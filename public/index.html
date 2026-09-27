@@ -2,84 +2,200 @@
 <html lang="tr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#02060a">
 <title>JARVIS OS</title>
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<main>
-<header><div><small>PERSONAL AUTONOMOUS SYSTEM</small><h1>JARVIS OS</h1></div><b id="health">●</b></header>
+<div id="loginOverlay" class="login-overlay">
+  <div class="login-card">
+    <div class="login-symbol"><span style="color:#65e6ff;letter-spacing:.2em;font-weight:900">J</span></div>
+    <h2>JARVIS</h2>
+    <p>PERSONAL AUTONOMOUS SYSTEM<br>Secure command interface</p>
+    <input id="token" type="password" autocomplete="off" placeholder="ACCESS KEY">
+    <button onclick="connect()">INITIALIZE</button>
+    <div id="authmsg" style="margin-top:10px;color:#ff7c87;font-size:10px"></div>
+  </div>
+</div>
 
-<section class="hero">
-<h2>Güvenli Bağlantı</h2>
-<input id="token" type="password" placeholder="JARVIS erişim anahtarı" style="width:100%;padding:12px;background:#03080c;border:1px solid #24556c;color:white;border-radius:12px">
-<button onclick="connect()">Bağlan</button>
-<small id="authmsg"></small>
-</section>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark"></span>
+      <div>
+        <h1>JARVIS</h1>
+        <small>PERSONAL AUTONOMOUS SYSTEM</small>
+      </div>
+    </div>
+    <div class="top-status">
+      <span><i id="cloudDot" class="dot online"></i>CLOUD</span>
+      <span><i id="authDot" class="dot"></i>AUTH</span>
+      <span><i id="pcDot" class="dot offline"></i>PC LINK</span>
+    </div>
+  </header>
 
-<section class="hero">
-<h2>PC Köprüsü</h2>
-<div id="worker">Durum kontrol ediliyor…</div>
-<small>Telefon → JARVIS Cloud → PC Worker → sonuç → telefon</small>
-</section>
+  <section class="main-grid">
+    <aside class="side-panel">
+      <div class="panel-title">CORE TELEMETRY</div>
+      <div class="metric"><span>SYSTEM</span><b id="systemState">ONLINE</b></div>
+      <div class="metric"><span>AUTH</span><b id="authState">LOCKED</b></div>
+      <div class="metric"><span>CLOUD NODE</span><b>RENDER / FRA</b></div>
+      <div class="metric"><span>PC BRIDGE</span><b id="pcState">OFFLINE</b></div>
+      <div class="metric"><span>MEMORY</span><b id="memoryState">VOLATILE</b></div>
+      <div class="metric"><span>PROTOCOL</span><b>ZERO-COST FIRST</b></div>
+    </aside>
 
-<section class="hero">
-<h2>Komuta Merkezi</h2>
-<textarea id="cmd" placeholder="Örnek: PC: sistem durumunu kontrol et"></textarea>
-<button onclick="send()">Görevi Başlat</button>
-</section>
+    <div class="core-stage">
+      <div class="core-label">
+        <div class="eyebrow">AUTONOMOUS COMMAND CORE</div>
+        <h2>JARVIS ONLINE</h2>
+        <p id="coreSubtitle">Awaiting secure authorization</p>
+      </div>
 
-<section><h3>Görevler</h3><div id="tasks"></div></section>
-<section><h3>Audit Log</h3><div id="audit"></div></section>
-</main>
+      <div class="ticks"></div>
+      <div class="hud-ring ring-1"></div>
+      <div class="hud-ring ring-2"></div>
+      <div class="hud-ring ring-3"></div>
+      <div class="hud-ring ring-4"></div>
+      <div class="arc a"></div>
+      <div class="arc b"></div>
+
+      <div class="core">
+        <div class="core-logo">
+          <strong>J</strong>
+          <small>CORE</small>
+        </div>
+      </div>
+
+      <div class="core-readout">
+        <div class="readout"><b id="taskCount">00</b><span>TASKS</span></div>
+        <div class="readout"><b id="workerReadout">OFF</b><span>PC LINK</span></div>
+        <div class="readout"><b>SAFE</b><span>GUARDRAIL</span></div>
+      </div>
+    </div>
+
+    <aside class="side-panel">
+      <div class="panel-title">AGENT MATRIX</div>
+      <div class="agent"><div class="agent-row"><span>CORE</span><b style="color:#65ffbf">READY</b></div><div class="agent-state">Task routing / safety</div></div>
+      <div class="agent"><div class="agent-row"><span>DEVELOPER</span><b id="devAgent">STANDBY</b></div><div class="agent-state">PC Worker dependent</div></div>
+      <div class="agent"><div class="agent-row"><span>CREATOR</span><b id="creatorAgent">STANDBY</b></div><div class="agent-state">Video pipeline not connected</div></div>
+      <div class="agent"><div class="agent-row"><span>COMMERCE</span><b id="commerceAgent">STANDBY</b></div><div class="agent-state">Shopify adapter pending</div></div>
+      <div class="agent"><div class="agent-row"><span>MEMORY</span><b style="color:#ffca66">LIMITED</b></div><div class="agent-state">Persistent DB pending</div></div>
+    </aside>
+  </section>
+
+  <section class="activity">
+    <div class="activity-panel">
+      <div class="panel-title">MISSION QUEUE</div>
+      <div id="tasks"><div class="task"><small>No active missions.</small></div></div>
+    </div>
+    <div class="activity-panel">
+      <div class="panel-title">SYSTEM FEED</div>
+      <div id="audit"><div class="log"><small>Awaiting authentication.</small></div></div>
+    </div>
+  </section>
+</div>
+
+<div class="console">
+  <div class="console-row">
+    <textarea id="cmd" class="command" placeholder="COMMAND JARVIS..."></textarea>
+    <button class="send" onclick="send()">EXECUTE</button>
+  </div>
+  <div class="console-meta">
+    <span id="consoleStatus">SECURE CHANNEL LOCKED</span>
+    <span>VOICE MODULE: NOT CONNECTED</span>
+  </div>
+</div>
 
 <script>
 let KEY=localStorage.getItem('jarvis_token')||'';
 token.value=KEY;
 const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-async function api(u,o={}){
-  o.headers={...(o.headers||{}),...(KEY?{authorization:'Bearer '+KEY}:{})};
-  let r=await fetch(u,o);
-  let j=await r.json().catch(()=>({}));
-  if(r.status===401)throw Error('Erişim anahtarı geçersiz');
+
+async function api(url,options={}){
+  options.headers={...(options.headers||{}),...(KEY?{authorization:'Bearer '+KEY}:{})};
+  const r=await fetch(url,options);
+  const j=await r.json().catch(()=>({}));
+  if(r.status===401)throw Error('ACCESS DENIED');
   if(!r.ok)throw Error(j.error||('HTTP '+r.status));
   return j;
 }
+
+function setAuthenticated(ok){
+  authDot.className='dot '+(ok?'online':'');
+  authState.textContent=ok?'AUTHORIZED':'LOCKED';
+  consoleStatus.textContent=ok?'SECURE CHANNEL ACTIVE':'SECURE CHANNEL LOCKED';
+  coreSubtitle.textContent=ok?'Secure command channel established':'Awaiting secure authorization';
+  loginOverlay.classList.toggle('hidden',ok);
+}
+
 async function connect(){
   KEY=token.value.trim();
   localStorage.setItem('jarvis_token',KEY);
-  try{await load();authmsg.textContent=' Bağlandı';}
-  catch(e){authmsg.textContent=' '+e.message}
+  try{
+    await load();
+    authmsg.textContent='';
+    setAuthenticated(true);
+  }catch(e){
+    setAuthenticated(false);
+    authmsg.textContent=e.message;
+  }
 }
+
 async function send(){
-  let command=cmd.value.trim();
+  const command=cmd.value.trim();
   if(!command)return;
   try{
-    await api('/api/tasks',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({command})});
+    await api('/api/tasks',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({command})
+    });
     cmd.value='';
     await load();
-  }catch(e){authmsg.textContent=' '+e.message}
+  }catch(e){
+    consoleStatus.textContent=e.message;
+  }
 }
+
 async function approve(id){
-  try{await api('/api/tasks/'+id+'/approve',{method:'POST'});await load()}catch(e){authmsg.textContent=' '+e.message}
+  try{await api('/api/tasks/'+id+'/approve',{method:'POST'});await load()}
+  catch(e){consoleStatus.textContent=e.message}
 }
 async function cancelTask(id){
-  try{await api('/api/tasks/'+id+'/cancel',{method:'POST'});await load()}catch(e){authmsg.textContent=' '+e.message}
+  try{await api('/api/tasks/'+id+'/cancel',{method:'POST'});await load()}
+  catch(e){consoleStatus.textContent=e.message}
 }
+
 function taskCard(x){
   let actions='';
-  if(x.status==='waiting_approval')actions='<button onclick="approve('+x.id+')">Onayla</button> ';
-  if(!['completed','cancelled','failed'].includes(x.status))actions+='<button onclick="cancelTask('+x.id+')">İptal</button>';
-  return '<article><b>'+esc(x.agent)+'</b> · <em>'+esc(x.status)+'</em><p>'+esc(x.command)+'</p><small>deneme '+esc(x.attempts)+'/'+esc(x.maxRetries)+(x.message?' · '+esc(x.message):'')+'</small><div>'+actions+'</div></article>';
+  if(x.status==='waiting_approval')actions='<button class="mini-btn" onclick="approve('+x.id+')">APPROVE</button>';
+  if(!['completed','cancelled','failed'].includes(x.status))actions+='<button class="mini-btn" onclick="cancelTask('+x.id+')">CANCEL</button>';
+  return '<div class="task"><div class="task-head"><b>'+esc(x.agent)+'</b><span class="status '+esc(x.status)+'">'+esc(x.status).toUpperCase()+'</span></div><p>'+esc(x.command)+'</p><small>ATTEMPT '+esc(x.attempts)+'/'+esc(x.maxRetries)+(x.message?' · '+esc(x.message):'')+'</small><div>'+actions+'</div></div>';
 }
+
 async function load(){
-  let d=await api('/api/state');
+  const d=await api('/api/state');
   const pc=d.workers&&d.workers.pc?d.workers.pc:{online:false};
-  worker.innerHTML=pc.online?'<b>● PC Worker ONLINE</b> · '+esc(pc.name||'PC'):'<b>○ PC Worker OFFLINE</b>';
-  tasks.innerHTML=d.tasks.slice().reverse().map(taskCard).join('')||'<small>Henüz görev yok.</small>';
-  audit.innerHTML=d.audit.slice(-14).reverse().map(x=>'<div class="log"><small>'+esc(x.at)+' · '+esc(x.type)+'</small> '+esc(x.message)+'</div>').join('');
+  pcDot.className='dot '+(pc.online?'online':'offline');
+  pcState.textContent=pc.online?'ONLINE':'OFFLINE';
+  workerReadout.textContent=pc.online?'ON':'OFF';
+  devAgent.textContent=pc.online?'READY':'STANDBY';
+  devAgent.style.color=pc.online?'#65ffbf':'';
+  taskCount.textContent=String((d.tasks||[]).length).padStart(2,'0');
+
+  tasks.innerHTML=(d.tasks||[]).slice().reverse().map(taskCard).join('')||'<div class="task"><small>No active missions.</small></div>';
+  audit.innerHTML=(d.audit||[]).slice(-18).reverse().map(x=>'<div class="log"><small>'+esc(x.at)+' · '+esc(x.type)+'</small><br>'+esc(x.message)+'</div>').join('')||'<div class="log"><small>No system events.</small></div>';
+  setAuthenticated(true);
 }
-if(KEY)load().catch(()=>{});
+
+cmd.addEventListener('keydown',e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key==='Enter')send();
+});
+
+if(KEY)load().catch(()=>setAuthenticated(false));
+else setAuthenticated(false);
 setInterval(()=>{if(KEY)load().catch(()=>{})},2500);
 </script>
 </body>
