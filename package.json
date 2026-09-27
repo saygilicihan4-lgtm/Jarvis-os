@@ -1,1 +1,11 @@
-{"name":"jarvis-os-v1","version":"0.1.0","private":true,"scripts":{"start":"node server.js","test":"node selftest.js"},"engines":{"node":">=18"}}
+{
+  "name":"jarvis-os-v1",
+  "version":"0.2.0",
+  "private":true,
+  "scripts":{
+    "start":"node server.js",
+    "test":"node selftest.js",
+    "worker":"node worker.js"
+  },
+  "engines":{"node":">=18"}
+}
