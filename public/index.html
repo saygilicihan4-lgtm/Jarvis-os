@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#02060a">
+<meta name="theme-color" content="#02060a">\n<meta name="apple-mobile-web-app-capable" content="yes">\n<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">\n<meta name="apple-mobile-web-app-title" content="JARVIS">\n<link rel="manifest" href="/manifest.webmanifest">
 <title>JARVIS OS</title>
 <link rel="stylesheet" href="/style.css">
 </head>
@@ -240,7 +240,7 @@ if(SpeechRecognition)voiceState.textContent='VOICE MODULE: READY';
 else voiceState.textContent='VOICE MODULE: BROWSER UNSUPPORTED';
 if(KEY)load().catch(()=>setAuthenticated(false));
 else setAuthenticated(false);
-setInterval(()=>{if(KEY)load().catch(()=>{})},2500);
+setInterval(()=>{if(KEY)load().catch(()=>{})},2500);\nif('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
 </script>
 </body>
 </html>
