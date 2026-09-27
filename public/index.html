@@ -100,16 +100,38 @@
 <div class="console">
   <div class="console-row">
     <textarea id="cmd" class="command" placeholder="COMMAND JARVIS..."></textarea>
+    <button id="voiceBtn" class="send" onclick="toggleVoice()" aria-label="Voice command">VOICE</button>
     <button class="send" onclick="send()">EXECUTE</button>
   </div>
   <div class="console-meta">
     <span id="consoleStatus">SECURE CHANNEL LOCKED</span>
-    <span>VOICE MODULE: NOT CONNECTED</span>
+    <span id="voiceState">VOICE MODULE: CHECKING</span>
   </div>
 </div>
 
 <script>
 let KEY=localStorage.getItem('jarvis_token')||'';
+let recognition=null;
+let listening=false;
+const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+if(SpeechRecognition){
+  recognition=new SpeechRecognition();
+  recognition.lang='tr-TR';
+  recognition.interimResults=true;
+  recognition.continuous=false;
+  recognition.onstart=()=>setVoiceMode(true);
+  recognition.onend=()=>setVoiceMode(false);
+  recognition.onerror=e=>{setVoiceMode(false);voiceState.textContent='VOICE: '+String(e.error||'ERROR').toUpperCase()};
+  recognition.onresult=e=>{
+    let text='';
+    for(let i=e.resultIndex;i<e.results.length;i++)text+=e.results[i][0].transcript;
+    cmd.value=text.trim();
+    if(e.results[e.results.length-1].isFinal){
+      voiceState.textContent='VOICE: COMMAND CAPTURED';
+      setTimeout(()=>send(),180);
+    }
+  };
+}
 token.value=KEY;
 const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
@@ -128,6 +150,26 @@ function setAuthenticated(ok){
   consoleStatus.textContent=ok?'SECURE CHANNEL ACTIVE':'SECURE CHANNEL LOCKED';
   coreSubtitle.textContent=ok?'Secure command channel established':'Awaiting secure authorization';
   loginOverlay.classList.toggle('hidden',ok);
+}
+
+function setVoiceMode(on){
+  listening=on;
+  document.body.classList.toggle('listening',on);
+  if(window.voiceState)voiceState.textContent=on?'VOICE: LISTENING':'VOICE: READY';
+  if(window.voiceBtn)voiceBtn.textContent=on?'STOP':'VOICE';
+}
+function toggleVoice(){
+  if(!recognition){voiceState.textContent='VOICE: BROWSER UNSUPPORTED';return}
+  try{listening?recognition.stop():recognition.start()}catch(e){}
+}
+function speak(text){
+  if(!('speechSynthesis' in window)||!text)return;
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(text);
+  u.lang='tr-TR';u.rate=.95;u.pitch=.85;
+  u.onstart=()=>document.body.classList.add('speaking');
+  u.onend=()=>document.body.classList.remove('speaking');
+  speechSynthesis.speak(u);
 }
 
 async function connect(){
@@ -194,6 +236,8 @@ cmd.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&e.key==='Enter')send();
 });
 
+if(SpeechRecognition)voiceState.textContent='VOICE MODULE: READY';
+else voiceState.textContent='VOICE MODULE: BROWSER UNSUPPORTED';
 if(KEY)load().catch(()=>setAuthenticated(false));
 else setAuthenticated(false);
 setInterval(()=>{if(KEY)load().catch(()=>{})},2500);
