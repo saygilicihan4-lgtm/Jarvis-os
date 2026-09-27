@@ -201,14 +201,26 @@ async function enableClapWake(){
     clapState.textContent=' · DOUBLE CLAP: MIC DENIED';
   }
 }
-function wakeJarvis(){
+async function wakeJarvis(){
   document.body.classList.add('speaking');
-  const tasks=document.querySelectorAll('.task').length;
-  let greeting='Merhaba Cihan Bey. JARVIS hazır.';
-  if(tasks>0)greeting+=' Sistem ekranında güncel görev ve gelişmelerinizi hazırladım.';
   coreSubtitle.textContent='Double-clap wake detected';
+  let greeting='Merhaba Cihan Bey. JARVIS hazır.';
+  try{
+    const d=await api('/api/state');
+    const all=d.tasks||[];
+    const completed=all.filter(x=>x.status==='completed').length;
+    const waiting=all.filter(x=>['waiting_worker','waiting_approval','needs_tool','queued','claimed','retrying'].includes(x.status)).length;
+    const failed=all.filter(x=>x.status==='failed').length;
+    if(completed)greeting+=' '+completed+' görev tamamlanmış durumda.';
+    if(waiting)greeting+=' '+waiting+' görev işlem veya bağlantı bekliyor.';
+    if(failed)greeting+=' '+failed+' görevde müdahale gerekiyor.';
+    const pc=d.workers&&d.workers.pc&&d.workers.pc.online;
+    greeting+=pc?' Bilgisayar bağlantınız aktif.':' Bilgisayar bağlantınız şu anda çevrim dışı.';
+    if(!completed&&!waiting&&!failed)greeting+=' Şu anda kayıtlı yeni görev bulunmuyor.';
+  }catch(e){
+    greeting+=' Güncel durum verisine şu anda erişemiyorum.';
+  }
   speak(greeting);
-  setTimeout(()=>document.body.classList.remove('speaking'),3500);
 }
 function toggleVoice(){
   if(!recognition){voiceState.textContent='VOICE: BROWSER UNSUPPORTED';return}
