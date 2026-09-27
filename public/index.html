@@ -42,6 +42,7 @@
       <div class="metric"><span>AUTH</span><b id="authState">LOCKED</b></div>
       <div class="metric"><span>CLOUD NODE</span><b>RENDER / FRA</b></div>
       <div class="metric"><span>PC BRIDGE</span><b id="pcState">OFFLINE</b></div>
+      <div class="metric"><span>WORKER SETUP</span><b id="workerSetup">RUN LAUNCHER ON PC</b></div>
       <div class="metric"><span>MEMORY</span><b id="memoryState">VOLATILE</b></div>
       <div class="metric"><span>PROTOCOL</span><b>ZERO-COST FIRST</b></div>
     </aside>
@@ -222,6 +223,7 @@ async function load(){
   const pc=d.workers&&d.workers.pc?d.workers.pc:{online:false};
   pcDot.className='dot '+(pc.online?'online':'offline');
   pcState.textContent=pc.online?'ONLINE':'OFFLINE';
+  workerSetup.textContent=pc.online?'CONNECTED':'RUN LAUNCHER ON PC';
   workerReadout.textContent=pc.online?'ON':'OFF';
   devAgent.textContent=pc.online?'READY':'STANDBY';
   devAgent.style.color=pc.online?'#65ffbf':'';
