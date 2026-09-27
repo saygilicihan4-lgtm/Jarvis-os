@@ -1,1 +1,86 @@
-<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>JARVIS OS</title><link rel="stylesheet" href="/style.css"></head><body><main><header><div><small>PERSONAL AUTONOMOUS SYSTEM</small><h1>JARVIS OS</h1></div><b id="health">●</b></header><section class="hero"><h2>Güvenli Bağlantı</h2><input id="token" type="password" placeholder="JARVIS erişim anahtarı" style="width:100%;padding:12px;background:#03080c;border:1px solid #24556c;color:white;border-radius:12px"><button onclick="connect()">Bağlan</button><small id="authmsg"></small></section><section class="hero"><h2>Komuta Merkezi</h2><textarea id="cmd" placeholder="JARVIS'e görev ver..."></textarea><button onclick="send()">Görevi Başlat</button></section><section><h3>Görevler</h3><div id="tasks"></div></section><section><h3>Audit Log</h3><div id="audit"></div></section></main><script>let KEY=localStorage.getItem('jarvis_token')||'';token.value=KEY;async function api(u,o={}){o.headers={...(o.headers||{}),...(KEY?{authorization:'Bearer '+KEY}:{})};let r=await fetch(u,o);let j=await r.json().catch(()=>({}));if(r.status===401)throw Error('Erişim anahtarı geçersiz');return j}async function connect(){KEY=token.value.trim();localStorage.setItem('jarvis_token',KEY);try{await load();authmsg.textContent=' Bağlandı';}catch(e){authmsg.textContent=' '+e.message}}async function send(){let command=cmd.value.trim();if(!command)return;try{await api('/api/tasks',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({command})});cmd.value='';load()}catch(e){authmsg.textContent=' '+e.message}}async function load(){let d=await api('/api/state');tasks.innerHTML=d.tasks.slice().reverse().map(x=>'<article><b>'+x.agent+'</b> · <em>'+x.status+'</em><p>'+x.command+'</p><small>deneme '+x.attempts+'/'+x.maxRetries+(x.message?' · '+x.message:'')+'</small></article>').join('')||'<small>Henüz görev yok.</small>';audit.innerHTML=d.audit.slice(-12).reverse().map(x=>'<div class="log"><small>'+x.at+' · '+x.type+'</small> '+x.message+'</div>').join('')}if(KEY)load().catch(()=>{});setInterval(()=>{if(KEY)load().catch(()=>{})},2500)</script></body></html>
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JARVIS OS</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+<header><div><small>PERSONAL AUTONOMOUS SYSTEM</small><h1>JARVIS OS</h1></div><b id="health">●</b></header>
+
+<section class="hero">
+<h2>Güvenli Bağlantı</h2>
+<input id="token" type="password" placeholder="JARVIS erişim anahtarı" style="width:100%;padding:12px;background:#03080c;border:1px solid #24556c;color:white;border-radius:12px">
+<button onclick="connect()">Bağlan</button>
+<small id="authmsg"></small>
+</section>
+
+<section class="hero">
+<h2>PC Köprüsü</h2>
+<div id="worker">Durum kontrol ediliyor…</div>
+<small>Telefon → JARVIS Cloud → PC Worker → sonuç → telefon</small>
+</section>
+
+<section class="hero">
+<h2>Komuta Merkezi</h2>
+<textarea id="cmd" placeholder="Örnek: PC: sistem durumunu kontrol et"></textarea>
+<button onclick="send()">Görevi Başlat</button>
+</section>
+
+<section><h3>Görevler</h3><div id="tasks"></div></section>
+<section><h3>Audit Log</h3><div id="audit"></div></section>
+</main>
+
+<script>
+let KEY=localStorage.getItem('jarvis_token')||'';
+token.value=KEY;
+const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+async function api(u,o={}){
+  o.headers={...(o.headers||{}),...(KEY?{authorization:'Bearer '+KEY}:{})};
+  let r=await fetch(u,o);
+  let j=await r.json().catch(()=>({}));
+  if(r.status===401)throw Error('Erişim anahtarı geçersiz');
+  if(!r.ok)throw Error(j.error||('HTTP '+r.status));
+  return j;
+}
+async function connect(){
+  KEY=token.value.trim();
+  localStorage.setItem('jarvis_token',KEY);
+  try{await load();authmsg.textContent=' Bağlandı';}
+  catch(e){authmsg.textContent=' '+e.message}
+}
+async function send(){
+  let command=cmd.value.trim();
+  if(!command)return;
+  try{
+    await api('/api/tasks',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({command})});
+    cmd.value='';
+    await load();
+  }catch(e){authmsg.textContent=' '+e.message}
+}
+async function approve(id){
+  try{await api('/api/tasks/'+id+'/approve',{method:'POST'});await load()}catch(e){authmsg.textContent=' '+e.message}
+}
+async function cancelTask(id){
+  try{await api('/api/tasks/'+id+'/cancel',{method:'POST'});await load()}catch(e){authmsg.textContent=' '+e.message}
+}
+function taskCard(x){
+  let actions='';
+  if(x.status==='waiting_approval')actions='<button onclick="approve('+x.id+')">Onayla</button> ';
+  if(!['completed','cancelled','failed'].includes(x.status))actions+='<button onclick="cancelTask('+x.id+')">İptal</button>';
+  return '<article><b>'+esc(x.agent)+'</b> · <em>'+esc(x.status)+'</em><p>'+esc(x.command)+'</p><small>deneme '+esc(x.attempts)+'/'+esc(x.maxRetries)+(x.message?' · '+esc(x.message):'')+'</small><div>'+actions+'</div></article>';
+}
+async function load(){
+  let d=await api('/api/state');
+  const pc=d.workers&&d.workers.pc?d.workers.pc:{online:false};
+  worker.innerHTML=pc.online?'<b>● PC Worker ONLINE</b> · '+esc(pc.name||'PC'):'<b>○ PC Worker OFFLINE</b>';
+  tasks.innerHTML=d.tasks.slice().reverse().map(taskCard).join('')||'<small>Henüz görev yok.</small>';
+  audit.innerHTML=d.audit.slice(-14).reverse().map(x=>'<div class="log"><small>'+esc(x.at)+' · '+esc(x.type)+'</small> '+esc(x.message)+'</div>').join('');
+}
+if(KEY)load().catch(()=>{});
+setInterval(()=>{if(KEY)load().catch(()=>{})},2500);
+</script>
+</body>
+</html>
