@@ -1,1 +1,240 @@
-const http=require('http'),fs=require('fs'),path=require('path');const PORT=process.env.PORT||3000,ROOT=__dirname,TOKEN=process.env.JARVIS_TOKEN||'',state={tasks:[],audit:[]};function log(type,message){state.audit.push({at:new Date().toISOString(),type,message});if(state.audit.length>200)state.audit.shift()}function agent(c){c=c.toLowerCase();if(/shopify|ürün|stok|sipariş|varova/.test(c))return'COMMERCE';if(/video|short|reels|youtube/.test(c))return'CREATOR';if(/kod|uygulama|site|deploy|github/.test(c))return'DEVELOPER';if(/araştır|bul|incele/.test(c))return'RESEARCH';if(/reklam|büyü|satış|seo/.test(c))return'GROWTH';return'CORE'}function risky(c){return /(öde|satın al|reklam bütçe|para gönder|iade yap|sözleşme imzala)/i.test(c)}function authorized(req){if(!TOKEN)return true;const h=req.headers.authorization||'';return h===('Bearer '+TOKEN)||req.headers['x-jarvis-token']===TOKEN}function run(t){t.status='running';log('EXECUTE','#'+t.id+' '+t.agent);setTimeout(()=>{t.attempts++;if(risky(t.command)){t.status='waiting_approval';t.message='Finansal/geri döndürülemez eylem: açık onay gerekli.';log('GUARDRAIL','#'+t.id+' onaya alındı');return}if(/self.?heal|hata testi|retry/i.test(t.command)&&t.attempts===1){t.status='retrying';t.message='İlk strateji başarısız (simülasyon). Alternatif strateji deneniyor.';log('DIAGNOSE','#'+t.id+' strateji değiştirildi');return setTimeout(()=>run(t),300)}t.status='completed';t.message='Yerel çekirdek görevi doğruladı. Harici entegrasyon yapılmadı.';log('VERIFY','#'+t.id+' tamamlandı ve doğrulandı')},250)}function json(res,code,obj){res.writeHead(code,{'content-type':'application/json; charset=utf-8','cache-control':'no-store'});res.end(JSON.stringify(obj))}const server=http.createServer((req,res)=>{const pathname=new URL(req.url,'http://localhost').pathname;if(pathname==='/api/health')return json(res,200,{ok:true,name:'JARVIS OS',version:'0.1.2',zeroCostFirst:true,auth:!!TOKEN});if(pathname.startsWith('/api/')&&!authorized(req))return json(res,401,{error:'unauthorized'});if(pathname==='/api/state')return json(res,200,state);if(pathname==='/api/tasks'&&req.method==='POST'){let b='';req.on('data',x=>b+=x);return req.on('end',()=>{try{let d=JSON.parse(b||'{}');if(!d.command)return json(res,400,{error:'command required'});let t={id:state.tasks.length+1,command:d.command,agent:agent(d.command),status:'queued',attempts:0,maxRetries:3,message:''};state.tasks.push(t);log('QUEUE','#'+t.id+' kuyruğa alındı');run(t);json(res,201,t)}catch(e){json(res,400,{error:'bad json'})}})}let f=pathname==='/'?'public/index.html':'public/'+pathname.replace(/^\//,'');f=path.join(ROOT,f);if(!f.startsWith(path.join(ROOT,'public')))return res.end('blocked');fs.readFile(f,(e,d)=>{if(e){res.writeHead(404);return res.end('not found')}let ext=path.extname(f);res.writeHead(200,{'content-type':ext==='.css'?'text/css':'text/html; charset=utf-8','cache-control':'no-store'});res.end(d)})});server.listen(PORT,'0.0.0.0',()=>{log('BOOT','JARVIS OS started');console.log('JARVIS OS listening on '+PORT)})
+const http=require('http');
+const fs=require('fs');
+const path=require('path');
+
+const PORT=process.env.PORT||3000;
+const ROOT=__dirname;
+const PUBLIC=path.join(ROOT,'public');
+const TOKEN=process.env.JARVIS_TOKEN||'';
+const state={
+  tasks:[],
+  audit:[],
+  workers:{pc:{name:null,lastSeen:null,capabilities:[]}}
+};
+
+function now(){return new Date().toISOString()}
+function log(type,message){
+  state.audit.push({at:now(),type,message});
+  if(state.audit.length>300)state.audit.shift();
+}
+function json(res,code,obj){
+  res.writeHead(code,{'content-type':'application/json; charset=utf-8','cache-control':'no-store'});
+  res.end(JSON.stringify(obj));
+}
+function readJson(req,cb){
+  let b='';
+  req.on('data',x=>{b+=x;if(b.length>1_000_000)req.destroy()});
+  req.on('end',()=>{try{cb(null,JSON.parse(b||'{}'))}catch(e){cb(e)}});
+}
+function authorized(req){
+  if(!TOKEN)return true;
+  const h=req.headers.authorization||'';
+  return h===('Bearer '+TOKEN)||req.headers['x-jarvis-token']===TOKEN;
+}
+function agentFor(c){
+  c=String(c||'').toLowerCase();
+  if(/shopify|ürün|stok|sipariş|varova/.test(c))return'COMMERCE';
+  if(/video|short|reels|youtube/.test(c))return'CREATOR';
+  if(/kod|uygulama|site|deploy|github|dosya|klasör|bilgisayar|pc:/.test(c))return'DEVELOPER';
+  if(/araştır|bul|incele/.test(c))return'RESEARCH';
+  if(/reklam|büyü|satış|seo/.test(c))return'GROWTH';
+  return'CORE';
+}
+function risky(c){
+  return /(öde|satın al|reklam bütçe|para gönder|iade yap|sözleşme imzala|sil|delete|format)/i.test(String(c||''));
+}
+function remoteAgent(a){return['DEVELOPER','CREATOR','COMMERCE'].includes(a)}
+function taskById(id){return state.tasks.find(t=>t.id===Number(id))}
+function pcOnline(){
+  const t=state.workers.pc.lastSeen;
+  return !!t&&(Date.now()-new Date(t).getTime()<15000);
+}
+function prepareTask(t,approved=false){
+  if(risky(t.command)&&!approved){
+    t.status='waiting_approval';
+    t.message='Yüksek riskli/geri döndürülemez eylem: açık onay gerekli.';
+    log('GUARDRAIL','#'+t.id+' onaya alındı');
+    return;
+  }
+  if(remoteAgent(t.agent)){
+    t.status='waiting_worker';
+    t.message='PC Worker bekleniyor.';
+    log('ROUTE','#'+t.id+' PC Worker kuyruğuna gönderildi');
+    return;
+  }
+  if(/self.?heal|hata testi|retry/i.test(t.command)){
+    return runLocalSelfHeal(t);
+  }
+  t.status='needs_tool';
+  t.message='Bu görev için henüz gerçek araç bağlı değil; tamamlandı sayılmadı.';
+  log('TOOL_MISSING','#'+t.id+' araç bekliyor');
+}
+function runLocalSelfHeal(t){
+  t.status='running';
+  log('EXECUTE','#'+t.id+' local self-heal testi');
+  setTimeout(()=>{
+    t.attempts++;
+    if(t.attempts===1){
+      t.status='retrying';
+      t.message='İlk strateji başarısız (kontrollü test). Alternatif strateji deneniyor.';
+      log('DIAGNOSE','#'+t.id+' strateji değiştirildi');
+      return setTimeout(()=>runLocalSelfHeal(t),300);
+    }
+    t.status='completed';
+    t.message='Self-healing döngüsü ikinci stratejide doğrulandı.';
+    log('VERIFY','#'+t.id+' self-heal doğrulandı');
+  },250);
+}
+function publicState(){
+  return{
+    tasks:state.tasks,
+    audit:state.audit,
+    workers:{
+      pc:{
+        name:state.workers.pc.name,
+        lastSeen:state.workers.pc.lastSeen,
+        capabilities:state.workers.pc.capabilities,
+        online:pcOnline()
+      }
+    }
+  };
+}
+
+const server=http.createServer((req,res)=>{
+  const u=new URL(req.url,'http://localhost');
+  const pathname=u.pathname;
+
+  if(pathname==='/api/health'){
+    return json(res,200,{ok:true,name:'JARVIS OS',version:'0.2.0',zeroCostFirst:true,auth:!!TOKEN,pcWorker:pcOnline()});
+  }
+
+  if(pathname.startsWith('/api/')&&!authorized(req)){
+    return json(res,401,{error:'unauthorized'});
+  }
+
+  if(pathname==='/api/state'&&req.method==='GET'){
+    return json(res,200,publicState());
+  }
+
+  if(pathname==='/api/tasks'&&req.method==='POST'){
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      const command=String(d.command||'').trim();
+      if(!command)return json(res,400,{error:'command required'});
+      const t={
+        id:state.tasks.length+1,
+        command,
+        agent:agentFor(command),
+        status:'queued',
+        attempts:0,
+        maxRetries:3,
+        message:'',
+        createdAt:now(),
+        claimedAt:null,
+        completedAt:null
+      };
+      state.tasks.push(t);
+      log('QUEUE','#'+t.id+' kuyruğa alındı');
+      prepareTask(t,false);
+      return json(res,201,t);
+    });
+  }
+
+  const approve=pathname.match(/^\/api\/tasks\/(\d+)\/approve$/);
+  if(approve&&req.method==='POST'){
+    const t=taskById(approve[1]);
+    if(!t)return json(res,404,{error:'task not found'});
+    if(t.status!=='waiting_approval')return json(res,409,{error:'task is not waiting approval'});
+    log('APPROVE','#'+t.id+' kullanıcı tarafından onaylandı');
+    prepareTask(t,true);
+    return json(res,200,t);
+  }
+
+  const cancel=pathname.match(/^\/api\/tasks\/(\d+)\/cancel$/);
+  if(cancel&&req.method==='POST'){
+    const t=taskById(cancel[1]);
+    if(!t)return json(res,404,{error:'task not found'});
+    if(['completed','cancelled'].includes(t.status))return json(res,409,{error:'task already closed'});
+    t.status='cancelled';
+    t.message='Kullanıcı tarafından iptal edildi.';
+    t.completedAt=now();
+    log('CANCEL','#'+t.id+' iptal edildi');
+    return json(res,200,t);
+  }
+
+  if(pathname==='/api/worker/heartbeat'&&req.method==='POST'){
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      state.workers.pc={
+        name:String(d.name||'PC Worker'),
+        lastSeen:now(),
+        capabilities:Array.isArray(d.capabilities)?d.capabilities.slice(0,50):[]
+      };
+      return json(res,200,{ok:true,at:state.workers.pc.lastSeen});
+    });
+  }
+
+  if(pathname==='/api/worker/next'&&req.method==='GET'){
+    state.workers.pc.lastSeen=now();
+    const t=state.tasks.find(x=>x.status==='waiting_worker');
+    if(!t)return json(res,200,{task:null});
+    t.status='claimed';
+    t.claimedAt=now();
+    t.attempts++;
+    t.message='PC Worker görevi aldı.';
+    log('CLAIM','#'+t.id+' PC Worker aldı (deneme '+t.attempts+')');
+    return json(res,200,{task:t});
+  }
+
+  if(pathname==='/api/worker/result'&&req.method==='POST'){
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      const t=taskById(d.id);
+      if(!t)return json(res,404,{error:'task not found'});
+      if(t.status==='cancelled')return json(res,409,{error:'task cancelled'});
+      if(d.ok){
+        t.status='completed';
+        t.message=String(d.message||'PC Worker görevi tamamladı.');
+        t.completedAt=now();
+        log('VERIFY','#'+t.id+' PC Worker sonucu doğrulandı');
+      }else{
+        const retryable=d.retryable===true&&t.attempts<t.maxRetries;
+        t.status=retryable?'waiting_worker':'failed';
+        t.message=String(d.message||'PC Worker görevi başarısız oldu.');
+        if(!retryable)t.completedAt=now();
+        log(retryable?'RETRY':'FAILED','#'+t.id+' '+t.message);
+      }
+      return json(res,200,t);
+    });
+  }
+
+  if(req.method!=='GET'){
+    res.writeHead(405);return res.end('method not allowed');
+  }
+
+  let rel=pathname==='/'?'index.html':decodeURIComponent(pathname).replace(/^\/+/, '');
+  let file=path.resolve(PUBLIC,rel);
+  if(!(file===path.resolve(PUBLIC,'index.html')||file.startsWith(PUBLIC+path.sep))){
+    res.writeHead(403);return res.end('blocked');
+  }
+  fs.readFile(file,(err,data)=>{
+    if(err&&!path.extname(rel)){
+      file=path.join(PUBLIC,'index.html');
+      return fs.readFile(file,(e,d)=>{
+        if(e){res.writeHead(404);return res.end('not found')}
+        res.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'no-store'});
+        res.end(d);
+      });
+    }
+    if(err){res.writeHead(404);return res.end('not found')}
+    const ext=path.extname(file);
+    const type=ext==='.css'?'text/css; charset=utf-8':ext==='.js'?'application/javascript; charset=utf-8':'text/html; charset=utf-8';
+    res.writeHead(200,{'content-type':type,'cache-control':'no-store'});
+    res.end(data);
+  });
+});
+
+server.listen(PORT,'0.0.0.0',()=>{
+  log('BOOT','JARVIS OS v0.2 started');
+  console.log('JARVIS OS listening on '+PORT);
+});
