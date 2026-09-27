@@ -106,7 +106,7 @@
   </div>
   <div class="console-meta">
     <span id="consoleStatus">SECURE CHANNEL LOCKED</span>
-    <span id="voiceState">VOICE MODULE: CHECKING</span>
+    <span id="voiceState">VOICE MODULE: CHECKING</span><span id="clapState"> · DOUBLE CLAP: OFF</span>
   </div>
 </div>
 
@@ -114,6 +114,7 @@
 let KEY=localStorage.getItem('jarvis_token')||'';
 let recognition=null;
 let listening=false;
+let clapStream=null,clapCtx=null,clapRAF=null,lastClap=0,clapArmed=false,clapCooldown=0;
 const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
 if(SpeechRecognition){
   recognition=new SpeechRecognition();
@@ -158,6 +159,56 @@ function setVoiceMode(on){
   document.body.classList.toggle('listening',on);
   if(window.voiceState)voiceState.textContent=on?'VOICE: LISTENING':'VOICE: READY';
   if(window.voiceBtn)voiceBtn.textContent=on?'STOP':'VOICE';
+}
+async function enableClapWake(){
+  if(clapArmed)return;
+  try{
+    clapStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+    clapCtx=new (window.AudioContext||window.webkitAudioContext)();
+    const src=clapCtx.createMediaStreamSource(clapStream);
+    const analyser=clapCtx.createAnalyser();
+    analyser.fftSize=1024;
+    analyser.smoothingTimeConstant=.12;
+    src.connect(analyser);
+    const data=new Uint8Array(analyser.frequencyBinCount);
+    clapArmed=true;
+    clapState.textContent=' · DOUBLE CLAP: ARMED';
+    let prevEnergy=0;
+    const tick=()=>{
+      if(!clapArmed)return;
+      analyser.getByteFrequencyData(data);
+      let high=0;
+      const start=Math.floor(data.length*.28);
+      for(let i=start;i<data.length;i++)high+=data[i];
+      high/=Math.max(1,data.length-start);
+      const spike=high>72 && high>prevEnergy*1.7;
+      const now=Date.now();
+      if(spike && now>clapCooldown){
+        if(lastClap && now-lastClap>=120 && now-lastClap<=850){
+          lastClap=0;
+          clapCooldown=now+1800;
+          wakeJarvis();
+        }else{
+          lastClap=now;
+        }
+      }
+      if(lastClap && now-lastClap>900)lastClap=0;
+      prevEnergy=high;
+      clapRAF=requestAnimationFrame(tick);
+    };
+    tick();
+  }catch(e){
+    clapState.textContent=' · DOUBLE CLAP: MIC DENIED';
+  }
+}
+function wakeJarvis(){
+  document.body.classList.add('speaking');
+  const tasks=document.querySelectorAll('.task').length;
+  let greeting='Merhaba Cihan Bey. JARVIS hazır.';
+  if(tasks>0)greeting+=' Sistem ekranında güncel görev ve gelişmelerinizi hazırladım.';
+  coreSubtitle.textContent='Double-clap wake detected';
+  speak(greeting);
+  setTimeout(()=>document.body.classList.remove('speaking'),3500);
 }
 function toggleVoice(){
   if(!recognition){voiceState.textContent='VOICE: BROWSER UNSUPPORTED';return}
@@ -232,6 +283,7 @@ async function load(){
   tasks.innerHTML=(d.tasks||[]).slice().reverse().map(taskCard).join('')||'<div class="task"><small>No active missions.</small></div>';
   audit.innerHTML=(d.audit||[]).slice(-18).reverse().map(x=>'<div class="log"><small>'+esc(x.at)+' · '+esc(x.type)+'</small><br>'+esc(x.message)+'</div>').join('')||'<div class="log"><small>No system events.</small></div>';
   setAuthenticated(true);
+    enableClapWake();
 }
 
 cmd.addEventListener('keydown',e=>{
