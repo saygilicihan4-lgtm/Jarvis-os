@@ -6,7 +6,7 @@ const BASE=(process.env.JARVIS_URL||'https://jarvis-os-1iuv.onrender.com').repla
 const TOKEN=process.env.JARVIS_TOKEN||'';
 const NAME=process.env.JARVIS_WORKER_NAME||os.hostname();
 const WORKSPACE=path.resolve(process.env.JARVIS_WORKSPACE||path.join(process.cwd(),'jarvis-workspace'));
-const CAPS=['system_status','list_files','write_note'];
+const CAPS=['system_status','list_files','write_note','write_file','read_file'];
 
 if(!TOKEN){console.error('JARVIS_TOKEN gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
@@ -21,6 +21,13 @@ async function api(route,options={}){
 function listFiles(){
   return fs.readdirSync(WORKSPACE,{withFileTypes:true}).slice(0,100).map(e=>e.name+(e.isDirectory()?'/':''));
 }
+function safeFile(name){
+  const clean=String(name||'').trim().replace(/^[\\/]+/,'');
+  if(!clean||clean.includes('..'))throw new Error('Geçersiz dosya yolu');
+  const target=path.resolve(WORKSPACE,clean);
+  if(!(target===WORKSPACE||target.startsWith(WORKSPACE+path.sep)))throw new Error('Workspace dışına erişim engellendi');
+  return target;
+}
 async function execute(task){
   const c=String(task.command||'').trim().replace(/^(pc|bilgisayar)\s*:\s*/i,'');
   if(/^(sistem durumu|system status|pc durumu)/i.test(c)){
@@ -28,6 +35,20 @@ async function execute(task){
   }
   if(/^(dosyaları listele|dosya listesi|list files)/i.test(c)){
     return{ok:true,message:'Workspace: '+(listFiles().join(', ')||'(boş)')};
+  }
+  const write=c.match(/^(?:dosya oluştur|dosya olustur|write file)\s+([^:]+)\s*:\s*([\s\S]+)$/i);
+  if(write){
+    const file=safeFile(write[1]);
+    fs.mkdirSync(path.dirname(file),{recursive:true});
+    fs.writeFileSync(file,write[2],'utf8');
+    return{ok:true,message:'Dosya oluşturuldu: '+path.relative(WORKSPACE,file)+' · '+Buffer.byteLength(write[2],'utf8')+' bayt'};
+  }
+  const read=c.match(/^(?:dosya oku|read file)\s+(.+)$/i);
+  if(read){
+    const file=safeFile(read[1]);
+    if(!fs.existsSync(file)||!fs.statSync(file).isFile())return{ok:false,retryable:false,message:'Dosya bulunamadı: '+read[1]};
+    const data=fs.readFileSync(file,'utf8');
+    return{ok:true,message:'Dosya '+path.relative(WORKSPACE,file)+': '+data.slice(0,4000)};
   }
   const m=c.match(/^not al\s+(.+)/i);
   if(m){
