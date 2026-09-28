@@ -8,8 +8,8 @@ const NAME=process.env.JARVIS_WORKER_NAME||os.hostname();
 const WORKSPACE=path.resolve(process.env.JARVIS_WORKSPACE||path.join(process.cwd(),'jarvis-workspace'));
 const MEMORY_DIR=path.join(WORKSPACE,'.jarvis-memory');
 const MEMORY_FILE=path.join(MEMORY_DIR,'task-history.jsonl');
-const WORKER_VERSION='0.8.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','local_memory'];
+const WORKER_VERSION='0.9.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','local_memory'];
 
 if(!TOKEN){console.error('JARVIS_TOKEN gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
@@ -34,6 +34,20 @@ function strategyMetrics(){
     if(x.ok)out.byAction[a].successes++;else out.byAction[a].failures++;
   }
   return out;
+}
+function strategySelection(){
+  const m=strategyMetrics();
+  const MIN_EVIDENCE=5;
+  const eligible=[];
+  for(const [action,v] of Object.entries(m.byAction)){
+    if(v.attempts<MIN_EVIDENCE)continue;
+    const successRate=v.successes/v.attempts;
+    const failureRate=v.failures/v.attempts;
+    const score=Math.max(0,successRate-(failureRate*0.5));
+    eligible.push({action,attempts:v.attempts,successRate:Number(successRate.toFixed(3)),score:Number(score.toFixed(3))});
+  }
+  eligible.sort((a,b)=>b.score-a.score||b.attempts-a.attempts||a.action.localeCompare(b.action));
+  return{minimumEvidence:MIN_EVIDENCE,repairEvents:m.repairs,candidates:eligible,recommended:eligible[0]||null};
 }
 function memoryStats(){
   if(!fs.existsSync(MEMORY_FILE))return{records:0,bytes:0,lastAt:null};
@@ -133,6 +147,12 @@ function createBundle(name,description){
 async function execute(task){
   if(task.plan)return runPlan(task.plan);
   const c=String(task.command||'').trim().replace(/^(pc|bilgisayar)\s*:\s*/i,'');
+  if(/^(optimizasyon durumu|strategy selection|en iyi strateji)/i.test(c)){
+    const s=strategySelection();
+    if(!s.recommended)return{ok:true,message:'Optimizasyon için yeterli kanıt yok · her strateji için en az '+s.minimumEvidence+' deneme gerekli'};
+    const r=s.recommended;
+    return{ok:true,message:'Kanıta dayalı öneri · '+r.action+' · '+r.attempts+' deneme · başarı '+Math.round(r.successRate*100)+'% · skor '+r.score+' · otomatik kod değişikliği yapılmadı'};
+  }
   if(/^(öğrenme durumu|ogrenme durumu|strategy metrics|learning status)/i.test(c)){
     const m=strategyMetrics();
     const actions=Object.entries(m.byAction).map(([k,v])=>k+': '+v.successes+'/'+v.attempts+' başarılı').join(' · ');
