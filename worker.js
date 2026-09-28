@@ -8,6 +8,7 @@ const NAME=process.env.JARVIS_WORKER_NAME||os.hostname();
 const WORKSPACE=path.resolve(process.env.JARVIS_WORKSPACE||path.join(process.cwd(),'jarvis-workspace'));
 const MEMORY_DIR=path.join(WORKSPACE,'.jarvis-memory');
 const MEMORY_FILE=path.join(MEMORY_DIR,'task-history.jsonl');
+const WORKER_VERSION='0.4.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','local_memory'];
 
 if(!TOKEN){console.error('JARVIS_TOKEN gerekli.');process.exit(1)}
@@ -79,7 +80,7 @@ async function execute(task){
 }
 async function poll(){
   try{
-    await api('/api/worker/heartbeat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:NAME,capabilities:CAPS,memory:memoryStats()})});
+    await api('/api/worker/heartbeat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:NAME,version:WORKER_VERSION,capabilities:CAPS,memory:memoryStats()})});
     const r=await api('/api/worker/next');
     if(!r.task)return;
     let result;
@@ -90,7 +91,7 @@ async function poll(){
     console.log('#'+r.task.id+' '+(result.ok?'OK':'FAIL')+' '+result.message);
   }catch(e){console.error(new Date().toISOString(),e.message)}
 }
-console.log('JARVIS PC Worker başladı');
+console.log('JARVIS PC Worker '+WORKER_VERSION+' başladı');
 console.log('Cloud:',BASE);
 console.log('Workspace:',WORKSPACE);
 poll();
