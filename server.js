@@ -283,8 +283,12 @@ const server=http.createServer((req,res)=>{
     return json(res,200,{ok:true,name:'JARVIS OS',version:'0.2.0',zeroCostFirst:true,auth:!!TOKEN,pcWorker:pcOnline()});
   }
 
-  if(pathname.startsWith('/api/')&&!authorized(req)){
-    return json(res,401,{error:'unauthorized'});
+  if(pathname.startsWith('/api/')){
+    const ident=workerIdentity(req),workerRoute=pathname.startsWith('/api/worker/')||pathname==='/api/state/snapshot'||pathname==='/api/state/restore';
+    if(workerRoute&&ident){
+      const headerId=String(req.headers['x-jarvis-device-id']||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80);
+      if(headerId!==ident.deviceId)return json(res,401,{error:'device identity mismatch'});
+    }else if(!authorized(req))return json(res,401,{error:'unauthorized'});
   }
 
   if(pathname==='/api/state'&&req.method==='GET'){
