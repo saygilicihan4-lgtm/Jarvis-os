@@ -9,7 +9,7 @@ const TOKEN=process.env.JARVIS_TOKEN||'';
 const state={
   tasks:[],
   audit:[],
-  workers:{pc:{name:null,version:null,lastSeen:null,capabilities:[],memory:null}}
+  workers:{pc:{name:null,version:null,lastSeen:null,capabilities:[],memory:null},devices:{}}
 };
 
 function now(){return new Date().toISOString()}
@@ -84,9 +84,12 @@ function workerSupports(command){
   return{ok:state.workers.pc.capabilities.includes(need),need};
 }
 function taskById(id){return state.tasks.find(t=>t.id===Number(id))}
-function pcOnline(){
-  const t=state.workers.pc.lastSeen;
-  return !!t&&(Date.now()-new Date(t).getTime()<15000);
+function workerOnline(w){const t=w&&w.lastSeen;return !!t&&(Date.now()-new Date(t).getTime()<15000)}
+function pcOnline(){return workerOnline(state.workers.pc)}
+function deviceWorker(id){return id&&state.workers.devices[id]||null}
+function deviceOnline(id){return workerOnline(deviceWorker(id))}
+function publicDevices(){
+  return Object.fromEntries(Object.entries(state.workers.devices).map(([id,w])=>[id,{name:w.name,version:w.version,lastSeen:w.lastSeen,capabilities:w.capabilities,memory:w.memory,approved:!!w.approved,online:workerOnline(w)}]));
 }
 function prepareTask(t,approved=false){
   if(risky(t.command)&&!approved){
