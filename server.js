@@ -46,6 +46,7 @@ function risky(c){
 function remoteAgent(a){return['DEVELOPER','CREATOR','COMMERCE'].includes(a)}
 function requiredCapability(command){
   const c=String(command||'').toLowerCase().replace(/^(pc|bilgisayar)\s*:\s*/i,'');
+  if(deterministicPlan(command))return'mission_plan';
   if(/^(hafıza durumu|hafiza durumu|memory status)/.test(c))return'local_memory';
   if(/^(sistem durumu|system status|pc durumu)/.test(c))return'system_status';
   if(/^(dosyaları listele|dosya listesi|list files)/.test(c))return'list_files';
@@ -56,6 +57,24 @@ function requiredCapability(command){
   if(/^(klasör oluştur|klasor olustur|make folder|proje klasörü oluştur|proje klasoru olustur)/.test(c))return'make_folder';
   if(/^(proje oluştur|proje olustur|yeni proje|project create)/.test(c))return'project_scaffold';
   return null;
+}
+function deterministicPlan(command){
+  const raw=String(command||'').trim().replace(/^(pc|bilgisayar)\s*:\s*/i,'');
+  const m=raw.match(/^(?:çalışma alanı hazırla|calisma alani hazirla|workspace hazırla|workspace hazirla)\s+([^:]+)(?::\s*(.*))?$/i);
+  if(!m)return null;
+  const name=m[1].trim().replace(/[<>:"|?*]/g,'-').slice(0,80);
+  if(!name||name==='.'||name==='..')return null;
+  const desc=(m[2]||'JARVIS kontrollü görev çalışma alanı.').trim().slice(0,1000);
+  return{
+    version:1,
+    steps:[
+      {action:'make_folder',path:name},
+      {action:'write_file',path:name+'/README.md',content:'# '+name+'\n\n'+desc+'\n'},
+      {action:'write_file',path:name+'/TASKS.md',content:'# Tasks\n\n- [ ] Plan\n- [ ] Execute\n- [ ] Verify\n'},
+      {action:'verify_file',path:name+'/README.md'},
+      {action:'verify_file',path:name+'/TASKS.md'}
+    ]
+  };
 }
 function workerSupports(command){
   const need=requiredCapability(command);
@@ -161,6 +180,8 @@ const server=http.createServer((req,res)=>{
         claimedAt:null,
         completedAt:null
       };
+      const plan=deterministicPlan(command);
+      if(plan){t.plan=plan;t.agent='DEVELOPER';}
       state.tasks.push(t);
       log('QUEUE','#'+t.id+' kuyruğa alındı');
       prepareTask(t,false);
