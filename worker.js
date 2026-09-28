@@ -24,8 +24,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.6.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','local_memory'];
+const WORKER_VERSION='2.7.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','local_memory'];
 
 if(!TOKEN&&!DEVICE_TOKEN){console.error('JARVIS cihaz kimliği veya geçiş tokenı gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
@@ -169,10 +169,12 @@ function journalBefore(task,target,type){
   if(j.version!==2)throw new Error('Eski transaction journal sürümü otomatik değiştirilemez');
   if(j.entries.some(x=>x.path===rel))return;
   if(j.entries.length>=32)throw new Error('Transaction journal 32 öğe sınırını aştı');
+  const backupBytes=j.entries.reduce((n,e)=>n+(e.type==='file'&&e.existed&&e.data?Buffer.from(e.data,'base64').length:0),0);
   if(type==='file'){
     if(fs.existsSync(target)){
       const st=fs.statSync(target);if(!st.isFile())throw new Error('Rollback hedefi dosya değil: '+rel);
       if(st.size>512*1024)throw new Error('Rollback limiti: mevcut dosya 512KB üzerinde: '+rel);
+      if(backupBytes+st.size>2*1024*1024)throw new Error('Transaction toplam rollback bütçesi 2MB sınırını aştı');
       j.entries.push({path:rel,type:'file',existed:true,beforeHash:fileHash(target),afterHash:null,data:fs.readFileSync(target).toString('base64')});
     }else j.entries.push({path:rel,type:'file',existed:false,beforeHash:null,afterHash:null});
   }else if(type==='dir')j.entries.push({path:rel,type:'dir',existed:fs.existsSync(target),afterExists:null});
@@ -270,7 +272,10 @@ async function runPlan(task){
           const dir=safeFile(step.path); journalBefore(task,dir,'dir'); fs.mkdirSync(dir,{recursive:true}); journalAfter(task,dir,'dir');
           result={ok:verifyPath(step.path,'dir'),message:'Klasör: '+step.path};
         }else if(step.action==='write_file'){
-          const file=safeFile(step.path); journalBefore(task,file,'file'); fs.mkdirSync(path.dirname(file),{recursive:true});
+          const file=safeFile(step.path),parent=path.dirname(file);
+          if(!fs.existsSync(parent))journalBefore(task,parent,'dir');
+          journalBefore(task,file,'file'); fs.mkdirSync(parent,{recursive:true});
+          if(readJournal(task).entries.some(e=>e.path===path.relative(WORKSPACE,parent)&&e.type==='dir'))journalAfter(task,parent,'dir');
           fs.writeFileSync(file,String(step.content||''),'utf8'); journalAfter(task,file,'file');
           result={ok:verifyPath(step.path,'file'),message:'Dosya: '+step.path};
         }else if(step.action==='verify_file'){
