@@ -295,8 +295,9 @@ const server=http.createServer((req,res)=>{
       if(Date.now()-new Date(stale.claimedAt).getTime()>CLAIM_TTL_MS){
         if(stale.attempts<stale.maxRetries){
           stale.status='waiting_worker';
-          stale.message='PC bağlantısı kesildi; görev checkpoint üzerinden yeniden kuyruğa alındı.';
-          log('RESUME','#'+stale.id+' yarım görev yeniden kuyruğa alındı');
+          if(!stale.plan){stale.targetDeviceId=null;stale.claimedDeviceId=null}
+          stale.message=stale.plan?'PC bağlantısı kesildi; checkpoint sahibi hedef PC bekleniyor.':'PC bağlantısı kesildi; görev uygun başka PC için yeniden kuyruğa alındı.';
+          log('RESUME','#'+stale.id+' '+stale.message);
         }else{
           stale.status='failed';
           stale.message='PC bağlantısı sırasında maksimum yeniden deneme sınırına ulaşıldı.';
