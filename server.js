@@ -287,7 +287,9 @@ const server=http.createServer((req,res)=>{
   const pathname=u.pathname;
 
   if(pathname==='/api/health'){
-    return json(res,200,{ok:true,name:'JARVIS OS',version:'0.2.0',zeroCostFirst:true,auth:!!TOKEN,pcWorker:pcOnline()});
+    const devices=Object.values(state.workers.devices),approved=devices.filter(w=>w.approved),online=approved.filter(workerOnline),signed=approved.filter(w=>w.authMode==='signed');
+    const latest=online.slice().sort((a,b)=>String(b.lastSeen||'').localeCompare(String(a.lastSeen||'')))[0]||null;
+    return json(res,200,{ok:true,name:'JARVIS OS',version:'0.2.0',zeroCostFirst:true,auth:!!TOKEN,pcWorker:pcOnline(),devices:{approved:approved.length,online:online.length,signed:signed.length,latestVersion:latest&&latest.version||null,latestSeen:latest&&latest.lastSeen||null}});
   }
 
   if(pathname.startsWith('/api/')&&pathname!=='/api/pairing/exchange'){
