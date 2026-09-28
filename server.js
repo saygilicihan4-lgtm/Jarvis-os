@@ -671,4 +671,5 @@ const server=http.createServer((req,res)=>{
 server.listen(PORT,'0.0.0.0',()=>{
   log('BOOT','JARVIS OS v0.2 started');
   console.log('JARVIS OS listening on '+PORT);
+  console.log('[JARVIS] PHONE SESSION CODE: '+phoneCode+' (5 min, one use)');
 });
