@@ -23,8 +23,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.4.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','local_memory'];
+const WORKER_VERSION='2.5.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','local_memory'];
 
 if(!TOKEN&&!DEVICE_TOKEN){console.error('JARVIS cihaz kimliği veya geçiş tokenı gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
@@ -435,6 +435,7 @@ async function tryRestoreCloudState(){
   if(!fs.existsSync(CLOUD_STATE_FILE))return;
   try{
     const s=JSON.parse(fs.readFileSync(CLOUD_STATE_FILE,'utf8'));
+    if(s.schemaVersion!==3||!s.signature){remember({kind:'state_restore_refused',reason:'unsigned_or_legacy_snapshot'});return}
     await api('/api/state/restore',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(s)});
     console.log('[JARVIS] Cloud state yerel snapshot ile geri yüklendi.');
   }catch(e){
