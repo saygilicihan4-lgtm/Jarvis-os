@@ -16,6 +16,7 @@ const state={
 };
 
 function now(){return new Date().toISOString()}
+function touchState(){state.stateRevision++;}
 function log(type,message){
   state.audit.push({at:now(),type,message});
   if(state.audit.length>300)state.audit.shift();
@@ -287,7 +288,7 @@ const server=http.createServer((req,res)=>{
       const roles=Array.isArray(d.roles)?d.roles.filter(x=>validRoles.includes(x)).slice(0,3):['DEVELOPER'];
       const requestedCaps=Array.isArray(d.allowedCapabilities)?d.allowedCapabilities.map(String):[];
       const allowedCapabilities=(requestedCaps.length?requestedCaps:w.capabilities).filter(x=>w.capabilities.includes(x)).slice(0,50);
-      w.approved=true;w.roles=roles.length?roles:['DEVELOPER'];w.allowedCapabilities=allowedCapabilities;
+      w.approved=true;w.roles=roles.length?roles:['DEVELOPER'];w.allowedCapabilities=allowedCapabilities;touchState();
       log('DEVICE_APPROVE',id+' onaylandı · roller '+w.roles.join(','));
       return json(res,200,{ok:true,deviceId:id,name:w.name,approved:true,roles:w.roles,allowedCapabilities:w.allowedCapabilities});
     });
@@ -302,6 +303,7 @@ const server=http.createServer((req,res)=>{
       const validRoles=['DEVELOPER','CREATOR','COMMERCE'];
       if(Array.isArray(d.roles)){const roles=d.roles.filter(x=>validRoles.includes(x)).slice(0,3);if(!roles.length)return json(res,400,{error:'at least one valid role required'});w.roles=roles}
       if(Array.isArray(d.allowedCapabilities)){w.allowedCapabilities=d.allowedCapabilities.map(String).filter(x=>w.capabilities.includes(x)).slice(0,50)}
+      touchState();
       log('DEVICE_SCOPE',id+' kapsam güncellendi · '+(w.roles||[]).join(','));
       return json(res,200,{ok:true,deviceId:id,roles:w.roles||[],allowedCapabilities:w.allowedCapabilities||[]});
     });
@@ -311,7 +313,7 @@ const server=http.createServer((req,res)=>{
   if(deviceRevoke&&req.method==='POST'){
     const id=deviceRevoke[1],w=state.workers.devices[id];
     if(!w)return json(res,404,{error:'device not found'});
-    w.approved=false;
+    w.approved=false;touchState();
     log('DEVICE_REVOKE',id+' cihazının yetkisi kaldırıldı');
     return json(res,200,{ok:true,deviceId:id,approved:false});
   }
@@ -329,7 +331,7 @@ const server=http.createServer((req,res)=>{
       const actions=(Array.isArray(d.actions)?d.actions:[]).filter(x=>validActions.includes(x));
       if(!agents.length||!actions.length)return json(res,400,{error:'agents and actions required'});
       const key=deviceId+'|'+accountType;
-      state.accountPolicies[key]={deviceId,accountType,agents:[...new Set(agents)],actions:[...new Set(actions)],updatedAt:now()};
+      state.accountPolicies[key]={deviceId,accountType,agents:[...new Set(agents)],actions:[...new Set(actions)],updatedAt:now()};touchState();
       log('ACCOUNT_POLICY',deviceId+' '+accountType+' · '+actions.join(','));
       return json(res,200,{ok:true,...state.accountPolicies[key],secretStored:false});
     });
@@ -337,7 +339,7 @@ const server=http.createServer((req,res)=>{
   const accountRevoke=pathname.match(/^\/api\/account-policies\/([A-Za-z0-9_.-]+)\/(github|shopify)$/);
   if(accountRevoke&&req.method==='DELETE'){
     const key=accountRevoke[1]+'|'+accountRevoke[2];
-    const existed=!!state.accountPolicies[key];delete state.accountPolicies[key];
+    const existed=!!state.accountPolicies[key];delete state.accountPolicies[key];if(existed)touchState();
     log('ACCOUNT_REVOKE',key+' kaldırıldı');
     return json(res,200,{ok:true,existed});
   }
@@ -363,7 +365,7 @@ const server=http.createServer((req,res)=>{
       };
       const plan=deterministicPlan(command);
       if(plan){t.plan=plan;t.agent='DEVELOPER';}
-      state.tasks.push(t);
+      state.tasks.push(t);touchState();
       log(plan?'PLAN':'QUEUE','#'+t.id+(plan?' güvenli '+plan.steps.length+' adımlı plan oluşturuldu':' kuyruğa alındı'));
       prepareTask(t,false);
       return json(res,201,t);
@@ -385,7 +387,7 @@ const server=http.createServer((req,res)=>{
     const t=taskById(cancel[1]);
     if(!t)return json(res,404,{error:'task not found'});
     if(['completed','cancelled'].includes(t.status))return json(res,409,{error:'task already closed'});
-    t.status='cancelled';
+    t.status='cancelled';touchState();
     t.message='Kullanıcı tarafından iptal edildi.';
     t.completedAt=now();
     log('CANCEL','#'+t.id+' iptal edildi');
