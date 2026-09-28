@@ -5,12 +5,20 @@ const os=require('os');
 const BASE=(process.env.JARVIS_URL||'https://jarvis-os-1iuv.onrender.com').replace(/\/$/,'');
 const TOKEN=process.env.JARVIS_TOKEN||'';
 const NAME=process.env.JARVIS_WORKER_NAME||os.hostname();
+const DEVICE_FILE=path.join(os.homedir(),'.jarvis-device-id');
+function loadDeviceId(){
+  if(process.env.JARVIS_DEVICE_ID)return process.env.JARVIS_DEVICE_ID;
+  try{const x=fs.readFileSync(DEVICE_FILE,'utf8').trim();if(x)return x}catch(e){}
+  const id='PC-'+os.hostname().replace(/[^A-Za-z0-9_.-]/g,'-')+'-'+require('crypto').randomBytes(4).toString('hex');
+  fs.writeFileSync(DEVICE_FILE,id,'utf8');return id;
+}
+const DEVICE_ID=loadDeviceId();
 const WORKSPACE=path.resolve(process.env.JARVIS_WORKSPACE||path.join(process.cwd(),'jarvis-workspace'));
 const MEMORY_DIR=path.join(WORKSPACE,'.jarvis-memory');
 const MEMORY_FILE=path.join(MEMORY_DIR,'task-history.jsonl');
 const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
-const WORKER_VERSION='1.0.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','resume_checkpoint','local_memory'];
+const WORKER_VERSION='1.1.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','resume_checkpoint','multi_device_identity','local_memory'];
 
 if(!TOKEN){console.error('JARVIS_TOKEN gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
@@ -61,7 +69,7 @@ function memoryStats(){
 }
 
 async function api(route,options={}){
-  options.headers={...(options.headers||{}),authorization:'Bearer '+TOKEN};
+  options.headers={...(options.headers||{}),authorization:'Bearer '+TOKEN,'x-jarvis-device-id':DEVICE_ID};
   const r=await fetch(BASE+route,options);
   const j=await r.json().catch(()=>({}));
   if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
@@ -235,7 +243,7 @@ async function execute(task){
 }
 async function poll(){
   try{
-    await api('/api/worker/heartbeat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:NAME,version:WORKER_VERSION,capabilities:CAPS,memory:memoryStats()})});
+    await api('/api/worker/heartbeat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:NAME,deviceId:DEVICE_ID,version:WORKER_VERSION,capabilities:CAPS,memory:memoryStats()})});
     const r=await api('/api/worker/next');
     if(!r.task)return;
     let result;
