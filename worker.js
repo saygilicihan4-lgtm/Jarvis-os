@@ -187,6 +187,23 @@ function rollbackJournal(task){
   remember({kind:'transaction_rollback',taskUid:task.uid||null,entries:out});return out;
 }
 function clearJournal(task){try{fs.unlinkSync(journalFile(task))}catch(e){}}
+function planHash(plan){return crypto.createHash('sha256').update(JSON.stringify(plan)).digest('hex')}
+function verifyCompletedStep(step){
+  if(!step||!step.action)return false;
+  if(step.action==='make_folder'||step.action==='verify_folder')return verifyPath(step.path,'dir');
+  if(step.action==='write_file'){
+    const file=safeFile(step.path);
+    if(!fs.existsSync(file)||!fs.statSync(file).isFile())return false;
+    return fileHash(file)===crypto.createHash('sha256').update(String(step.content||''),'utf8').digest('hex');
+  }
+  if(step.action==='verify_file')return verifyPath(step.path,'file');
+  return false;
+}
+function verifyPlanPrefix(plan,count){
+  const failures=[];
+  for(let i=0;i<count;i++)if(!verifyCompletedStep(plan.steps[i]))failures.push(i+1);
+  return{ok:failures.length===0,failures};
+}
 function checkpointFile(task){
   const key=String(task.uid||('legacy-'+task.id)).replace(/[^A-Za-z0-9_.-]/g,'_');
   return path.join(CHECKPOINT_DIR,key+'.json');
@@ -208,9 +225,14 @@ async function runPlan(task){
   if(!plan||!Array.isArray(plan.steps)||plan.steps.length<1||plan.steps.length>8)throw new Error('Plan 1-8 adım içermeli');
   const results=[];
   const MAX_STEP_ATTEMPTS=2;
-  const cp=readCheckpoint(task);
-  let startAt=(cp.planVersion===plan.version&&Number.isInteger(cp.nextStep))?Math.max(0,Math.min(cp.nextStep,plan.steps.length)):0;
-  if(startAt>0)remember({kind:'resume',taskUid:task.uid||null,nextStep:startAt+1,totalSteps:plan.steps.length});
+  const cp=readCheckpoint(task),expectedPlanHash=planHash(plan);
+  let startAt=(cp.planVersion===plan.version&&cp.planHash===expectedPlanHash&&Number.isInteger(cp.nextStep))?Math.max(0,Math.min(cp.nextStep,plan.steps.length)):0;
+  if(cp.nextStep>0&&cp.planHash!==expectedPlanHash)throw new Error('Checkpoint plan hash uyuşmazlığı; otomatik resume reddedildi');
+  if(startAt>0){
+    const prefix=verifyPlanPrefix(plan,startAt);
+    if(!prefix.ok)throw new Error('Checkpoint prefix yeniden doğrulanamadı; adımlar: '+prefix.failures.join(','));
+    remember({kind:'resume_revalidated',taskUid:task.uid||null,nextStep:startAt+1,totalSteps:plan.steps.length,planHash:expectedPlanHash});
+  }
   for(let i=startAt;i<plan.steps.length;i++){
     const step=plan.steps[i]||{};
     let result=null,lastError=null;
@@ -231,7 +253,7 @@ async function runPlan(task){
         remember({kind:'plan_step',taskUid:task.uid||null,action:step.action,path:step.path||null,step:i+1,attempt,ok:!!result.ok});
         if(result.ok){
           results.push({step:i+1,action:step.action,attempts:attempt,...result});
-          saveCheckpoint(task,{planVersion:plan.version,nextStep:i+1,totalSteps:plan.steps.length});
+          saveCheckpoint(task,{planVersion:plan.version,planHash:planHash(plan),nextStep:i+1,totalSteps:plan.steps.length});
           break;
         }
         lastError=new Error('Doğrulama başarısız: '+result.message);
