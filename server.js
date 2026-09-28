@@ -9,6 +9,9 @@ const PUBLIC=path.join(ROOT,'public');
 const TOKEN=process.env.JARVIS_TOKEN||'';
 const DEVICE_SECRET=process.env.JARVIS_DEVICE_SECRET||'';
 const STATE_SECRET=process.env.JARVIS_STATE_SECRET||'';
+const BOOTSTRAP_PAIR_HASH=process.env.JARVIS_BOOTSTRAP_PAIR_HASH||'';
+const BOOTSTRAP_PAIR_EXP=Number(process.env.JARVIS_BOOTSTRAP_PAIR_EXP||0);
+let bootstrapPairUsed=false;
 // DEVICE_AUTH_CHAIN_V2_2
 const state={
   tasks:[],
@@ -311,10 +314,15 @@ const server=http.createServer((req,res)=>{
     return readJson(req,(err,d)=>{
       if(err)return json(res,400,{error:'bad json'});
       const code=String(d.code||'').trim().toUpperCase(),deviceId=String(d.deviceId||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80);
-      const p=state.pairingCodes[code];
+      let p=state.pairingCodes[code];
+      if(!p&&BOOTSTRAP_PAIR_HASH&&!bootstrapPairUsed&&Date.now()<BOOTSTRAP_PAIR_EXP){
+        const got=crypto.createHash('sha256').update(code).digest('hex');
+        const a=Buffer.from(got,'hex'),b=Buffer.from(BOOTSTRAP_PAIR_HASH,'hex');
+        if(a.length===b.length&&crypto.timingSafeEqual(a,b))p={expiresAt:BOOTSTRAP_PAIR_EXP,used:false,bootstrap:true};
+      }
       if(!p||p.used||p.expiresAt<Date.now())return json(res,403,{error:'invalid or expired pairing code'});
       if(!deviceId)return json(res,400,{error:'deviceId required'});
-      p.used=true;
+      p.used=true;if(p.bootstrap)bootstrapPairUsed=true;
       const caps=Array.isArray(d.capabilities)?d.capabilities.map(String).slice(0,50):[];
       state.workers.devices[deviceId]={name:String(d.name||deviceId).slice(0,100),version:d.version?String(d.version):null,lastSeen:now(),capabilities:caps,memory:null,approved:true,roles:['DEVELOPER'],allowedCapabilities:caps,authMode:'signed',credentialIssuedAt:now()};
       touchState();
