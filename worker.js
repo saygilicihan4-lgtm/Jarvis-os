@@ -1,6 +1,7 @@
 const fs=require('fs');
 const path=require('path');
 const os=require('os');
+const crypto=require('crypto');
 
 const BASE=(process.env.JARVIS_URL||'https://jarvis-os-1iuv.onrender.com').replace(/\/$/,'');
 const TOKEN=process.env.JARVIS_TOKEN||'';
@@ -23,8 +24,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.5.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','local_memory'];
+const WORKER_VERSION='2.6.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','local_memory'];
 
 if(!TOKEN&&!DEVICE_TOKEN){console.error('JARVIS cihaz kimliği veya geçiş tokenı gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
@@ -151,7 +152,15 @@ function journalFile(task){
   const key=String(task.uid||('legacy-'+task.id)).replace(/[^A-Za-z0-9_.-]/g,'_');
   return path.join(JOURNAL_DIR,key+'.json');
 }
-function readJournal(task){try{return JSON.parse(fs.readFileSync(journalFile(task),'utf8'))}catch(e){return{version:2,task:{uid:task.uid,command:task.command,plan:task.plan,createdAt:task.createdAt},entries:[]}}}
+function freshJournal(task){return{version:2,task:{uid:task.uid,command:task.command,plan:task.plan,createdAt:task.createdAt},entries:[]}}
+function readJournal(task){
+  const f=journalFile(task);
+  try{return JSON.parse(fs.readFileSync(f,'utf8'))}
+  catch(e){
+    if(e&&e.code==='ENOENT')return freshJournal(task);
+    throw new Error('Transaction journal okunamadı/bozuk; otomatik işlem durduruldu: '+path.basename(f));
+  }
+}
 function writeJournal(task,j){
   const f=journalFile(task),tmp=f+'.tmp';fs.writeFileSync(tmp,JSON.stringify(j),'utf8');fs.renameSync(tmp,f);
 }
@@ -159,6 +168,7 @@ function journalBefore(task,target,type){
   const j=readJournal(task),rel=path.relative(WORKSPACE,target);
   if(j.version!==2)throw new Error('Eski transaction journal sürümü otomatik değiştirilemez');
   if(j.entries.some(x=>x.path===rel))return;
+  if(j.entries.length>=32)throw new Error('Transaction journal 32 öğe sınırını aştı');
   if(type==='file'){
     if(fs.existsSync(target)){
       const st=fs.statSync(target);if(!st.isFile())throw new Error('Rollback hedefi dosya değil: '+rel);
@@ -166,7 +176,6 @@ function journalBefore(task,target,type){
       j.entries.push({path:rel,type:'file',existed:true,beforeHash:fileHash(target),afterHash:null,data:fs.readFileSync(target).toString('base64')});
     }else j.entries.push({path:rel,type:'file',existed:false,beforeHash:null,afterHash:null});
   }else if(type==='dir')j.entries.push({path:rel,type:'dir',existed:fs.existsSync(target),afterExists:null});
-  if(j.entries.length>32)throw new Error('Transaction journal 32 öğe sınırını aştı');
   writeJournal(task,j);
 }
 function journalAfter(task,target,type){
