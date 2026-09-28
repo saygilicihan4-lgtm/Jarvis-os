@@ -308,7 +308,13 @@ const server=http.createServer((req,res)=>{
     const queued=state.tasks.filter(x=>x.status==='waiting_worker');
     let t=null;
     for(const candidate of queued){
-      const support=workerSupports(candidate.command);
+      if(candidate.targetDeviceId&&candidate.targetDeviceId!==deviceId)continue;
+      if(!candidate.targetDeviceId&&deviceId){
+        const selected=chooseDevice(candidate.command);
+        if(selected&&selected!==deviceId)continue;
+        if(selected)candidate.targetDeviceId=selected;
+      }
+      const support=workerSupports(candidate.command,deviceId||null);
       if(support.ok){t=candidate;break}
       if(support.need){
         candidate.status='needs_tool';
@@ -324,8 +330,9 @@ const server=http.createServer((req,res)=>{
     t.status='claimed';
     t.claimedAt=now();
     t.attempts++;
-    t.message='PC Worker görevi aldı.';
-    log('CLAIM','#'+t.id+' PC Worker aldı (deneme '+t.attempts+')');
+    t.claimedDeviceId=deviceId||'legacy-pc';
+    t.message='PC Worker görevi aldı: '+t.claimedDeviceId;
+    log('CLAIM','#'+t.id+' '+t.claimedDeviceId+' aldı (deneme '+t.attempts+')');
     return json(res,200,{task:t});
   }
 
@@ -334,6 +341,8 @@ const server=http.createServer((req,res)=>{
       if(err)return json(res,400,{error:'bad json'});
       const t=taskById(d.id);
       if(!t)return json(res,404,{error:'task not found'});
+      const resultDevice=String(req.headers['x-jarvis-device-id']||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80)||'legacy-pc';
+      if(t.claimedDeviceId&&t.claimedDeviceId!==resultDevice)return json(res,409,{error:'result device mismatch'});
       if(t.status==='cancelled')return json(res,409,{error:'task cancelled'});
       if(d.ok){
         t.status='completed';
