@@ -138,6 +138,7 @@ function writeJournal(task,j){
 }
 function journalBefore(task,target,type){
   const j=readJournal(task),rel=path.relative(WORKSPACE,target);
+  if(j.version!==2)throw new Error('Eski transaction journal sürümü otomatik değiştirilemez');
   if(j.entries.some(x=>x.path===rel))return;
   if(type==='file'){
     if(fs.existsSync(target)){
@@ -151,6 +152,7 @@ function journalBefore(task,target,type){
 }
 function journalAfter(task,target,type){
   const j=readJournal(task),rel=path.relative(WORKSPACE,target),e=j.entries.find(x=>x.path===rel);
+  if(j.version!==2)throw new Error('Eski transaction journal sürümü otomatik değiştirilemez');
   if(!e)throw new Error('Transaction journal girdisi bulunamadı: '+rel);
   if(type==='file')e.afterHash=fileHash(target);else e.afterExists=fs.existsSync(target);
   writeJournal(task,j);
