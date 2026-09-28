@@ -233,6 +233,21 @@ const server=http.createServer((req,res)=>{
 
   if(pathname==='/api/worker/next'&&req.method==='GET'){
     state.workers.pc.lastSeen=now();
+    const CLAIM_TTL_MS=90_000;
+    for(const stale of state.tasks.filter(x=>x.status==='claimed'&&x.claimedAt)){
+      if(Date.now()-new Date(stale.claimedAt).getTime()>CLAIM_TTL_MS){
+        if(stale.attempts<stale.maxRetries){
+          stale.status='waiting_worker';
+          stale.message='PC bağlantısı kesildi; görev checkpoint üzerinden yeniden kuyruğa alındı.';
+          log('RESUME','#'+stale.id+' yarım görev yeniden kuyruğa alındı');
+        }else{
+          stale.status='failed';
+          stale.message='PC bağlantısı sırasında maksimum yeniden deneme sınırına ulaşıldı.';
+          stale.completedAt=now();
+          log('FAILED','#'+stale.id+' kesinti retry sınırına ulaştı');
+        }
+      }
+    }
     const queued=state.tasks.filter(x=>x.status==='waiting_worker');
     let t=null;
     for(const candidate of queued){
