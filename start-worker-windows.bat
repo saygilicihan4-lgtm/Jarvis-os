@@ -11,7 +11,11 @@ if errorlevel 1 (
 )
 if "%JARVIS_URL%"=="" set "JARVIS_URL=https://jarvis-os-1iuv.onrender.com"
 if "%JARVIS_TOKEN%"=="" (
+  for /f "usebackq delims=" %%T in (`powershell -NoProfile -Command "$p=Join-Path $env:LOCALAPPDATA 'JARVIS\token.dpapi'; if(Test-Path $p){try{$s=Get-Content $p -Raw ^| ConvertTo-SecureString; $b=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($s); [Runtime.InteropServices.Marshal]::PtrToStringBSTR($b)}catch{}}" `) do set "JARVIS_TOKEN=%%T"
+)
+if "%JARVIS_TOKEN%"=="" (
   set /p "JARVIS_TOKEN=JARVIS ACCESS KEY: "
+  if not "%JARVIS_TOKEN%"=="" powershell -NoProfile -Command "$d=Join-Path $env:LOCALAPPDATA 'JARVIS'; New-Item -ItemType Directory -Force -Path $d ^| Out-Null; ConvertTo-SecureString $env:JARVIS_TOKEN -AsPlainText -Force ^| ConvertFrom-SecureString ^| Set-Content (Join-Path $d 'token.dpapi')"
 )
 if "%JARVIS_TOKEN%"=="" (
   echo [JARVIS] ACCESS KEY gerekli.
