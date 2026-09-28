@@ -8,6 +8,7 @@ const ROOT=__dirname;
 const PUBLIC=path.join(ROOT,'public');
 const TOKEN=process.env.JARVIS_TOKEN||'';
 const DEVICE_SECRET=process.env.JARVIS_DEVICE_SECRET||'';
+// DEVICE_AUTH_CHAIN_V2_2
 const state={
   tasks:[],
   audit:[],
