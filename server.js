@@ -309,11 +309,19 @@ const server=http.createServer((req,res)=>{
     return readJson(req,(err,d)=>{
       if(err)return json(res,400,{error:'bad json'});
       const deviceId=String(req.headers['x-jarvis-device-id']||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80);
-      const w=deviceWorker(deviceId);
-      if(!w||!w.approved)return json(res,403,{error:'approved device required'});
-      if(state.tasks.length||Object.keys(state.accountPolicies).length)return json(res,409,{error:'cloud state not empty; restore refused'});
-      try{restoreSnapshot(d);log('STATE_RESTORE',deviceId+' yerel snapshot geri yükledi');return json(res,200,{ok:true,tasks:state.tasks.length,policies:Object.keys(state.accountPolicies).length})}
-      catch(e){return json(res,400,{error:e.message})}
+      const live=deviceWorker(deviceId),cloudEmpty=state.stateRevision===0&&state.tasks.length===0&&Object.keys(state.accountPolicies).length===0&&!Object.values(state.workers.devices).some(x=>x.approved);
+      try{
+        const verified=verifySnapshot(d),snapDevice=verified.devices&&verified.devices[deviceId];
+        const normalApproved=!!(live&&live.approved);
+        const bootstrapApproved=cloudEmpty&&!!(snapDevice&&snapDevice.approved);
+        if(!normalApproved&&!bootstrapApproved)return json(res,403,{error:'approved device required'});
+        if(!cloudEmpty&&!normalApproved)return json(res,409,{error:'cloud state not empty; bootstrap restore refused'});
+        if(state.tasks.length||Object.keys(state.accountPolicies).length)return json(res,409,{error:'cloud state not empty; restore refused'});
+        restoreSnapshot(d);
+        log('STATE_RESTORE',deviceId+(bootstrapApproved?' signed bootstrap restore':' local snapshot restore'));
+        touchState();
+        return json(res,200,{ok:true,bootstrap:bootstrapApproved,tasks:state.tasks.length,policies:Object.keys(state.accountPolicies).length,revision:state.stateRevision});
+      }catch(e){return json(res,400,{error:e.message})}
     });
   }
 
