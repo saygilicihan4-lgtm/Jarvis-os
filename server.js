@@ -77,7 +77,7 @@ function risky(c){
 function remoteAgent(a){return['DEVELOPER','CREATOR','COMMERCE'].includes(a)}
 function requiredCapability(command){
   const c=String(command||'').toLowerCase().replace(/^(pc|bilgisayar)\s*:\s*/i,'');
-  if(deterministicPlan(command))return'transactional_plan';
+  if(deterministicPlan(command))return'transaction_journal_v3';
   if(/^(optimizasyonu uygula|optimizasyon uygula|apply optimization)/.test(c))return'strategy_rollback';
   if(/^(optimizasyon durumu|strategy selection|en iyi strateji)/.test(c))return'strategy_selection';
   if(/^(öğrenme durumu|ogrenme durumu|strategy metrics|learning status)/.test(c))return'strategy_metrics';
