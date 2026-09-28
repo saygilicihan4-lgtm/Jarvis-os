@@ -17,6 +17,7 @@ const WORKSPACE=path.resolve(process.env.JARVIS_WORKSPACE||path.join(process.cwd
 const MEMORY_DIR=path.join(WORKSPACE,'.jarvis-memory');
 const MEMORY_FILE=path.join(MEMORY_DIR,'task-history.jsonl');
 const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
+const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
 const WORKER_VERSION='1.8.0';
@@ -26,6 +27,7 @@ if(!TOKEN){console.error('JARVIS_TOKEN gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
 fs.mkdirSync(MEMORY_DIR,{recursive:true});
 fs.mkdirSync(CHECKPOINT_DIR,{recursive:true});
+fs.mkdirSync(JOURNAL_DIR,{recursive:true});
 function remember(record){
   const safe={at:new Date().toISOString(),...record};
   fs.appendFileSync(MEMORY_FILE,JSON.stringify(safe)+'\n','utf8');
@@ -122,6 +124,45 @@ function verifyPath(rel,type){
   if(type==='file')return fs.statSync(target).isFile();
   return true;
 }
+function journalFile(task){
+  const key=String(task.uid||('legacy-'+task.id)).replace(/[^A-Za-z0-9_.-]/g,'_');
+  return path.join(JOURNAL_DIR,key+'.json');
+}
+function readJournal(task){try{return JSON.parse(fs.readFileSync(journalFile(task),'utf8'))}catch(e){return{version:1,entries:[]}}}
+function writeJournal(task,j){
+  const f=journalFile(task),tmp=f+'.tmp';fs.writeFileSync(tmp,JSON.stringify(j),'utf8');fs.renameSync(tmp,f);
+}
+function journalBefore(task,target,type){
+  const j=readJournal(task),rel=path.relative(WORKSPACE,target);
+  if(j.entries.some(x=>x.path===rel))return;
+  if(type==='file'){
+    if(fs.existsSync(target)){
+      const st=fs.statSync(target);if(!st.isFile())throw new Error('Rollback hedefi dosya değil: '+rel);
+      if(st.size>512*1024)throw new Error('Rollback limiti: mevcut dosya 512KB üzerinde: '+rel);
+      j.entries.push({path:rel,type:'file',existed:true,data:fs.readFileSync(target).toString('base64')});
+    }else j.entries.push({path:rel,type:'file',existed:false});
+  }else if(type==='dir')j.entries.push({path:rel,type:'dir',existed:fs.existsSync(target)});
+  if(j.entries.length>32)throw new Error('Transaction journal 32 öğe sınırını aştı');
+  writeJournal(task,j);
+}
+function rollbackJournal(task){
+  const j=readJournal(task),out=[];
+  for(const e of [...j.entries].reverse()){
+    const target=safeFile(e.path);
+    try{
+      if(e.type==='file'){
+        if(e.existed){fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,Buffer.from(e.data||'','base64'))}
+        else if(fs.existsSync(target)&&fs.statSync(target).isFile())fs.unlinkSync(target);
+      }else if(e.type==='dir'&&!e.existed&&fs.existsSync(target)){
+        try{fs.rmdirSync(target)}catch(x){}
+      }
+      out.push({path:e.path,ok:true});
+    }catch(err){out.push({path:e.path,ok:false,error:err.message})}
+  }
+  remember({kind:'transaction_rollback',taskUid:task.uid||null,entries:out});
+  return out;
+}
+function clearJournal(task){try{fs.unlinkSync(journalFile(task))}catch(e){}}
 function checkpointFile(task){
   const key=String(task.uid||('legacy-'+task.id)).replace(/[^A-Za-z0-9_.-]/g,'_');
   return path.join(CHECKPOINT_DIR,key+'.json');
