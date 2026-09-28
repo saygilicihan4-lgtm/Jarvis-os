@@ -290,10 +290,11 @@ async function load(){
   const pc=d.workers&&d.workers.pc?d.workers.pc:{online:false};
   pcDot.className='dot '+(pc.online?'online':'offline');
   pcState.textContent=pc.online?'ONLINE':'OFFLINE';
-  workerSetup.textContent=pc.online?'CONNECTED':'RUN LAUNCHER ON PC';
+  const workerCurrent=pc.online&&pc.version==='0.4.0';
+  workerSetup.textContent=!pc.online?'RUN LAUNCHER ON PC':workerCurrent?('CONNECTED v'+pc.version):'UPDATE REQUIRED';
   workerReadout.textContent=pc.online?'ON':'OFF';
-  devAgent.textContent=pc.online?'READY':'STANDBY';
-  devAgent.style.color=pc.online?'#65ffbf':'';
+  devAgent.textContent=!pc.online?'STANDBY':workerCurrent?('READY v'+pc.version):'UPDATE REQUIRED';
+  devAgent.style.color=workerCurrent?'#65ffbf':pc.online?'#ffca66':'';
   taskCount.textContent=String((d.tasks||[]).length).padStart(2,'0');
   const localMemory=pc.online&&Array.isArray(pc.capabilities)&&pc.capabilities.includes('local_memory');
   memoryState.textContent=localMemory?'LOCAL PERSISTENT':'VOLATILE';
