@@ -1,6 +1,7 @@
 const http=require('http');
 const fs=require('fs');
 const path=require('path');
+const crypto=require('crypto');
 
 const PORT=process.env.PORT||3000;
 const ROOT=__dirname;
@@ -10,6 +11,7 @@ const state={
   tasks:[],
   audit:[],
   accountPolicies:{},
+  stateRevision:0,
   workers:{pc:{name:null,version:null,lastSeen:null,capabilities:[],memory:null},devices:{}}
 };
 
@@ -190,9 +192,10 @@ function runLocalSelfHeal(t){
     log('VERIFY','#'+t.id+' self-heal doğrulandı');
   },250);
 }
-function persistentSnapshot(){
+function snapshotPayload(){
   return{
-    schemaVersion:1,
+    schemaVersion:2,
+    revision:state.stateRevision,
     savedAt:now(),
     tasks:state.tasks.slice(-500),
     audit:state.audit.slice(-300),
@@ -200,12 +203,27 @@ function persistentSnapshot(){
     devices:Object.fromEntries(Object.entries(state.workers.devices).map(([id,w])=>[id,{name:w.name,approved:!!w.approved,roles:w.roles||[],allowedCapabilities:w.allowedCapabilities||[]}]))
   };
 }
+function snapshotHash(payload){
+  return crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+}
+function persistentSnapshot(){
+  const payload=snapshotPayload();
+  return{...payload,sha256:snapshotHash(payload)};
+}
+function verifySnapshot(s){
+  if(!s||s.schemaVersion!==2||!Number.isSafeInteger(s.revision)||s.revision<0||!Array.isArray(s.tasks)||typeof s.accountPolicies!=='object'||typeof s.devices!=='object')throw new Error('invalid snapshot');
+  const {sha256,...payload}=s;
+  if(!/^[a-f0-9]{64}$/.test(String(sha256||''))||snapshotHash(payload)!==sha256)throw new Error('snapshot integrity check failed');
+  return payload;
+}
 function restoreSnapshot(s){
-  if(!s||s.schemaVersion!==1||!Array.isArray(s.tasks)||typeof s.accountPolicies!=='object'||typeof s.devices!=='object')throw new Error('invalid snapshot');
-  state.tasks=s.tasks.slice(-500);
-  state.audit=Array.isArray(s.audit)?s.audit.slice(-300):[];
-  state.accountPolicies=s.accountPolicies||{};
-  for(const [id,d] of Object.entries(s.devices)){
+  const p=verifySnapshot(s);
+  if(p.revision<state.stateRevision)throw new Error('stale snapshot refused');
+  state.tasks=p.tasks.slice(-500);
+  state.audit=Array.isArray(p.audit)?p.audit.slice(-300):[];
+  state.accountPolicies=p.accountPolicies||{};
+  state.stateRevision=p.revision;
+  for(const [id,d] of Object.entries(p.devices)){
     const live=state.workers.devices[id]||{};
     state.workers.devices[id]={...live,name:d.name||live.name||id,approved:!!d.approved,roles:Array.isArray(d.roles)?d.roles:[],allowedCapabilities:Array.isArray(d.allowedCapabilities)?d.allowedCapabilities:[]};
   }
