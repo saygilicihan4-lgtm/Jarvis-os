@@ -130,6 +130,8 @@ function accountPolicyAllows(deviceId,agent,command){
   return{ok:true,account:a};
 }
 function taskById(id){return state.tasks.find(t=>t.id===Number(id))}
+function taskByUid(uid){return state.tasks.find(t=>t.uid===String(uid||''))}
+function taskLookup(id,uid){return uid?taskByUid(uid):taskById(id)}
 function workerOnline(w){const t=w&&w.lastSeen;return !!t&&(Date.now()-new Date(t).getTime()<15000)}
 function pcOnline(){return workerOnline(state.workers.pc)}
 function deviceWorker(id){return id&&state.workers.devices[id]||null}
@@ -351,7 +353,7 @@ const server=http.createServer((req,res)=>{
       if(!command)return json(res,400,{error:'command required'});
       const t={
         id:state.tasks.length+1,
-        uid:'J-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,7).toUpperCase(),
+        uid:'J-'+crypto.randomUUID().toUpperCase(),
         command,
         agent:agentFor(command),
         status:'queued',
@@ -477,8 +479,9 @@ const server=http.createServer((req,res)=>{
   if(pathname==='/api/worker/result'&&req.method==='POST'){
     return readJson(req,(err,d)=>{
       if(err)return json(res,400,{error:'bad json'});
-      const t=taskById(d.id);
+      const t=taskLookup(d.id,d.uid);
       if(!t)return json(res,404,{error:'task not found'});
+      if(d.uid&&Number.isFinite(Number(d.id))&&t.id!==Number(d.id))return json(res,409,{error:'task id/uid mismatch'});
       const resultDevice=String(req.headers['x-jarvis-device-id']||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80)||'legacy-pc';
       if(t.claimedDeviceId&&t.claimedDeviceId!==resultDevice)return json(res,409,{error:'result device mismatch'});
       if(t.status==='cancelled')return json(res,409,{error:'task cancelled'});
