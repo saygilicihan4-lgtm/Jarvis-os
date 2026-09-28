@@ -18,9 +18,12 @@ function remember(record){
   fs.appendFileSync(MEMORY_FILE,JSON.stringify(safe)+'\n','utf8');
 }
 function memoryStats(){
-  if(!fs.existsSync(MEMORY_FILE))return{records:0,bytes:0};
+  if(!fs.existsSync(MEMORY_FILE))return{records:0,bytes:0,lastAt:null};
   const raw=fs.readFileSync(MEMORY_FILE,'utf8');
-  return{records:raw.split('\n').filter(Boolean).length,bytes:Buffer.byteLength(raw)};
+  const lines=raw.split('\n').filter(Boolean);
+  let lastAt=null;
+  if(lines.length){try{lastAt=JSON.parse(lines[lines.length-1]).at||null}catch(e){}}
+  return{records:lines.length,bytes:Buffer.byteLength(raw),lastAt};
 }
 
 async function api(route,options={}){
@@ -76,7 +79,7 @@ async function execute(task){
 }
 async function poll(){
   try{
-    await api('/api/worker/heartbeat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:NAME,capabilities:CAPS})});
+    await api('/api/worker/heartbeat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:NAME,capabilities:CAPS,memory:memoryStats()})});
     const r=await api('/api/worker/next');
     if(!r.task)return;
     let result;
