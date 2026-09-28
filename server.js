@@ -42,7 +42,7 @@ function agentFor(c){
   return'CORE';
 }
 function risky(c){
-  return /(öde|satın al|reklam bütçe|para gönder|iade yap|sözleşme imzala|sil|delete|format)/i.test(String(c||''));
+  return /(öde|satın al|reklam bütçe|para gönder|iade|refund|sözleşme imzala|sil|delete|format)/i.test(String(c||''));
 }
 function remoteAgent(a){return['DEVELOPER','CREATOR','COMMERCE'].includes(a)}
 function requiredCapability(command){
