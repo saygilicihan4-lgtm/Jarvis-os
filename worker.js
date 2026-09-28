@@ -20,8 +20,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.0.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','local_memory'];
+const WORKER_VERSION='2.1.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','checkpoint_plan_hash_v1','prefix_revalidation_v1','local_memory'];
 
 if(!TOKEN){console.error('JARVIS_TOKEN gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
@@ -379,10 +379,12 @@ async function recoverTransactionJournals(){
         remember({kind:'transaction_recovery_blocked',taskUid:t.uid,conflicts:consistency.conflicts});
         console.error('[JARVIS] Transaction dış değişiklik nedeniyle durduruldu:',t.uid);continue;
       }
-      const cp=readCheckpoint(t);
-      if(cp.planVersion===t.plan.version&&Number.isInteger(cp.nextStep)){
+      const cp=readCheckpoint(t),expectedHash=planHash(t.plan);
+      if(cp.planVersion===t.plan.version&&cp.planHash===expectedHash&&Number.isInteger(cp.nextStep)){
+        const prefix=verifyPlanPrefix(t.plan,Math.max(0,Math.min(cp.nextStep,t.plan.steps.length)));
+        if(!prefix.ok){remember({kind:'transaction_recovery_blocked',taskUid:t.uid,reason:'prefix mismatch',steps:prefix.failures});continue}
         await api('/api/worker/rehydrate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(t)});
-        remember({kind:'transaction_resume_ready',taskUid:t.uid,nextStep:cp.nextStep});
+        remember({kind:'transaction_resume_ready',taskUid:t.uid,nextStep:cp.nextStep,planHash:expectedHash});
       }else{
         const rb=rollbackJournal(t);
         if(rb.every(x=>x.ok)){clearJournal(t);clearCheckpoint(t)}
