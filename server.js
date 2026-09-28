@@ -47,6 +47,7 @@ function remoteAgent(a){return['DEVELOPER','CREATOR','COMMERCE'].includes(a)}
 function requiredCapability(command){
   const c=String(command||'').toLowerCase().replace(/^(pc|bilgisayar)\s*:\s*/i,'');
   if(deterministicPlan(command))return'mission_plan';
+  if(/^(öğrenme durumu|ogrenme durumu|strategy metrics|learning status)/.test(c))return'strategy_metrics';
   if(/^(hafıza durumu|hafiza durumu|memory status)/.test(c))return'local_memory';
   if(/^(sistem durumu|system status|pc durumu)/.test(c))return'system_status';
   if(/^(dosyaları listele|dosya listesi|list files)/.test(c))return'list_files';
