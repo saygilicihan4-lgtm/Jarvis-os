@@ -1,4 +1,4 @@
-const CACHE='jarvis-shell-v1';
+const CACHE='jarvis-shell-v2';
 const SHELL=['/','/style.css','/manifest.webmanifest'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));
