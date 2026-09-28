@@ -9,6 +9,7 @@ const TOKEN=process.env.JARVIS_TOKEN||'';
 const state={
   tasks:[],
   audit:[],
+  accountPolicies:{},
   workers:{pc:{name:null,version:null,lastSeen:null,capabilities:[],memory:null},devices:{}}
 };
 
@@ -101,6 +102,30 @@ function chooseDevice(command,agent='DEVELOPER'){
     .sort((a,b)=>new Date(b[1].lastSeen)-new Date(a[1].lastSeen));
   return eligible.length?eligible[0][0]:null;
 }
+function normalizeAccountType(x){const v=String(x||'').toLowerCase();return['github','shopify'].includes(v)?v:null}
+function accountActionFor(command){
+  const c=String(command||'').toLowerCase();
+  if(/github/.test(c)){
+    if(/delete|sil/.test(c))return{type:'github',action:'delete'};
+    if(/deploy|push|commit|oluştur|olustur|create|update|güncelle/.test(c))return{type:'github',action:'write'};
+    return{type:'github',action:'read'};
+  }
+  if(/shopify|varova|ürün|stok|sipariş/.test(c)){
+    if(/delete|sil/.test(c))return{type:'shopify',action:'delete'};
+    if(/refund|iade/.test(c))return{type:'shopify',action:'refund'};
+    if(/oluştur|olustur|update|güncelle|stok gir|yayınla|yayinla/.test(c))return{type:'shopify',action:'write'};
+    return{type:'shopify',action:'read'};
+  }
+  return null;
+}
+function accountPolicyAllows(deviceId,agent,command){
+  const a=accountActionFor(command);if(!a)return{ok:true,account:null};
+  if(!deviceId)return{ok:false,account:a,reason:'Hesap görevi için hedef cihaz gerekli'};
+  const key=deviceId+'|'+a.type, p=state.accountPolicies[key];
+  if(!p)return{ok:false,account:a,reason:a.type+' hesap erişim politikası tanımlı değil'};
+  if(!p.agents.includes(agent)||!p.actions.includes(a.action))return{ok:false,account:a,reason:'Hesap politikası bu ajan/eyleme izin vermiyor'};
+  return{ok:true,account:a};
+}
 function taskById(id){return state.tasks.find(t=>t.id===Number(id))}
 function workerOnline(w){const t=w&&w.lastSeen;return !!t&&(Date.now()-new Date(t).getTime()<15000)}
 function pcOnline(){return workerOnline(state.workers.pc)}
@@ -163,6 +188,7 @@ function runLocalSelfHeal(t){
 }
 function publicState(){
   return{
+    accountPolicies:Object.values(state.accountPolicies).map(p=>({...p,secretStored:false})),
     tasks:state.tasks,
     audit:state.audit,
     workers:{
