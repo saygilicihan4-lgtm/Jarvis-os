@@ -159,6 +159,10 @@ function prepareTask(t,approved=false){
     }
     t.status='waiting_worker';
     t.targetDeviceId=requested||chooseDevice(t.command,t.agent)||null;
+    const accountCheck=accountPolicyAllows(t.targetDeviceId,t.agent,t.command);
+    if(!accountCheck.ok){
+      t.status='waiting_approval';t.message='Hesap erişimi bekliyor: '+accountCheck.reason;log('ACCOUNT_GUARD','#'+t.id+' '+t.message);return;
+    }
     t.message=t.targetDeviceId?'Hedef PC bekleniyor: '+t.targetDeviceId:'Uygun PC Worker bekleniyor.';
     log('ROUTE','#'+t.id+' '+(t.targetDeviceId?'hedef '+t.targetDeviceId:'uygun Worker')+' kuyruğuna gönderildi');
     return;
@@ -258,6 +262,32 @@ const server=http.createServer((req,res)=>{
     w.approved=false;
     log('DEVICE_REVOKE',id+' cihazının yetkisi kaldırıldı');
     return json(res,200,{ok:true,deviceId:id,approved:false});
+  }
+
+  if(pathname==='/api/account-policies'&&req.method==='POST'){
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      const deviceId=String(d.deviceId||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80),w=deviceWorker(deviceId);
+      const accountType=normalizeAccountType(d.accountType);
+      if(!deviceId||!w||!w.approved)return json(res,400,{error:'approved device required'});
+      if(!accountType)return json(res,400,{error:'supported accountType required'});
+      const validAgents=['DEVELOPER','CREATOR','COMMERCE'];
+      const validActions=['read','write','delete','refund'];
+      const agents=(Array.isArray(d.agents)?d.agents:[]).filter(x=>validAgents.includes(x));
+      const actions=(Array.isArray(d.actions)?d.actions:[]).filter(x=>validActions.includes(x));
+      if(!agents.length||!actions.length)return json(res,400,{error:'agents and actions required'});
+      const key=deviceId+'|'+accountType;
+      state.accountPolicies[key]={deviceId,accountType,agents:[...new Set(agents)],actions:[...new Set(actions)],updatedAt:now()};
+      log('ACCOUNT_POLICY',deviceId+' '+accountType+' · '+actions.join(','));
+      return json(res,200,{ok:true,...state.accountPolicies[key],secretStored:false});
+    });
+  }
+  const accountRevoke=pathname.match(/^\/api\/account-policies\/([A-Za-z0-9_.-]+)\/(github|shopify)$/);
+  if(accountRevoke&&req.method==='DELETE'){
+    const key=accountRevoke[1]+'|'+accountRevoke[2];
+    const existed=!!state.accountPolicies[key];delete state.accountPolicies[key];
+    log('ACCOUNT_REVOKE',key+' kaldırıldı');
+    return json(res,200,{ok:true,existed});
   }
 
   if(pathname==='/api/tasks'&&req.method==='POST'){
@@ -367,6 +397,8 @@ const server=http.createServer((req,res)=>{
         if(selected)candidate.targetDeviceId=selected;
       }
       const support=workerSupports(candidate.command,deviceId||null,candidate.agent);
+      const accountCheck=accountPolicyAllows(deviceId||null,candidate.agent,candidate.command);
+      if(!accountCheck.ok){candidate.status='waiting_approval';candidate.message='Hesap erişimi bekliyor: '+accountCheck.reason;log('ACCOUNT_GUARD','#'+candidate.id+' '+candidate.message);continue}
       if(support.ok){t=candidate;break}
       if(support.need){
         candidate.status='needs_tool';
