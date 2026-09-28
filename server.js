@@ -199,10 +199,32 @@ const server=http.createServer((req,res)=>{
   if(deviceApprove&&req.method==='POST'){
     const id=deviceApprove[1],w=state.workers.devices[id];
     if(!w)return json(res,404,{error:'device not found'});
-    w.approved=true;
-    log('DEVICE_APPROVE',id+' cihazı kullanıcı tarafından onaylandı');
-    return json(res,200,{ok:true,deviceId:id,name:w.name,approved:true});
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      const validRoles=['DEVELOPER','CREATOR','COMMERCE'];
+      const roles=Array.isArray(d.roles)?d.roles.filter(x=>validRoles.includes(x)).slice(0,3):['DEVELOPER'];
+      const requestedCaps=Array.isArray(d.allowedCapabilities)?d.allowedCapabilities.map(String):[];
+      const allowedCapabilities=(requestedCaps.length?requestedCaps:w.capabilities).filter(x=>w.capabilities.includes(x)).slice(0,50);
+      w.approved=true;w.roles=roles.length?roles:['DEVELOPER'];w.allowedCapabilities=allowedCapabilities;
+      log('DEVICE_APPROVE',id+' onaylandı · roller '+w.roles.join(','));
+      return json(res,200,{ok:true,deviceId:id,name:w.name,approved:true,roles:w.roles,allowedCapabilities:w.allowedCapabilities});
+    });
   }
+  const deviceScope=pathname.match(/^\/api\/devices\/([A-Za-z0-9_.-]+)\/scope$/);
+  if(deviceScope&&req.method==='POST'){
+    const id=deviceScope[1],w=state.workers.devices[id];
+    if(!w)return json(res,404,{error:'device not found'});
+    if(!w.approved)return json(res,409,{error:'device not approved'});
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      const validRoles=['DEVELOPER','CREATOR','COMMERCE'];
+      if(Array.isArray(d.roles)){const roles=d.roles.filter(x=>validRoles.includes(x)).slice(0,3);if(!roles.length)return json(res,400,{error:'at least one valid role required'});w.roles=roles}
+      if(Array.isArray(d.allowedCapabilities)){w.allowedCapabilities=d.allowedCapabilities.map(String).filter(x=>w.capabilities.includes(x)).slice(0,50)}
+      log('DEVICE_SCOPE',id+' kapsam güncellendi · '+(w.roles||[]).join(','));
+      return json(res,200,{ok:true,deviceId:id,roles:w.roles||[],allowedCapabilities:w.allowedCapabilities||[]});
+    });
+  }
+
   const deviceRevoke=pathname.match(/^\/api\/devices\/([A-Za-z0-9_.-]+)\/revoke$/);
   if(deviceRevoke&&req.method==='POST'){
     const id=deviceRevoke[1],w=state.workers.devices[id];
@@ -279,7 +301,7 @@ const server=http.createServer((req,res)=>{
       const deviceId=d.deviceId?String(d.deviceId).replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80):null;
       if(deviceId){
         const previous=state.workers.devices[deviceId];
-        state.workers.devices[deviceId]={...snapshot,approved:previous?!!previous.approved:false};
+        state.workers.devices[deviceId]={...snapshot,approved:previous?!!previous.approved:false,roles:previous&&previous.roles||[],allowedCapabilities:previous&&previous.allowedCapabilities||[]};
       }else state.workers.pc=snapshot;
       return json(res,200,{ok:true,at:snapshot.lastSeen,deviceId,approved:deviceId?!!state.workers.devices[deviceId].approved:true});
     });
