@@ -79,10 +79,24 @@ function deterministicPlan(command){
     ]
   };
 }
-function workerSupports(command){
+function workerSupports(command,deviceId=null){
   const need=requiredCapability(command);
   if(!need)return{ok:false,need:null};
-  return{ok:state.workers.pc.capabilities.includes(need),need};
+  if(deviceId){
+    const w=deviceWorker(deviceId);
+    return{ok:!!w&&!!w.approved&&workerOnline(w)&&w.capabilities.includes(need),need};
+  }
+  const devices=Object.entries(state.workers.devices).filter(([,w])=>w.approved&&workerOnline(w));
+  if(devices.some(([,w])=>w.capabilities.includes(need)))return{ok:true,need};
+  return{ok:state.workers.pc.capabilities.includes(need)&&pcOnline(),need};
+}
+function chooseDevice(command){
+  const need=requiredCapability(command);
+  if(!need)return null;
+  const eligible=Object.entries(state.workers.devices)
+    .filter(([,w])=>w.approved&&workerOnline(w)&&w.capabilities.includes(need))
+    .sort((a,b)=>new Date(b[1].lastSeen)-new Date(a[1].lastSeen));
+  return eligible.length?eligible[0][0]:null;
 }
 function taskById(id){return state.tasks.find(t=>t.id===Number(id))}
 function workerOnline(w){const t=w&&w.lastSeen;return !!t&&(Date.now()-new Date(t).getTime()<15000)}
@@ -100,16 +114,25 @@ function prepareTask(t,approved=false){
     return;
   }
   if(remoteAgent(t.agent)){
-    const support=workerSupports(t.command);
-    if(pcOnline()&&!support.ok){
+    const requested=t.targetDeviceId||null;
+    const support=workerSupports(t.command,requested);
+    const anyOnline=pcOnline()||Object.values(state.workers.devices).some(w=>w.approved&&workerOnline(w));
+    if(requested&&!deviceWorker(requested)){
+      t.status='needs_tool';t.message='Hedef bilgisayar kayıtlı değil: '+requested;log('ROUTE_FAIL','#'+t.id+' '+t.message);return;
+    }
+    if(requested&&deviceWorker(requested)&&!deviceWorker(requested).approved){
+      t.status='waiting_approval';t.message='Hedef bilgisayar henüz cihaz onayı bekliyor.';log('DEVICE_WAIT','#'+t.id+' '+requested);return;
+    }
+    if(anyOnline&&!support.ok){
       t.status='needs_tool';
       t.message=support.need?'Bağlı PC Worker bu yeteneği desteklemiyor: '+support.need+' · Worker güncellemesi gerekli.':'Bu görev için güvenli PC aracı henüz tanımlı değil.';
       log('TOOL_MISSING','#'+t.id+' '+t.message);
       return;
     }
     t.status='waiting_worker';
-    t.message='PC Worker bekleniyor.';
-    log('ROUTE','#'+t.id+' PC Worker kuyruğuna gönderildi');
+    t.targetDeviceId=requested||chooseDevice(t.command)||null;
+    t.message=t.targetDeviceId?'Hedef PC bekleniyor: '+t.targetDeviceId:'Uygun PC Worker bekleniyor.';
+    log('ROUTE','#'+t.id+' '+(t.targetDeviceId?'hedef '+t.targetDeviceId:'uygun Worker')+' kuyruğuna gönderildi');
     return;
   }
   if(/self.?heal|hata testi|retry/i.test(t.command)){
@@ -202,7 +225,8 @@ const server=http.createServer((req,res)=>{
         message:'',
         createdAt:now(),
         claimedAt:null,
-        completedAt:null
+        completedAt:null,
+        targetDeviceId:d.targetDeviceId?String(d.targetDeviceId).replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80):null
       };
       const plan=deterministicPlan(command);
       if(plan){t.plan=plan;t.agent='DEVELOPER';}
