@@ -306,7 +306,8 @@ if(SpeechRecognition)voiceState.textContent='VOICE MODULE: READY';
 else voiceState.textContent='VOICE MODULE: BROWSER UNSUPPORTED';
 if(KEY)load().catch(()=>setAuthenticated(false));
 else setAuthenticated(false);
-setInterval(()=>{if(KEY)load().catch(()=>{})},2500);\nif('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+setInterval(()=>{if(KEY)load().catch(()=>{})},2500);
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
 </script>
 </body>
 </html>
