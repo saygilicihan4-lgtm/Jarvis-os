@@ -19,8 +19,8 @@ const MEMORY_FILE=path.join(MEMORY_DIR,'task-history.jsonl');
 const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='1.7.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','task_uid_v1','local_memory'];
+const WORKER_VERSION='1.8.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','task_uid_v1','safe_rehydrate_v1','local_memory'];
 
 if(!TOKEN){console.error('JARVIS_TOKEN gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
@@ -133,7 +133,8 @@ function readCheckpoint(task){
 }
 function saveCheckpoint(task,data){
   const f=checkpointFile(task),tmp=f+'.tmp';
-  fs.writeFileSync(tmp,JSON.stringify({at:new Date().toISOString(),...data}),'utf8');
+  const envelope={at:new Date().toISOString(),task:{uid:task.uid,id:task.id,command:task.command,createdAt:task.createdAt,plan:task.plan},...data};
+  fs.writeFileSync(tmp,JSON.stringify(envelope),'utf8');
   fs.renameSync(tmp,f);
 }
 function clearCheckpoint(task){try{fs.unlinkSync(checkpointFile(task))}catch(e){}}
@@ -275,6 +276,16 @@ async function execute(task){
   }
   return{ok:false,retryable:false,message:'Bu görev henüz güvenli PC araç kataloğunda yok; tamamlandı sayılmadı.'};
 }
+async function rehydrateCheckpoints(){
+  let files=[];try{files=fs.readdirSync(CHECKPOINT_DIR).filter(x=>x.endsWith('.json')).slice(0,50)}catch(e){return}
+  for(const name of files){
+    try{
+      const cp=JSON.parse(fs.readFileSync(path.join(CHECKPOINT_DIR,name),'utf8')),t=cp.task;
+      if(!t||!t.uid||!t.command||!t.plan)continue;
+      await api('/api/worker/rehydrate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(t)});
+    }catch(e){}
+  }
+}
 async function syncCloudState(){
   try{
     const s=await api('/api/state/snapshot');
@@ -301,6 +312,7 @@ async function poll(){
     await api('/api/worker/heartbeat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:NAME,deviceId:DEVICE_ID,version:WORKER_VERSION,capabilities:CAPS,memory:memoryStats()})});
     if(Date.now()-lastStateSync>30000){
       await tryRestoreCloudState();
+      await rehydrateCheckpoints();
       await syncCloudState();
       lastStateSync=Date.now();
     }
