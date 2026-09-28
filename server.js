@@ -146,7 +146,8 @@ function publicState(){
         capabilities:state.workers.pc.capabilities,
         memory:state.workers.pc.memory,
         online:pcOnline()
-      }
+      },
+      devices:publicDevices()
     }
   };
 }
@@ -219,7 +220,7 @@ const server=http.createServer((req,res)=>{
   if(pathname==='/api/worker/heartbeat'&&req.method==='POST'){
     return readJson(req,(err,d)=>{
       if(err)return json(res,400,{error:'bad json'});
-      state.workers.pc={
+      const snapshot={
         name:String(d.name||'PC Worker'),
         version:d.version?String(d.version):null,
         lastSeen:now(),
@@ -230,7 +231,12 @@ const server=http.createServer((req,res)=>{
           lastAt:d.memory.lastAt?String(d.memory.lastAt):null
         }:null
       };
-      return json(res,200,{ok:true,at:state.workers.pc.lastSeen});
+      const deviceId=d.deviceId?String(d.deviceId).replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80):null;
+      if(deviceId){
+        const previous=state.workers.devices[deviceId];
+        state.workers.devices[deviceId]={...snapshot,approved:previous?!!previous.approved:false};
+      }else state.workers.pc=snapshot;
+      return json(res,200,{ok:true,at:snapshot.lastSeen,deviceId,approved:deviceId?!!state.workers.devices[deviceId].approved:true});
     });
   }
 
