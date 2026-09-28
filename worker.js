@@ -9,7 +9,7 @@ const WORKSPACE=path.resolve(process.env.JARVIS_WORKSPACE||path.join(process.cwd
 const MEMORY_DIR=path.join(WORKSPACE,'.jarvis-memory');
 const MEMORY_FILE=path.join(MEMORY_DIR,'task-history.jsonl');
 const WORKER_VERSION='0.5.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','local_memory'];
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','local_memory'];
 
 if(!TOKEN){console.error('JARVIS_TOKEN gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
@@ -44,6 +44,38 @@ function safeFile(name){
   if(!(target===WORKSPACE||target.startsWith(WORKSPACE+path.sep)))throw new Error('Workspace dışına erişim engellendi');
   return target;
 }
+function verifyPath(rel,type){
+  const target=safeFile(rel);
+  if(!fs.existsSync(target))return false;
+  if(type==='dir')return fs.statSync(target).isDirectory();
+  if(type==='file')return fs.statSync(target).isFile();
+  return true;
+}
+async function runPlan(plan){
+  if(!plan||!Array.isArray(plan.steps)||plan.steps.length<1||plan.steps.length>8)throw new Error('Plan 1-8 adım içermeli');
+  const results=[];
+  for(let i=0;i<plan.steps.length;i++){
+    const step=plan.steps[i]||{};
+    let result;
+    if(step.action==='make_folder'){
+      const dir=safeFile(step.path); fs.mkdirSync(dir,{recursive:true});
+      result={ok:verifyPath(step.path,'dir'),message:'Klasör: '+step.path};
+    }else if(step.action==='write_file'){
+      const file=safeFile(step.path); fs.mkdirSync(path.dirname(file),{recursive:true});
+      fs.writeFileSync(file,String(step.content||''),'utf8');
+      result={ok:verifyPath(step.path,'file'),message:'Dosya: '+step.path};
+    }else if(step.action==='verify_file'){
+      result={ok:verifyPath(step.path,'file'),message:'Dosya doğrulama: '+step.path};
+    }else if(step.action==='verify_folder'){
+      result={ok:verifyPath(step.path,'dir'),message:'Klasör doğrulama: '+step.path};
+    }else{
+      throw new Error('İzin verilmeyen plan aksiyonu: '+String(step.action||''));
+    }
+    results.push({step:i+1,action:step.action,...result});
+    if(!result.ok)throw new Error('Adım '+(i+1)+' doğrulanamadı: '+result.message);
+  }
+  return{ok:true,message:'Plan doğrulandı · '+results.length+' adım',steps:results};
+}
 function createBundle(name,description){
   const dir=safeFile(name);
   const existed=fs.existsSync(dir);
@@ -71,6 +103,7 @@ function createBundle(name,description){
   }
 }
 async function execute(task){
+  if(task.plan)return runPlan(task.plan);
   const c=String(task.command||'').trim().replace(/^(pc|bilgisayar)\s*:\s*/i,'');
   if(/^(hafıza durumu|hafiza durumu|memory status)/i.test(c)){
     const s=memoryStats();
