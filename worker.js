@@ -24,8 +24,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.7.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','local_memory'];
+const WORKER_VERSION='2.8.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','local_memory'];
 
 if(!TOKEN&&!DEVICE_TOKEN){console.error('JARVIS cihaz kimliği veya geçiş tokenı gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
@@ -152,7 +152,7 @@ function journalFile(task){
   const key=String(task.uid||('legacy-'+task.id)).replace(/[^A-Za-z0-9_.-]/g,'_');
   return path.join(JOURNAL_DIR,key+'.json');
 }
-function freshJournal(task){return{version:2,task:{uid:task.uid,command:task.command,plan:task.plan,createdAt:task.createdAt},entries:[]}}
+function freshJournal(task){return{version:3,task:{uid:task.uid,command:task.command,plan:task.plan,createdAt:task.createdAt},entries:[]}}
 function readJournal(task){
   const f=journalFile(task);
   try{return JSON.parse(fs.readFileSync(f,'utf8'))}
@@ -166,7 +166,7 @@ function writeJournal(task,j){
 }
 function journalBefore(task,target,type){
   const j=readJournal(task),rel=path.relative(WORKSPACE,target);
-  if(j.version!==2)throw new Error('Eski transaction journal sürümü otomatik değiştirilemez');
+  if(j.version!==3)throw new Error('Eski transaction journal sürümü otomatik değiştirilemez');
   if(j.entries.some(x=>x.path===rel))return;
   if(j.entries.length>=32)throw new Error('Transaction journal 32 öğe sınırını aştı');
   const backupBytes=j.entries.reduce((n,e)=>n+(e.type==='file'&&e.existed&&e.data?Buffer.from(e.data,'base64').length:0),0);
@@ -175,42 +175,50 @@ function journalBefore(task,target,type){
       const st=fs.statSync(target);if(!st.isFile())throw new Error('Rollback hedefi dosya değil: '+rel);
       if(st.size>512*1024)throw new Error('Rollback limiti: mevcut dosya 512KB üzerinde: '+rel);
       if(backupBytes+st.size>2*1024*1024)throw new Error('Transaction toplam rollback bütçesi 2MB sınırını aştı');
-      j.entries.push({path:rel,type:'file',existed:true,beforeHash:fileHash(target),afterHash:null,data:fs.readFileSync(target).toString('base64')});
-    }else j.entries.push({path:rel,type:'file',existed:false,beforeHash:null,afterHash:null});
-  }else if(type==='dir')j.entries.push({path:rel,type:'dir',existed:fs.existsSync(target),afterExists:null});
+      j.entries.push({path:rel,type:'file',state:'prepared',existed:true,beforeHash:fileHash(target),expectedAfterHash:null,data:fs.readFileSync(target).toString('base64')});
+    }else j.entries.push({path:rel,type:'file',state:'prepared',existed:false,beforeHash:null,expectedAfterHash:null});
+  }else if(type==='dir')j.entries.push({path:rel,type:'dir',state:'prepared',existed:fs.existsSync(target),expectedAfterExists:null});
   writeJournal(task,j);
 }
 function journalAfter(task,target,type){
   const j=readJournal(task),rel=path.relative(WORKSPACE,target),e=j.entries.find(x=>x.path===rel);
-  if(j.version!==2)throw new Error('Eski transaction journal sürümü otomatik değiştirilemez');
+  if(j.version!==3)throw new Error('Eski transaction journal sürümü otomatik değiştirilemez');
   if(!e)throw new Error('Transaction journal girdisi bulunamadı: '+rel);
-  if(type==='file')e.afterHash=fileHash(target);else e.afterExists=fs.existsSync(target);
-  writeJournal(task,j);
+  if(type==='file')e.expectedAfterHash=fileHash(target);else e.expectedAfterExists=fs.existsSync(target);
+  e.state='applied';writeJournal(task,j);
 }
 function journalConsistency(task){
   const j=readJournal(task),conflicts=[];
+  if(j.version!==3)return{ok:false,conflicts:[{path:'journal',expected:'v3',current:String(j.version)}]};
   for(const e of j.entries){
     const target=safeFile(e.path);
     if(e.type==='file'){
       const current=fileHash(target);
-      const expected=e.afterHash;
-      if(expected&&current!==expected)conflicts.push({path:e.path,expected,current});
-      if(!expected&&e.existed&&current!==e.beforeHash)conflicts.push({path:e.path,expected:e.beforeHash,current});
-    }else if(e.type==='dir'&&e.afterExists===true&&!fs.existsSync(target))conflicts.push({path:e.path,expected:'exists',current:'missing'});
+      if(e.state==='applied'&&current!==e.expectedAfterHash)conflicts.push({path:e.path,expected:e.expectedAfterHash,current});
+      if(e.state==='prepared'){
+        const unchanged=e.existed?current===e.beforeHash:current===null;
+        if(!unchanged)conflicts.push({path:e.path,expected:'prepared preimage',current});
+      }
+    }else if(e.type==='dir'){
+      const current=fs.existsSync(target);
+      if(e.state==='applied'&&current!==e.expectedAfterExists)conflicts.push({path:e.path,expected:e.expectedAfterExists,current});
+      if(e.state==='prepared'&&current!==!!e.existed)conflicts.push({path:e.path,expected:!!e.existed,current});
+    }
   }
   return{ok:conflicts.length===0,conflicts};
 }
 function rollbackJournal(task){
   const consistency=journalConsistency(task);
-  if(!consistency.ok){remember({kind:'transaction_conflict',taskUid:task.uid||null,conflicts:consistency.conflicts});return consistency.conflicts.map(x=>({path:x.path,ok:false,error:'external change detected'}))}
+  if(!consistency.ok){remember({kind:'transaction_conflict',taskUid:task.uid||null,conflicts:consistency.conflicts});return consistency.conflicts.map(x=>({path:x.path,ok:false,error:'external or ambiguous change detected'}))}
   const j=readJournal(task),out=[];
   for(const e of [...j.entries].reverse()){
     const target=safeFile(e.path);
     try{
+      if(e.state==='prepared'){out.push({path:e.path,ok:true,skipped:true});continue}
       if(e.type==='file'){
         if(e.existed){fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,Buffer.from(e.data||'','base64'))}
         else if(fs.existsSync(target)&&fs.statSync(target).isFile())fs.unlinkSync(target);
-      }else if(e.type==='dir'&&!e.existed&&fs.existsSync(target)){try{fs.rmdirSync(target)}catch(x){}}
+      }else if(e.type==='dir'&&!e.existed&&fs.existsSync(target))fs.rmdirSync(target);
       out.push({path:e.path,ok:true});
     }catch(err){out.push({path:e.path,ok:false,error:err.message})}
   }
