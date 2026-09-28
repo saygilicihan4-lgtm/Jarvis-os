@@ -163,7 +163,7 @@ function pcOnline(){return workerOnline(state.workers.pc)}
 function deviceWorker(id){return id&&state.workers.devices[id]||null}
 function deviceOnline(id){return workerOnline(deviceWorker(id))}
 function publicDevices(){
-  return Object.fromEntries(Object.entries(state.workers.devices).map(([id,w])=>[id,{name:w.name,version:w.version,lastSeen:w.lastSeen,capabilities:w.capabilities,memory:w.memory,approved:!!w.approved,roles:w.roles||[],allowedCapabilities:w.allowedCapabilities||[],online:workerOnline(w)}]));
+  return Object.fromEntries(Object.entries(state.workers.devices).map(([id,w])=>[id,{name:w.name,version:w.version,lastSeen:w.lastSeen,capabilities:w.capabilities,memory:w.memory,approved:!!w.approved,roles:w.roles||[],allowedCapabilities:w.allowedCapabilities||[],authMode:w.authMode||'legacy',credentialIssuedAt:w.credentialIssuedAt||null,online:workerOnline(w)}]));
 }
 function prepareTask(t,approved=false){
   if(risky(t.command)&&!approved){
@@ -287,6 +287,7 @@ const server=http.createServer((req,res)=>{
   if(pathname.startsWith('/api/')){
     const ident=workerIdentity(req),workerRoute=pathname.startsWith('/api/worker/')||pathname==='/api/state/snapshot'||pathname==='/api/state/restore';
     if(workerRoute&&ident){
+      const signedWorker=deviceWorker(ident.deviceId);if(signedWorker)signedWorker.authMode='signed';
       const headerId=String(req.headers['x-jarvis-device-id']||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80);
       if(headerId!==ident.deviceId)return json(res,401,{error:'device identity mismatch'});
       if(pathname!=='/api/state/restore'){
@@ -535,6 +536,7 @@ const server=http.createServer((req,res)=>{
       if(!w||!w.approved)return json(res,403,{error:'approved device required'});
       if(!DEVICE_SECRET)return json(res,503,{error:'device identity unavailable'});
       const token=signDevicePayload(deviceTokenPayload(deviceId));
+      w.authMode='signed';w.credentialIssuedAt=now();
       log('DEVICE_TOKEN',deviceId+' scoped credential issued');
       return json(res,200,{deviceId,token,expiresInSeconds:604800});
     });
