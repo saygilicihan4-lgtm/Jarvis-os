@@ -7,6 +7,7 @@ const PORT=process.env.PORT||3000;
 const ROOT=__dirname;
 const PUBLIC=path.join(ROOT,'public');
 const TOKEN=process.env.JARVIS_TOKEN||'';
+const DEVICE_SECRET=process.env.JARVIS_DEVICE_SECRET||'';
 const state={
   tasks:[],
   audit:[],
@@ -34,6 +35,30 @@ function authorized(req){
   if(!TOKEN)return true;
   const h=req.headers.authorization||'';
   return h===('Bearer '+TOKEN)||req.headers['x-jarvis-token']===TOKEN;
+}
+function deviceTokenPayload(deviceId,ttlMs=7*24*60*60*1000){
+  return{deviceId,exp:Date.now()+ttlMs,v:1};
+}
+function signDevicePayload(p){
+  if(!DEVICE_SECRET)throw new Error('device secret unavailable');
+  const body=Buffer.from(JSON.stringify(p)).toString('base64url');
+  const sig=crypto.createHmac('sha256',DEVICE_SECRET).update(body).digest('base64url');
+  return body+'.'+sig;
+}
+function verifyDeviceToken(token){
+  if(!DEVICE_SECRET||!token||!token.includes('.'))return null;
+  try{
+    const [body,sig]=token.split('.'),expected=crypto.createHmac('sha256',DEVICE_SECRET).update(body).digest();
+    const got=Buffer.from(sig,'base64url');if(got.length!==expected.length||!crypto.timingSafeEqual(got,expected))return null;
+    const p=JSON.parse(Buffer.from(body,'base64url').toString('utf8'));
+    if(p.v!==1||!p.deviceId||!Number.isFinite(p.exp)||p.exp<Date.now())return null;
+    return p;
+  }catch(e){return null}
+}
+function workerIdentity(req){
+  const raw=String(req.headers.authorization||'');
+  if(raw.startsWith('Device '))return verifyDeviceToken(raw.slice(7));
+  const x=String(req.headers['x-jarvis-device-token']||'');return verifyDeviceToken(x);
 }
 function agentFor(c){
   c=String(c||'').toLowerCase();
@@ -491,6 +516,18 @@ const server=http.createServer((req,res)=>{
       const t={id:state.tasks.length+1,uid,command,agent:'DEVELOPER',status:'waiting_worker',attempts:0,maxRetries:3,message:'Render restart sonrası güvenli checkpoint görevi geri yüklendi.',createdAt:String(d.createdAt||now()),claimedAt:null,completedAt:null,targetDeviceId:deviceId,plan};
       state.tasks.push(t);touchState();log('REHYDRATE','#'+t.id+' '+uid+' · '+deviceId);
       return json(res,201,{ok:true,existing:false,task:t});
+    });
+  }
+
+  if(pathname==='/api/worker/device-token'&&req.method==='POST'){
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      const deviceId=String(d.deviceId||req.headers['x-jarvis-device-id']||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80),w=deviceWorker(deviceId);
+      if(!w||!w.approved)return json(res,403,{error:'approved device required'});
+      if(!DEVICE_SECRET)return json(res,503,{error:'device identity unavailable'});
+      const token=signDevicePayload(deviceTokenPayload(deviceId));
+      log('DEVICE_TOKEN',deviceId+' scoped credential issued');
+      return json(res,200,{deviceId,token,expiresInSeconds:604800});
     });
   }
 
