@@ -52,6 +52,7 @@ function requiredCapability(command){
   if(/^(dosya oluştur|dosya olustur|write file)/.test(c))return'write_file';
   if(/^(dosya oku|read file)/.test(c))return'read_file';
   if(/^(not al)/.test(c))return'write_note';
+  if(/^(proje paketi oluştur|proje paketi olustur|workspace bundle)/.test(c))return'workspace_bundle';
   if(/^(klasör oluştur|klasor olustur|make folder|proje klasörü oluştur|proje klasoru olustur)/.test(c))return'make_folder';
   if(/^(proje oluştur|proje olustur|yeni proje|project create)/.test(c))return'project_scaffold';
   return null;
