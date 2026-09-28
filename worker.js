@@ -17,8 +17,9 @@ const WORKSPACE=path.resolve(process.env.JARVIS_WORKSPACE||path.join(process.cwd
 const MEMORY_DIR=path.join(WORKSPACE,'.jarvis-memory');
 const MEMORY_FILE=path.join(MEMORY_DIR,'task-history.jsonl');
 const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
-const WORKER_VERSION='1.1.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','resume_checkpoint','multi_device_identity','local_memory'];
+const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
+const WORKER_VERSION='1.2.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','local_memory'];
 
 if(!TOKEN){console.error('JARVIS_TOKEN gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
@@ -58,6 +59,34 @@ function strategySelection(){
   }
   eligible.sort((a,b)=>b.score-a.score||b.attempts-a.attempts||a.action.localeCompare(b.action));
   return{minimumEvidence:MIN_EVIDENCE,repairEvents:m.repairs,candidates:eligible,recommended:eligible[0]||null};
+}
+function readStrategyPolicy(){
+  try{return JSON.parse(fs.readFileSync(STRATEGY_FILE,'utf8'))}catch(e){return{version:1,active:null,previous:null,baseline:null,updatedAt:null}}
+}
+function writeStrategyPolicy(p){
+  const tmp=STRATEGY_FILE+'.tmp';
+  fs.writeFileSync(tmp,JSON.stringify(p,null,2),'utf8');fs.renameSync(tmp,STRATEGY_FILE);
+}
+function evaluateStrategyPolicy(){
+  const selection=strategySelection(),policy=readStrategyPolicy(),candidate=selection.recommended;
+  if(!candidate)return{changed:false,rolledBack:false,policy,reason:'Yeterli kanıt yok'};
+  const MIN_IMPROVEMENT=0.05,ROLLBACK_DROP=0.10;
+  if(policy.active&&policy.baseline&&policy.active.action===candidate.action){
+    const drop=Number(policy.baseline.score||0)-candidate.score;
+    if(drop>=ROLLBACK_DROP&&policy.previous){
+      const next={...policy,active:policy.previous,previous:policy.active,baseline:policy.previous,updatedAt:new Date().toISOString(),lastDecision:'rollback'};
+      writeStrategyPolicy(next);remember({kind:'strategy_rollback',from:policy.active,to:policy.previous,drop});
+      return{changed:true,rolledBack:true,policy:next,reason:'Performans düşüşü '+drop.toFixed(3)};
+    }
+    return{changed:false,rolledBack:false,policy,reason:'Etkin strateji korunuyor'};
+  }
+  const activeScore=policy.baseline?Number(policy.baseline.score||0):0;
+  if(!policy.active||candidate.score>=activeScore+MIN_IMPROVEMENT){
+    const next={version:Number(policy.version||1)+1,active:candidate,previous:policy.active||null,baseline:candidate,updatedAt:new Date().toISOString(),lastDecision:'promote'};
+    writeStrategyPolicy(next);remember({kind:'strategy_promote',from:policy.active||null,to:candidate});
+    return{changed:true,rolledBack:false,policy:next,reason:'Kanıt eşiğini geçen strateji etkinleştirildi'};
+  }
+  return{changed:false,rolledBack:false,policy,reason:'Aday mevcut politikayı yeterince aşmadı'};
 }
 function memoryStats(){
   if(!fs.existsSync(MEMORY_FILE))return{records:0,bytes:0,lastAt:null};
@@ -179,6 +208,10 @@ function createBundle(name,description){
 async function execute(task){
   if(task.plan)return runPlan(task);
   const c=String(task.command||'').trim().replace(/^(pc|bilgisayar)\s*:\s*/i,'');
+  if(/^(optimizasyonu uygula|optimizasyon uygula|apply optimization)/i.test(c)){
+    const e=evaluateStrategyPolicy(),a=e.policy.active;
+    return{ok:true,message:(e.rolledBack?'ROLLBACK · ':e.changed?'POLICY UPDATE · ':'NO CHANGE · ')+e.reason+(a?' · aktif '+a.action+' · skor '+a.score:' · aktif strateji yok')};
+  }
   if(/^(optimizasyon durumu|strategy selection|en iyi strateji)/i.test(c)){
     const s=strategySelection();
     if(!s.recommended)return{ok:true,message:'Optimizasyon için yeterli kanıt yok · her strateji için en az '+s.minimumEvidence+' deneme gerekli'};
