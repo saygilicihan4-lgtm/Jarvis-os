@@ -12,6 +12,8 @@ const STATE_SECRET=process.env.JARVIS_STATE_SECRET||'';
 const BOOTSTRAP_PAIR_HASH=process.env.JARVIS_BOOTSTRAP_PAIR_HASH||'';
 const BOOTSTRAP_PAIR_EXP=Number(process.env.JARVIS_BOOTSTRAP_PAIR_EXP||0);
 let bootstrapPairUsed=false;
+const BOOTSTRAP_DEVICE_ID=process.env.JARVIS_BOOTSTRAP_DEVICE_ID||'';
+const BOOTSTRAP_DEVICE_EXP=Number(process.env.JARVIS_BOOTSTRAP_DEVICE_EXP||0);
 // DEVICE_AUTH_CHAIN_V2_2
 const state={
   tasks:[],
@@ -299,7 +301,11 @@ const server=http.createServer((req,res)=>{
       const headerId=String(req.headers['x-jarvis-device-id']||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80);
       if(headerId!==ident.deviceId)return json(res,401,{error:'device identity mismatch'});
       if(pathname!=='/api/state/restore'){
-        const dw=deviceWorker(ident.deviceId);
+        let dw=deviceWorker(ident.deviceId);
+        if((!dw||!dw.approved)&&BOOTSTRAP_DEVICE_ID===ident.deviceId&&Date.now()<BOOTSTRAP_DEVICE_EXP){
+          state.workers.devices[ident.deviceId]={name:ident.deviceId,version:null,lastSeen:null,capabilities:[],memory:null,approved:true,roles:['DEVELOPER'],allowedCapabilities:[],authMode:'signed',credentialIssuedAt:now()};
+          dw=deviceWorker(ident.deviceId);touchState();log('DEVICE_BOOTSTRAP',ident.deviceId+' signed bootstrap approval restored');
+        }
         if(!dw||!dw.approved)return json(res,403,{error:'device revoked or not approved'});
       }
     }else if(!authorized(req))return json(res,401,{error:'unauthorized'});
