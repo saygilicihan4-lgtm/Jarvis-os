@@ -8,7 +8,7 @@ const NAME=process.env.JARVIS_WORKER_NAME||os.hostname();
 const WORKSPACE=path.resolve(process.env.JARVIS_WORKSPACE||path.join(process.cwd(),'jarvis-workspace'));
 const MEMORY_DIR=path.join(WORKSPACE,'.jarvis-memory');
 const MEMORY_FILE=path.join(MEMORY_DIR,'task-history.jsonl');
-const WORKER_VERSION='0.6.0';
+const WORKER_VERSION='0.7.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','local_memory'];
 
 if(!TOKEN){console.error('JARVIS_TOKEN gerekli.');process.exit(1)}
@@ -54,27 +54,38 @@ function verifyPath(rel,type){
 async function runPlan(plan){
   if(!plan||!Array.isArray(plan.steps)||plan.steps.length<1||plan.steps.length>8)throw new Error('Plan 1-8 adım içermeli');
   const results=[];
+  const MAX_STEP_ATTEMPTS=2;
   for(let i=0;i<plan.steps.length;i++){
     const step=plan.steps[i]||{};
-    let result;
-    if(step.action==='make_folder'){
-      const dir=safeFile(step.path); fs.mkdirSync(dir,{recursive:true});
-      result={ok:verifyPath(step.path,'dir'),message:'Klasör: '+step.path};
-    }else if(step.action==='write_file'){
-      const file=safeFile(step.path); fs.mkdirSync(path.dirname(file),{recursive:true});
-      fs.writeFileSync(file,String(step.content||''),'utf8');
-      result={ok:verifyPath(step.path,'file'),message:'Dosya: '+step.path};
-    }else if(step.action==='verify_file'){
-      result={ok:verifyPath(step.path,'file'),message:'Dosya doğrulama: '+step.path};
-    }else if(step.action==='verify_folder'){
-      result={ok:verifyPath(step.path,'dir'),message:'Klasör doğrulama: '+step.path};
-    }else{
-      throw new Error('İzin verilmeyen plan aksiyonu: '+String(step.action||''));
+    let result=null,lastError=null;
+    for(let attempt=1;attempt<=MAX_STEP_ATTEMPTS;attempt++){
+      try{
+        if(step.action==='make_folder'){
+          const dir=safeFile(step.path); fs.mkdirSync(dir,{recursive:true});
+          result={ok:verifyPath(step.path,'dir'),message:'Klasör: '+step.path};
+        }else if(step.action==='write_file'){
+          const file=safeFile(step.path); fs.mkdirSync(path.dirname(file),{recursive:true});
+          fs.writeFileSync(file,String(step.content||''),'utf8');
+          result={ok:verifyPath(step.path,'file'),message:'Dosya: '+step.path};
+        }else if(step.action==='verify_file'){
+          result={ok:verifyPath(step.path,'file'),message:'Dosya doğrulama: '+step.path};
+        }else if(step.action==='verify_folder'){
+          result={ok:verifyPath(step.path,'dir'),message:'Klasör doğrulama: '+step.path};
+        }else{
+          throw new Error('İzin verilmeyen plan aksiyonu: '+String(step.action||''));
+        }
+        remember({kind:'plan_step',action:step.action,path:step.path||null,step:i+1,attempt,ok:!!result.ok});
+        if(result.ok){results.push({step:i+1,action:step.action,attempts:attempt,...result});break}
+        lastError=new Error('Doğrulama başarısız: '+result.message);
+      }catch(e){
+        lastError=e;
+        remember({kind:'plan_step',action:step.action,path:step.path||null,step:i+1,attempt,ok:false,error:e.message});
+      }
+      if(attempt<MAX_STEP_ATTEMPTS)remember({kind:'repair',step:i+1,action:step.action,reason:lastError&&lastError.message});
     }
-    results.push({step:i+1,action:step.action,...result});
-    if(!result.ok)throw new Error('Adım '+(i+1)+' doğrulanamadı: '+result.message);
+    if(!result||!result.ok)throw new Error('Adım '+(i+1)+' iki denemede doğrulanamadı: '+(lastError?lastError.message:'bilinmeyen hata'));
   }
-  return{ok:true,message:'Plan doğrulandı · '+results.length+' adım',steps:results};
+  return{ok:true,message:'Plan doğrulandı · '+results.length+' adım · bounded repair aktif',steps:results};
 }
 function createBundle(name,description){
   const dir=safeFile(name);
