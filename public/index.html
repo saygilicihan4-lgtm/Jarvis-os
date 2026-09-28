@@ -295,6 +295,16 @@ async function load(){
   devAgent.textContent=pc.online?'READY':'STANDBY';
   devAgent.style.color=pc.online?'#65ffbf':'';
   taskCount.textContent=String((d.tasks||[]).length).padStart(2,'0');
+  const localMemory=pc.online&&Array.isArray(pc.capabilities)&&pc.capabilities.includes('local_memory');
+  memoryState.textContent=localMemory?'LOCAL PERSISTENT':'VOLATILE';
+  memoryState.style.color=localMemory?'#65ffbf':'#ffca66';
+  const memoryAgent=[...document.querySelectorAll('.agent-row span')].find(x=>x.textContent==='MEMORY');
+  if(memoryAgent){
+    const b=memoryAgent.parentElement.querySelector('b');
+    const detail=memoryAgent.parentElement.parentElement.querySelector('.agent-state');
+    if(b){b.textContent=localMemory?'LOCAL READY':'LIMITED';b.style.color=localMemory?'#65ffbf':'#ffca66'}
+    if(detail)detail.textContent=localMemory?'PC disk persistence active':'Persistent memory not connected';
+  }
 
   tasks.innerHTML=(d.tasks||[]).slice().reverse().map(taskCard).join('')||'<div class="task"><small>No active missions.</small></div>';
   audit.innerHTML=(d.audit||[]).slice(-18).reverse().map(x=>'<div class="log"><small>'+esc(x.at)+' · '+esc(x.type)+'</small><br>'+esc(x.message)+'</div>').join('')||'<div class="log"><small>No system events.</small></div>';
