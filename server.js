@@ -12,6 +12,16 @@ const STATE_SECRET=process.env.JARVIS_STATE_SECRET||'';
 const BOOTSTRAP_PAIR_HASH=process.env.JARVIS_BOOTSTRAP_PAIR_HASH||'';
 const BOOTSTRAP_PAIR_EXP=Number(process.env.JARVIS_BOOTSTRAP_PAIR_EXP||0);
 let bootstrapPairUsed=false;
+const PHONE_SESSION_SECRET=crypto.randomBytes(32);
+let phoneCode=String(crypto.randomInt(0,100000000)).padStart(8,'0');
+let phoneCodeExp=Date.now()+5*60*1000;
+let phoneCodeUsed=false;
+function cookieMap(req){return Object.fromEntries(String(req.headers.cookie||'').split(';').map(x=>x.trim().split('=').map(decodeURIComponent)).filter(x=>x.length===2))}
+function signPhoneSession(exp){const body=Buffer.from(JSON.stringify({scope:'admin-ui',exp})).toString('base64url');return body+'.'+crypto.createHmac('sha256',PHONE_SESSION_SECRET).update(body).digest('base64url')}
+function validPhoneSession(req){
+ const t=cookieMap(req).jarvis_session;if(!t||!t.includes('.'))return false;
+ try{const [body,sig]=t.split('.'),expected=crypto.createHmac('sha256',PHONE_SESSION_SECRET).update(body).digest(),got=Buffer.from(sig,'base64url');if(got.length!==expected.length||!crypto.timingSafeEqual(got,expected))return false;const p=JSON.parse(Buffer.from(body,'base64url').toString());return p.scope==='admin-ui'&&p.exp>Date.now()}catch{return false}
+}
 const BOOTSTRAP_DEVICE_ID=process.env.JARVIS_BOOTSTRAP_DEVICE_ID||'';
 const BOOTSTRAP_DEVICE_EXP=Number(process.env.JARVIS_BOOTSTRAP_DEVICE_EXP||0);
 // DEVICE_AUTH_CHAIN_V2_2
@@ -42,7 +52,7 @@ function readJson(req,cb){
 function authorized(req){
   if(!TOKEN)return true;
   const h=req.headers.authorization||'';
-  return h===('Bearer '+TOKEN)||req.headers['x-jarvis-token']===TOKEN;
+  return h===('Bearer '+TOKEN)||req.headers['x-jarvis-token']===TOKEN||validPhoneSession(req);
 }
 function deviceTokenPayload(deviceId,ttlMs=7*24*60*60*1000,extra={}){
   return{deviceId,exp:Date.now()+ttlMs,v:1,...extra};
@@ -294,7 +304,7 @@ const server=http.createServer((req,res)=>{
     return json(res,200,{ok:true,name:'JARVIS OS',version:'0.2.0',zeroCostFirst:true,auth:!!TOKEN,pcWorker:pcOnline(),devices:{approved:approved.length,online:online.length,signed:signed.length,latestVersion:latest&&latest.version||null,latestSeen:latest&&latest.lastSeen||null}});
   }
 
-  if(pathname.startsWith('/api/')&&pathname!=='/api/pairing/exchange'){
+  if(pathname.startsWith('/api/')&&!['/api/pairing/exchange','/api/session/exchange'].includes(pathname)){
     const ident=workerIdentity(req),workerRoute=pathname.startsWith('/api/worker/')||pathname==='/api/state/snapshot'||pathname==='/api/state/restore';
     if(workerRoute&&ident){
       const signedWorker=deviceWorker(ident.deviceId);if(signedWorker)signedWorker.authMode='signed';
@@ -311,6 +321,18 @@ const server=http.createServer((req,res)=>{
         if(!dw||!dw.approved)return json(res,403,{error:'device revoked or not approved'});
       }
     }else if(!authorized(req))return json(res,401,{error:'unauthorized'});
+  }
+
+  if(pathname==='/api/session/exchange'&&req.method==='POST'){
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      const code=String(d.code||'').replace(/\D/g,'');
+      if(phoneCodeUsed||Date.now()>phoneCodeExp||code!==phoneCode)return json(res,403,{error:'invalid or expired session code'});
+      phoneCodeUsed=true;phoneCode='';
+      const exp=Date.now()+12*60*60*1000,token=signPhoneSession(exp);
+      res.writeHead(200,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','set-cookie':'jarvis_session='+encodeURIComponent(token)+'; Max-Age=43200; Path=/; HttpOnly; Secure; SameSite=Strict'});
+      res.end(JSON.stringify({ok:true,expiresAt:new Date(exp).toISOString()}));
+    });
   }
 
   if(pathname==='/api/pairing/create'&&req.method==='POST'){
