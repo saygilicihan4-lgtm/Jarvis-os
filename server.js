@@ -14,6 +14,7 @@ const state={
   tasks:[],
   audit:[],
   accountPolicies:{},
+  pairingCodes:{},
   stateRevision:0,
   workers:{pc:{name:null,version:null,lastSeen:null,capabilities:[],memory:null},devices:{}}
 };
@@ -286,7 +287,7 @@ const server=http.createServer((req,res)=>{
     return json(res,200,{ok:true,name:'JARVIS OS',version:'0.2.0',zeroCostFirst:true,auth:!!TOKEN,pcWorker:pcOnline()});
   }
 
-  if(pathname.startsWith('/api/')){
+  if(pathname.startsWith('/api/')&&pathname!=='/api/pairing/exchange'){
     const ident=workerIdentity(req),workerRoute=pathname.startsWith('/api/worker/')||pathname==='/api/state/snapshot'||pathname==='/api/state/restore';
     if(workerRoute&&ident){
       const signedWorker=deviceWorker(ident.deviceId);if(signedWorker)signedWorker.authMode='signed';
@@ -297,6 +298,31 @@ const server=http.createServer((req,res)=>{
         if(!dw||!dw.approved)return json(res,403,{error:'device revoked or not approved'});
       }
     }else if(!authorized(req))return json(res,401,{error:'unauthorized'});
+  }
+
+  if(pathname==='/api/pairing/create'&&req.method==='POST'){
+    const code=crypto.randomBytes(4).toString('hex').toUpperCase(),expiresAt=Date.now()+5*60*1000;
+    state.pairingCodes[code]={expiresAt,used:false};
+    for(const [k,v] of Object.entries(state.pairingCodes))if(v.used||v.expiresAt<Date.now())delete state.pairingCodes[k];
+    log('PAIRING_CREATE','tek kullanımlık cihaz eşleştirme kodu üretildi');
+    return json(res,200,{code,expiresAt:new Date(expiresAt).toISOString(),expiresInSeconds:300});
+  }
+  if(pathname==='/api/pairing/exchange'&&req.method==='POST'){
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      const code=String(d.code||'').trim().toUpperCase(),deviceId=String(d.deviceId||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80);
+      const p=state.pairingCodes[code];
+      if(!p||p.used||p.expiresAt<Date.now())return json(res,403,{error:'invalid or expired pairing code'});
+      if(!deviceId)return json(res,400,{error:'deviceId required'});
+      p.used=true;
+      const caps=Array.isArray(d.capabilities)?d.capabilities.map(String).slice(0,50):[];
+      state.workers.devices[deviceId]={name:String(d.name||deviceId).slice(0,100),version:d.version?String(d.version):null,lastSeen:now(),capabilities:caps,memory:null,approved:true,roles:['DEVELOPER'],allowedCapabilities:caps,authMode:'signed',credentialIssuedAt:now()};
+      touchState();
+      const token=signDevicePayload(deviceTokenPayload(deviceId));
+      log('PAIRING_EXCHANGE',deviceId+' tek kullanımlık kodla eşleştirildi');
+      delete state.pairingCodes[code];
+      return json(res,200,{ok:true,deviceId,token,expiresInSeconds:604800});
+    });
   }
 
   if(pathname==='/api/state'&&req.method==='GET'){
