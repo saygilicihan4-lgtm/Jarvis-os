@@ -8,6 +8,7 @@ const ROOT=__dirname;
 const PUBLIC=path.join(ROOT,'public');
 const TOKEN=process.env.JARVIS_TOKEN||'';
 const DEVICE_SECRET=process.env.JARVIS_DEVICE_SECRET||'';
+const STATE_SECRET=process.env.JARVIS_STATE_SECRET||'';
 // DEVICE_AUTH_CHAIN_V2_2
 const state={
   tasks:[],
@@ -232,17 +233,18 @@ function snapshotPayload(){
     devices:Object.fromEntries(Object.entries(state.workers.devices).map(([id,w])=>[id,{name:w.name,approved:!!w.approved,roles:w.roles||[],allowedCapabilities:w.allowedCapabilities||[]}]))
   };
 }
-function snapshotHash(payload){
-  return crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+function snapshotSignature(payload){
+  if(!STATE_SECRET)throw new Error('state secret unavailable');
+  return crypto.createHmac('sha256',STATE_SECRET).update(JSON.stringify(payload)).digest('hex');
 }
 function persistentSnapshot(){
-  const payload=snapshotPayload();
-  return{...payload,sha256:snapshotHash(payload)};
+  const payload={...snapshotPayload(),schemaVersion:3};
+  return{...payload,signature:snapshotSignature(payload)};
 }
 function verifySnapshot(s){
-  if(!s||s.schemaVersion!==2||!Number.isSafeInteger(s.revision)||s.revision<0||!Array.isArray(s.tasks)||typeof s.accountPolicies!=='object'||typeof s.devices!=='object')throw new Error('invalid snapshot');
-  const {sha256,...payload}=s;
-  if(!/^[a-f0-9]{64}$/.test(String(sha256||''))||snapshotHash(payload)!==sha256)throw new Error('snapshot integrity check failed');
+  if(!s||s.schemaVersion!==3||!Number.isSafeInteger(s.revision)||s.revision<0||!Array.isArray(s.tasks)||typeof s.accountPolicies!=='object'||typeof s.devices!=='object')throw new Error('invalid signed snapshot');
+  const {signature,...payload}=s,got=Buffer.from(String(signature||''),'hex'),expected=Buffer.from(snapshotSignature(payload),'hex');
+  if(got.length!==expected.length||!crypto.timingSafeEqual(got,expected))throw new Error('snapshot signature check failed');
   return payload;
 }
 function restoreSnapshot(s){
