@@ -8,8 +8,8 @@ const NAME=process.env.JARVIS_WORKER_NAME||os.hostname();
 const WORKSPACE=path.resolve(process.env.JARVIS_WORKSPACE||path.join(process.cwd(),'jarvis-workspace'));
 const MEMORY_DIR=path.join(WORKSPACE,'.jarvis-memory');
 const MEMORY_FILE=path.join(MEMORY_DIR,'task-history.jsonl');
-const WORKER_VERSION='0.7.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','local_memory'];
+const WORKER_VERSION='0.8.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','local_memory'];
 
 if(!TOKEN){console.error('JARVIS_TOKEN gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
@@ -17,6 +17,23 @@ fs.mkdirSync(MEMORY_DIR,{recursive:true});
 function remember(record){
   const safe={at:new Date().toISOString(),...record};
   fs.appendFileSync(MEMORY_FILE,JSON.stringify(safe)+'\n','utf8');
+}
+function strategyMetrics(){
+  if(!fs.existsSync(MEMORY_FILE))return{steps:0,repairs:0,successes:0,failures:0,byAction:{}};
+  const lines=fs.readFileSync(MEMORY_FILE,'utf8').split('\n').filter(Boolean).slice(-2000);
+  const out={steps:0,repairs:0,successes:0,failures:0,byAction:{}};
+  for(const line of lines){
+    let x;try{x=JSON.parse(line)}catch(e){continue}
+    if(x.kind==='repair'){out.repairs++;continue}
+    if(x.kind!=='plan_step')continue;
+    out.steps++;
+    if(x.ok)out.successes++;else out.failures++;
+    const a=String(x.action||'unknown');
+    if(!out.byAction[a])out.byAction[a]={attempts:0,successes:0,failures:0};
+    out.byAction[a].attempts++;
+    if(x.ok)out.byAction[a].successes++;else out.byAction[a].failures++;
+  }
+  return out;
 }
 function memoryStats(){
   if(!fs.existsSync(MEMORY_FILE))return{records:0,bytes:0,lastAt:null};
@@ -116,6 +133,11 @@ function createBundle(name,description){
 async function execute(task){
   if(task.plan)return runPlan(task.plan);
   const c=String(task.command||'').trim().replace(/^(pc|bilgisayar)\s*:\s*/i,'');
+  if(/^(öğrenme durumu|ogrenme durumu|strategy metrics|learning status)/i.test(c)){
+    const m=strategyMetrics();
+    const actions=Object.entries(m.byAction).map(([k,v])=>k+': '+v.successes+'/'+v.attempts+' başarılı').join(' · ');
+    return{ok:true,message:'Strateji ölçümü · '+m.steps+' adım · '+m.repairs+' repair · '+m.successes+' başarılı · '+m.failures+' başarısız'+(actions?' · '+actions:' · henüz yeterli veri yok')};
+  }
   if(/^(hafıza durumu|hafiza durumu|memory status)/i.test(c)){
     const s=memoryStats();
     return{ok:true,message:'Yerel kalıcı hafıza aktif · '+s.records+' kayıt · '+s.bytes+' bayt · '+MEMORY_FILE};
