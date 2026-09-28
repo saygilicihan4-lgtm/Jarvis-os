@@ -438,6 +438,7 @@ async function tryRestoreCloudState(){
 let lastStateSync=0;
 async function poll(){
   try{
+    await migrateDeviceCredential();
     await api('/api/worker/heartbeat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:NAME,deviceId:DEVICE_ID,version:WORKER_VERSION,capabilities:CAPS,memory:memoryStats()})});
     if(Date.now()-lastStateSync>30000){
       await tryRestoreCloudState();
