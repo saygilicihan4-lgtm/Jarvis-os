@@ -22,6 +22,8 @@ if "%JARVIS_WORKSPACE%"=="" set "JARVIS_WORKSPACE=%USERPROFILE%\JARVIS-Workspace
 echo.
 echo [JARVIS] Cloud: %JARVIS_URL%
 echo [JARVIS] Workspace: %JARVIS_WORKSPACE%
+echo [JARVIS] Guncelleme kontrol ediliyor...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$u='https://raw.githubusercontent.com/saygilicihan4-lgtm/Jarvis-os/main/worker.js'; try { $n=Join-Path $env:TEMP 'jarvis-worker.new.js'; Invoke-WebRequest -UseBasicParsing -Uri $u -OutFile $n -TimeoutSec 15; node --check $n ^| Out-Null; if($LASTEXITCODE -eq 0){ if(-not (Test-Path 'worker.js') -or ((Get-FileHash $n).Hash -ne (Get-FileHash 'worker.js').Hash)){ Copy-Item $n 'worker.js' -Force; Write-Host '[JARVIS] Worker guncellendi.' } else { Write-Host '[JARVIS] Worker guncel.' } }; Remove-Item $n -Force -ErrorAction SilentlyContinue } catch { Write-Host '[JARVIS] Guncelleme kontrolu atlandi; mevcut Worker kullaniliyor.' }"
 echo [JARVIS] Worker baslatiliyor...
 node worker.js
 pause
