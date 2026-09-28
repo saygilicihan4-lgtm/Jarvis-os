@@ -8,12 +8,14 @@ const NAME=process.env.JARVIS_WORKER_NAME||os.hostname();
 const WORKSPACE=path.resolve(process.env.JARVIS_WORKSPACE||path.join(process.cwd(),'jarvis-workspace'));
 const MEMORY_DIR=path.join(WORKSPACE,'.jarvis-memory');
 const MEMORY_FILE=path.join(MEMORY_DIR,'task-history.jsonl');
-const WORKER_VERSION='0.9.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','local_memory'];
+const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
+const WORKER_VERSION='1.0.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','resume_checkpoint','local_memory'];
 
 if(!TOKEN){console.error('JARVIS_TOKEN gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
 fs.mkdirSync(MEMORY_DIR,{recursive:true});
+fs.mkdirSync(CHECKPOINT_DIR,{recursive:true});
 function remember(record){
   const safe={at:new Date().toISOString(),...record};
   fs.appendFileSync(MEMORY_FILE,JSON.stringify(safe)+'\n','utf8');
@@ -82,11 +84,30 @@ function verifyPath(rel,type){
   if(type==='file')return fs.statSync(target).isFile();
   return true;
 }
-async function runPlan(plan){
+function checkpointFile(task){
+  const key=String(task.uid||('legacy-'+task.id)).replace(/[^A-Za-z0-9_.-]/g,'_');
+  return path.join(CHECKPOINT_DIR,key+'.json');
+}
+function readCheckpoint(task){
+  const f=checkpointFile(task);
+  if(!fs.existsSync(f))return{nextStep:0,planVersion:null};
+  try{return JSON.parse(fs.readFileSync(f,'utf8'))}catch(e){return{nextStep:0,planVersion:null}}
+}
+function saveCheckpoint(task,data){
+  const f=checkpointFile(task),tmp=f+'.tmp';
+  fs.writeFileSync(tmp,JSON.stringify({at:new Date().toISOString(),...data}),'utf8');
+  fs.renameSync(tmp,f);
+}
+function clearCheckpoint(task){try{fs.unlinkSync(checkpointFile(task))}catch(e){}}
+async function runPlan(task){
+  const plan=task.plan;
   if(!plan||!Array.isArray(plan.steps)||plan.steps.length<1||plan.steps.length>8)throw new Error('Plan 1-8 adım içermeli');
   const results=[];
   const MAX_STEP_ATTEMPTS=2;
-  for(let i=0;i<plan.steps.length;i++){
+  const cp=readCheckpoint(task);
+  let startAt=(cp.planVersion===plan.version&&Number.isInteger(cp.nextStep))?Math.max(0,Math.min(cp.nextStep,plan.steps.length)):0;
+  if(startAt>0)remember({kind:'resume',taskUid:task.uid||null,nextStep:startAt+1,totalSteps:plan.steps.length});
+  for(let i=startAt;i<plan.steps.length;i++){
     const step=plan.steps[i]||{};
     let result=null,lastError=null;
     for(let attempt=1;attempt<=MAX_STEP_ATTEMPTS;attempt++){
@@ -102,21 +123,24 @@ async function runPlan(plan){
           result={ok:verifyPath(step.path,'file'),message:'Dosya doğrulama: '+step.path};
         }else if(step.action==='verify_folder'){
           result={ok:verifyPath(step.path,'dir'),message:'Klasör doğrulama: '+step.path};
-        }else{
-          throw new Error('İzin verilmeyen plan aksiyonu: '+String(step.action||''));
+        }else throw new Error('İzin verilmeyen plan aksiyonu: '+String(step.action||''));
+        remember({kind:'plan_step',taskUid:task.uid||null,action:step.action,path:step.path||null,step:i+1,attempt,ok:!!result.ok});
+        if(result.ok){
+          results.push({step:i+1,action:step.action,attempts:attempt,...result});
+          saveCheckpoint(task,{planVersion:plan.version,nextStep:i+1,totalSteps:plan.steps.length});
+          break;
         }
-        remember({kind:'plan_step',action:step.action,path:step.path||null,step:i+1,attempt,ok:!!result.ok});
-        if(result.ok){results.push({step:i+1,action:step.action,attempts:attempt,...result});break}
         lastError=new Error('Doğrulama başarısız: '+result.message);
       }catch(e){
         lastError=e;
-        remember({kind:'plan_step',action:step.action,path:step.path||null,step:i+1,attempt,ok:false,error:e.message});
+        remember({kind:'plan_step',taskUid:task.uid||null,action:step.action,path:step.path||null,step:i+1,attempt,ok:false,error:e.message});
       }
-      if(attempt<MAX_STEP_ATTEMPTS)remember({kind:'repair',step:i+1,action:step.action,reason:lastError&&lastError.message});
+      if(attempt<MAX_STEP_ATTEMPTS)remember({kind:'repair',taskUid:task.uid||null,step:i+1,action:step.action,reason:lastError&&lastError.message});
     }
     if(!result||!result.ok)throw new Error('Adım '+(i+1)+' iki denemede doğrulanamadı: '+(lastError?lastError.message:'bilinmeyen hata'));
   }
-  return{ok:true,message:'Plan doğrulandı · '+results.length+' adım · bounded repair aktif',steps:results};
+  clearCheckpoint(task);
+  return{ok:true,message:'Plan doğrulandı · '+plan.steps.length+' adım · kesintiden devam koruması aktif',steps:results,resumedFrom:startAt};
 }
 function createBundle(name,description){
   const dir=safeFile(name);
@@ -145,7 +169,7 @@ function createBundle(name,description){
   }
 }
 async function execute(task){
-  if(task.plan)return runPlan(task.plan);
+  if(task.plan)return runPlan(task);
   const c=String(task.command||'').trim().replace(/^(pc|bilgisayar)\s*:\s*/i,'');
   if(/^(optimizasyon durumu|strategy selection|en iyi strateji)/i.test(c)){
     const s=strategySelection();
