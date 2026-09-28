@@ -183,7 +183,7 @@ const server=http.createServer((req,res)=>{
       const plan=deterministicPlan(command);
       if(plan){t.plan=plan;t.agent='DEVELOPER';}
       state.tasks.push(t);
-      log('QUEUE','#'+t.id+' kuyruğa alındı');
+      log(plan?'PLAN':'QUEUE','#'+t.id+(plan?' güvenli '+plan.steps.length+' adımlı plan oluşturuldu':' kuyruğa alındı'));
       prepareTask(t,false);
       return json(res,201,t);
     });
