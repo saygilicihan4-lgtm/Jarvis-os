@@ -124,11 +124,15 @@ function verifyPath(rel,type){
   if(type==='file')return fs.statSync(target).isFile();
   return true;
 }
+function fileHash(file){
+  if(!fs.existsSync(file)||!fs.statSync(file).isFile())return null;
+  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+}
 function journalFile(task){
   const key=String(task.uid||('legacy-'+task.id)).replace(/[^A-Za-z0-9_.-]/g,'_');
   return path.join(JOURNAL_DIR,key+'.json');
 }
-function readJournal(task){try{return JSON.parse(fs.readFileSync(journalFile(task),'utf8'))}catch(e){return{version:1,entries:[]}}}
+function readJournal(task){try{return JSON.parse(fs.readFileSync(journalFile(task),'utf8'))}catch(e){return{version:2,task:{uid:task.uid,command:task.command,plan:task.plan,createdAt:task.createdAt},entries:[]}}}
 function writeJournal(task,j){
   const f=journalFile(task),tmp=f+'.tmp';fs.writeFileSync(tmp,JSON.stringify(j),'utf8');fs.renameSync(tmp,f);
 }
@@ -139,13 +143,34 @@ function journalBefore(task,target,type){
     if(fs.existsSync(target)){
       const st=fs.statSync(target);if(!st.isFile())throw new Error('Rollback hedefi dosya değil: '+rel);
       if(st.size>512*1024)throw new Error('Rollback limiti: mevcut dosya 512KB üzerinde: '+rel);
-      j.entries.push({path:rel,type:'file',existed:true,data:fs.readFileSync(target).toString('base64')});
-    }else j.entries.push({path:rel,type:'file',existed:false});
-  }else if(type==='dir')j.entries.push({path:rel,type:'dir',existed:fs.existsSync(target)});
+      j.entries.push({path:rel,type:'file',existed:true,beforeHash:fileHash(target),afterHash:null,data:fs.readFileSync(target).toString('base64')});
+    }else j.entries.push({path:rel,type:'file',existed:false,beforeHash:null,afterHash:null});
+  }else if(type==='dir')j.entries.push({path:rel,type:'dir',existed:fs.existsSync(target),afterExists:null});
   if(j.entries.length>32)throw new Error('Transaction journal 32 öğe sınırını aştı');
   writeJournal(task,j);
 }
+function journalAfter(task,target,type){
+  const j=readJournal(task),rel=path.relative(WORKSPACE,target),e=j.entries.find(x=>x.path===rel);
+  if(!e)throw new Error('Transaction journal girdisi bulunamadı: '+rel);
+  if(type==='file')e.afterHash=fileHash(target);else e.afterExists=fs.existsSync(target);
+  writeJournal(task,j);
+}
+function journalConsistency(task){
+  const j=readJournal(task),conflicts=[];
+  for(const e of j.entries){
+    const target=safeFile(e.path);
+    if(e.type==='file'){
+      const current=fileHash(target);
+      const expected=e.afterHash;
+      if(expected&&current!==expected)conflicts.push({path:e.path,expected,current});
+      if(!expected&&e.existed&&current!==e.beforeHash)conflicts.push({path:e.path,expected:e.beforeHash,current});
+    }else if(e.type==='dir'&&e.afterExists===true&&!fs.existsSync(target))conflicts.push({path:e.path,expected:'exists',current:'missing'});
+  }
+  return{ok:conflicts.length===0,conflicts};
+}
 function rollbackJournal(task){
+  const consistency=journalConsistency(task);
+  if(!consistency.ok){remember({kind:'transaction_conflict',taskUid:task.uid||null,conflicts:consistency.conflicts});return consistency.conflicts.map(x=>({path:x.path,ok:false,error:'external change detected'}))}
   const j=readJournal(task),out=[];
   for(const e of [...j.entries].reverse()){
     const target=safeFile(e.path);
@@ -153,14 +178,11 @@ function rollbackJournal(task){
       if(e.type==='file'){
         if(e.existed){fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,Buffer.from(e.data||'','base64'))}
         else if(fs.existsSync(target)&&fs.statSync(target).isFile())fs.unlinkSync(target);
-      }else if(e.type==='dir'&&!e.existed&&fs.existsSync(target)){
-        try{fs.rmdirSync(target)}catch(x){}
-      }
+      }else if(e.type==='dir'&&!e.existed&&fs.existsSync(target)){try{fs.rmdirSync(target)}catch(x){}}
       out.push({path:e.path,ok:true});
     }catch(err){out.push({path:e.path,ok:false,error:err.message})}
   }
-  remember({kind:'transaction_rollback',taskUid:task.uid||null,entries:out});
-  return out;
+  remember({kind:'transaction_rollback',taskUid:task.uid||null,entries:out});return out;
 }
 function clearJournal(task){try{fs.unlinkSync(journalFile(task))}catch(e){}}
 function checkpointFile(task){
