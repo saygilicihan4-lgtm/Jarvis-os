@@ -44,6 +44,23 @@ function risky(c){
   return /(öde|satın al|reklam bütçe|para gönder|iade yap|sözleşme imzala|sil|delete|format)/i.test(String(c||''));
 }
 function remoteAgent(a){return['DEVELOPER','CREATOR','COMMERCE'].includes(a)}
+function requiredCapability(command){
+  const c=String(command||'').toLowerCase().replace(/^(pc|bilgisayar)\s*:\s*/i,'');
+  if(/^(hafıza durumu|hafiza durumu|memory status)/.test(c))return'local_memory';
+  if(/^(sistem durumu|system status|pc durumu)/.test(c))return'system_status';
+  if(/^(dosyaları listele|dosya listesi|list files)/.test(c))return'list_files';
+  if(/^(dosya oluştur|dosya olustur|write file)/.test(c))return'write_file';
+  if(/^(dosya oku|read file)/.test(c))return'read_file';
+  if(/^(not al)/.test(c))return'write_note';
+  if(/^(klasör oluştur|klasor olustur|make folder|proje klasörü oluştur|proje klasoru olustur)/.test(c))return'make_folder';
+  if(/^(proje oluştur|proje olustur|yeni proje|project create)/.test(c))return'project_scaffold';
+  return null;
+}
+function workerSupports(command){
+  const need=requiredCapability(command);
+  if(!need)return{ok:false,need:null};
+  return{ok:state.workers.pc.capabilities.includes(need),need};
+}
 function taskById(id){return state.tasks.find(t=>t.id===Number(id))}
 function pcOnline(){
   const t=state.workers.pc.lastSeen;
@@ -57,6 +74,13 @@ function prepareTask(t,approved=false){
     return;
   }
   if(remoteAgent(t.agent)){
+    const support=workerSupports(t.command);
+    if(pcOnline()&&!support.ok){
+      t.status='needs_tool';
+      t.message=support.need?'Bağlı PC Worker bu yeteneği desteklemiyor: '+support.need+' · Worker güncellemesi gerekli.':'Bu görev için güvenli PC aracı henüz tanımlı değil.';
+      log('TOOL_MISSING','#'+t.id+' '+t.message);
+      return;
+    }
     t.status='waiting_worker';
     t.message='PC Worker bekleniyor.';
     log('ROUTE','#'+t.id+' PC Worker kuyruğuna gönderildi');
