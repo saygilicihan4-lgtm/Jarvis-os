@@ -6,10 +6,22 @@ const BASE=(process.env.JARVIS_URL||'https://jarvis-os-1iuv.onrender.com').repla
 const TOKEN=process.env.JARVIS_TOKEN||'';
 const NAME=process.env.JARVIS_WORKER_NAME||os.hostname();
 const WORKSPACE=path.resolve(process.env.JARVIS_WORKSPACE||path.join(process.cwd(),'jarvis-workspace'));
-const CAPS=['system_status','list_files','write_note','write_file','read_file'];
+const MEMORY_DIR=path.join(WORKSPACE,'.jarvis-memory');
+const MEMORY_FILE=path.join(MEMORY_DIR,'task-history.jsonl');
+const CAPS=['system_status','list_files','write_note','write_file','read_file','local_memory'];
 
 if(!TOKEN){console.error('JARVIS_TOKEN gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
+fs.mkdirSync(MEMORY_DIR,{recursive:true});
+function remember(record){
+  const safe={at:new Date().toISOString(),...record};
+  fs.appendFileSync(MEMORY_FILE,JSON.stringify(safe)+'\n','utf8');
+}
+function memoryStats(){
+  if(!fs.existsSync(MEMORY_FILE))return{records:0,bytes:0};
+  const raw=fs.readFileSync(MEMORY_FILE,'utf8');
+  return{records:raw.split('\n').filter(Boolean).length,bytes:Buffer.byteLength(raw)};
+}
 
 async function api(route,options={}){
   options.headers={...(options.headers||{}),authorization:'Bearer '+TOKEN};
@@ -30,6 +42,10 @@ function safeFile(name){
 }
 async function execute(task){
   const c=String(task.command||'').trim().replace(/^(pc|bilgisayar)\s*:\s*/i,'');
+  if(/^(hafıza durumu|hafiza durumu|memory status)/i.test(c)){
+    const s=memoryStats();
+    return{ok:true,message:'Yerel kalıcı hafıza aktif · '+s.records+' kayıt · '+s.bytes+' bayt · '+MEMORY_FILE};
+  }
   if(/^(sistem durumu|system status|pc durumu)/i.test(c)){
     return{ok:true,message:'PC aktif · '+os.platform()+' '+os.release()+' · Node '+process.version+' · RAM '+Math.round(os.freemem()/1024/1024)+'MB boş'};
   }
@@ -66,6 +82,7 @@ async function poll(){
     let result;
     try{result=await execute(r.task)}
     catch(e){result={ok:false,retryable:true,message:'Worker hatası: '+e.message}}
+    remember({kind:'task_result',taskId:r.task.id,command:r.task.command,agent:r.task.agent,result});
     await api('/api/worker/result',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.task.id,...result})});
     console.log('#'+r.task.id+' '+(result.ok?'OK':'FAIL')+' '+result.message);
   }catch(e){console.error(new Date().toISOString(),e.message)}
