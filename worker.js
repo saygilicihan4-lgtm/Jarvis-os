@@ -9,7 +9,7 @@ const WORKSPACE=path.resolve(process.env.JARVIS_WORKSPACE||path.join(process.cwd
 const MEMORY_DIR=path.join(WORKSPACE,'.jarvis-memory');
 const MEMORY_FILE=path.join(MEMORY_DIR,'task-history.jsonl');
 const WORKER_VERSION='0.4.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','local_memory'];
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','local_memory'];
 
 if(!TOKEN){console.error('JARVIS_TOKEN gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
@@ -55,6 +55,21 @@ async function execute(task){
   }
   if(/^(dosyaları listele|dosya listesi|list files)/i.test(c)){
     return{ok:true,message:'Workspace: '+(listFiles().join(', ')||'(boş)')};
+  }
+  const folder=c.match(/^(?:klasör oluştur|klasor olustur|make folder|proje klasörü oluştur|proje klasoru olustur)\s+(.+)$/i);
+  if(folder){
+    const dir=safeFile(folder[1]);
+    fs.mkdirSync(dir,{recursive:true});
+    return{ok:true,message:'Klasör hazırlandı: '+path.relative(WORKSPACE,dir)};
+  }
+  const project=c.match(/^(?:proje oluştur|proje olustur|yeni proje|project create)\s+([^:]+)(?::\s*(.*))?$/i);
+  if(project){
+    const dir=safeFile(project[1]);
+    fs.mkdirSync(dir,{recursive:true});
+    const readme=path.join(dir,'README.md');
+    const desc=(project[2]||'JARVIS tarafından oluşturulan yerel proje.').trim();
+    if(!fs.existsSync(readme))fs.writeFileSync(readme,'# '+path.basename(dir)+'\n\n'+desc+'\n','utf8');
+    return{ok:true,message:'Proje klasörü hazırlandı: '+path.relative(WORKSPACE,dir)+' · README.md oluşturuldu'};
   }
   const write=c.match(/^(?:dosya oluştur|dosya olustur|write file)\s+([^:]+)\s*:\s*([\s\S]+)$/i);
   if(write){
