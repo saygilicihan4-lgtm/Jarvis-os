@@ -9,7 +9,7 @@ const TOKEN=process.env.JARVIS_TOKEN||'';
 const state={
   tasks:[],
   audit:[],
-  workers:{pc:{name:null,lastSeen:null,capabilities:[]}}
+  workers:{pc:{name:null,lastSeen:null,capabilities:[],memory:null}}
 };
 
 function now(){return new Date().toISOString()}
@@ -94,6 +94,7 @@ function publicState(){
         name:state.workers.pc.name,
         lastSeen:state.workers.pc.lastSeen,
         capabilities:state.workers.pc.capabilities,
+        memory:state.workers.pc.memory,
         online:pcOnline()
       }
     }
@@ -169,7 +170,12 @@ const server=http.createServer((req,res)=>{
       state.workers.pc={
         name:String(d.name||'PC Worker'),
         lastSeen:now(),
-        capabilities:Array.isArray(d.capabilities)?d.capabilities.slice(0,50):[]
+        capabilities:Array.isArray(d.capabilities)?d.capabilities.slice(0,50):[],
+        memory:d.memory&&typeof d.memory==='object'?{
+          records:Number(d.memory.records)||0,
+          bytes:Number(d.memory.bytes)||0,
+          lastAt:d.memory.lastAt?String(d.memory.lastAt):null
+        }:null
       };
       return json(res,200,{ok:true,at:state.workers.pc.lastSeen});
     });
