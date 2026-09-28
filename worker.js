@@ -13,6 +13,9 @@ function loadDeviceId(){
   fs.writeFileSync(DEVICE_FILE,id,'utf8');return id;
 }
 const DEVICE_ID=loadDeviceId();
+const DEVICE_TOKEN_FILE=path.join(os.homedir(),'.jarvis-device-token');
+let DEVICE_TOKEN='';
+try{DEVICE_TOKEN=fs.readFileSync(DEVICE_TOKEN_FILE,'utf8').trim()}catch(e){}
 const WORKSPACE=path.resolve(process.env.JARVIS_WORKSPACE||path.join(process.cwd(),'jarvis-workspace'));
 const MEMORY_DIR=path.join(WORKSPACE,'.jarvis-memory');
 const MEMORY_FILE=path.join(MEMORY_DIR,'task-history.jsonl');
@@ -20,10 +23,10 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.1.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','checkpoint_plan_hash_v1','prefix_revalidation_v1','local_memory'];
+const WORKER_VERSION='2.2.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','local_memory'];
 
-if(!TOKEN){console.error('JARVIS_TOKEN gerekli.');process.exit(1)}
+if(!TOKEN&&!DEVICE_TOKEN){console.error('JARVIS cihaz kimliği veya geçiş tokenı gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
 fs.mkdirSync(MEMORY_DIR,{recursive:true});
 fs.mkdirSync(CHECKPOINT_DIR,{recursive:true});
@@ -101,11 +104,21 @@ function memoryStats(){
 }
 
 async function api(route,options={}){
-  options.headers={...(options.headers||{}),authorization:'Bearer '+TOKEN,'x-jarvis-device-id':DEVICE_ID};
+  const auth=DEVICE_TOKEN?'Device '+DEVICE_TOKEN:'Bearer '+TOKEN;
+  options.headers={...(options.headers||{}),authorization:auth,'x-jarvis-device-id':DEVICE_ID};
   const r=await fetch(BASE+route,options);
   const j=await r.json().catch(()=>({}));
   if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
   return j;
+}
+async function migrateDeviceCredential(){
+  if(DEVICE_TOKEN||!TOKEN)return false;
+  try{
+    const r=await fetch(BASE+'/api/worker/device-token',{method:'POST',headers:{authorization:'Bearer '+TOKEN,'x-jarvis-device-id':DEVICE_ID,'content-type':'application/json'},body:JSON.stringify({deviceId:DEVICE_ID})});
+    const j=await r.json().catch(()=>({}));if(!r.ok||!j.token)return false;
+    const tmp=DEVICE_TOKEN_FILE+'.tmp';fs.writeFileSync(tmp,j.token,{encoding:'utf8',mode:0o600});fs.renameSync(tmp,DEVICE_TOKEN_FILE);DEVICE_TOKEN=j.token;
+    remember({kind:'device_credential_migrated',deviceId:DEVICE_ID});return true;
+  }catch(e){return false}
 }
 function listFiles(){
   return fs.readdirSync(WORKSPACE,{withFileTypes:true}).slice(0,100).map(e=>e.name+(e.isDirectory()?'/':''));
