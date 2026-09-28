@@ -23,8 +23,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.3.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','local_memory'];
+const WORKER_VERSION='2.4.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','local_memory'];
 
 if(!TOKEN&&!DEVICE_TOKEN){console.error('JARVIS cihaz kimliği veya geçiş tokenı gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
@@ -424,7 +424,7 @@ async function rehydrateCheckpoints(){
 async function syncCloudState(){
   try{
     const s=await api('/api/state/snapshot');
-    if(s.schemaVersion!==2||!Number.isSafeInteger(s.revision)||!s.sha256)throw new Error('Cloud snapshot v2 doğrulanamadı');
+    if(s.schemaVersion!==3||!Number.isSafeInteger(s.revision)||!s.signature)throw new Error('İmzalı Cloud snapshot v3 doğrulanamadı');
     let local=null;try{local=JSON.parse(fs.readFileSync(CLOUD_STATE_FILE,'utf8'))}catch(e){}
     if(local&&Number.isSafeInteger(local.revision)&&local.revision>s.revision)return;
     const tmp=CLOUD_STATE_FILE+'.tmp';
