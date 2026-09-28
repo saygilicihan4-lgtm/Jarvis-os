@@ -190,6 +190,26 @@ function runLocalSelfHeal(t){
     log('VERIFY','#'+t.id+' self-heal doğrulandı');
   },250);
 }
+function persistentSnapshot(){
+  return{
+    schemaVersion:1,
+    savedAt:now(),
+    tasks:state.tasks.slice(-500),
+    audit:state.audit.slice(-300),
+    accountPolicies:state.accountPolicies,
+    devices:Object.fromEntries(Object.entries(state.workers.devices).map(([id,w])=>[id,{name:w.name,approved:!!w.approved,roles:w.roles||[],allowedCapabilities:w.allowedCapabilities||[]}]))
+  };
+}
+function restoreSnapshot(s){
+  if(!s||s.schemaVersion!==1||!Array.isArray(s.tasks)||typeof s.accountPolicies!=='object'||typeof s.devices!=='object')throw new Error('invalid snapshot');
+  state.tasks=s.tasks.slice(-500);
+  state.audit=Array.isArray(s.audit)?s.audit.slice(-300):[];
+  state.accountPolicies=s.accountPolicies||{};
+  for(const [id,d] of Object.entries(s.devices)){
+    const live=state.workers.devices[id]||{};
+    state.workers.devices[id]={...live,name:d.name||live.name||id,approved:!!d.approved,roles:Array.isArray(d.roles)?d.roles:[],allowedCapabilities:Array.isArray(d.allowedCapabilities)?d.allowedCapabilities:[]};
+  }
+}
 function publicState(){
   return{
     accountPolicies:Object.values(state.accountPolicies).map(p=>({...p,secretStored:false})),
@@ -223,6 +243,20 @@ const server=http.createServer((req,res)=>{
 
   if(pathname==='/api/state'&&req.method==='GET'){
     return json(res,200,publicState());
+  }
+  if(pathname==='/api/state/snapshot'&&req.method==='GET'){
+    return json(res,200,persistentSnapshot());
+  }
+  if(pathname==='/api/state/restore'&&req.method==='POST'){
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      const deviceId=String(req.headers['x-jarvis-device-id']||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80);
+      const w=deviceWorker(deviceId);
+      if(!w||!w.approved)return json(res,403,{error:'approved device required'});
+      if(state.tasks.length||Object.keys(state.accountPolicies).length)return json(res,409,{error:'cloud state not empty; restore refused'});
+      try{restoreSnapshot(d);log('STATE_RESTORE',deviceId+' yerel snapshot geri yükledi');return json(res,200,{ok:true,tasks:state.tasks.length,policies:Object.keys(state.accountPolicies).length})}
+      catch(e){return json(res,400,{error:e.message})}
+    });
   }
 
   const deviceApprove=pathname.match(/^\/api\/devices\/([A-Za-z0-9_.-]+)\/approve$/);
