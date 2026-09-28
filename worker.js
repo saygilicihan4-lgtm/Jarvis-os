@@ -23,8 +23,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.2.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','local_memory'];
+const WORKER_VERSION='2.3.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','local_memory'];
 
 if(!TOKEN&&!DEVICE_TOKEN){console.error('JARVIS cihaz kimliği veya geçiş tokenı gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
@@ -111,8 +111,13 @@ async function api(route,options={}){
   if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
   return j;
 }
+function deviceTokenExp(token){
+  try{const body=String(token||'').split('.')[0];return Number(JSON.parse(Buffer.from(body,'base64url').toString('utf8')).exp)||0}catch(e){return 0}
+}
 async function migrateDeviceCredential(){
-  if(DEVICE_TOKEN||!TOKEN)return false;
+  const exp=deviceTokenExp(DEVICE_TOKEN);
+  if(DEVICE_TOKEN&&exp>Date.now()+24*60*60*1000)return false;
+  if(!TOKEN)return false;
   try{
     const r=await fetch(BASE+'/api/worker/device-token',{method:'POST',headers:{authorization:'Bearer '+TOKEN,'x-jarvis-device-id':DEVICE_ID,'content-type':'application/json'},body:JSON.stringify({deviceId:DEVICE_ID})});
     const j=await r.json().catch(()=>({}));if(!r.ok||!j.token)return false;
