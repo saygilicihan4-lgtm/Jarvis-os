@@ -359,8 +359,7 @@ const server=http.createServer((req,res)=>{
         const normalApproved=!!(live&&live.approved);
         const bootstrapApproved=cloudEmpty&&!!(snapDevice&&snapDevice.approved);
         if(!normalApproved&&!bootstrapApproved)return json(res,403,{error:'approved device required'});
-        if(!cloudEmpty&&!normalApproved)return json(res,409,{error:'cloud state not empty; bootstrap restore refused'});
-        if(state.tasks.length||Object.keys(state.accountPolicies).length)return json(res,409,{error:'cloud state not empty; restore refused'});
+        if(!cloudEmpty)return json(res,409,{error:'cloud state not empty; restore refused'});
         restoreSnapshot(d);
         log('STATE_RESTORE',deviceId+(bootstrapApproved?' signed bootstrap restore':' local snapshot restore'));
         touchState();
