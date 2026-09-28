@@ -209,7 +209,21 @@ const server=http.createServer((req,res)=>{
 
   if(pathname==='/api/worker/next'&&req.method==='GET'){
     state.workers.pc.lastSeen=now();
-    const t=state.tasks.find(x=>x.status==='waiting_worker');
+    const queued=state.tasks.filter(x=>x.status==='waiting_worker');
+    let t=null;
+    for(const candidate of queued){
+      const support=workerSupports(candidate.command);
+      if(support.ok){t=candidate;break}
+      if(support.need){
+        candidate.status='needs_tool';
+        candidate.message='Bağlı PC Worker bu yeteneği desteklemiyor: '+support.need+' · Worker güncellemesi gerekli.';
+        log('TOOL_MISSING','#'+candidate.id+' '+candidate.message);
+      }else{
+        candidate.status='needs_tool';
+        candidate.message='Bu görev için güvenli PC aracı henüz tanımlı değil.';
+        log('TOOL_MISSING','#'+candidate.id+' '+candidate.message);
+      }
+    }
     if(!t)return json(res,200,{task:null});
     t.status='claimed';
     t.claimedAt=now();
