@@ -9,7 +9,7 @@ const WORKSPACE=path.resolve(process.env.JARVIS_WORKSPACE||path.join(process.cwd
 const MEMORY_DIR=path.join(WORKSPACE,'.jarvis-memory');
 const MEMORY_FILE=path.join(MEMORY_DIR,'task-history.jsonl');
 const WORKER_VERSION='0.4.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','local_memory'];
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','local_memory'];
 
 if(!TOKEN){console.error('JARVIS_TOKEN gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
@@ -44,6 +44,32 @@ function safeFile(name){
   if(!(target===WORKSPACE||target.startsWith(WORKSPACE+path.sep)))throw new Error('Workspace dışına erişim engellendi');
   return target;
 }
+function createBundle(name,description){
+  const dir=safeFile(name);
+  const existed=fs.existsSync(dir);
+  fs.mkdirSync(dir,{recursive:true});
+  const created=[];
+  try{
+    const files={
+      'README.md':'# '+path.basename(dir)+'\n\n'+description+'\n',
+      'TASKS.md':'# Tasks\n\n- [ ] İlk hedefi tanımla\n- [ ] Uygulamayı geliştir\n- [ ] Doğrulama testlerini çalıştır\n',
+      '.gitignore':'node_modules/\n.env\n.env.*\n.DS_Store\n'
+    };
+    for(const [rel,data] of Object.entries(files)){
+      const target=path.join(dir,rel);
+      if(!fs.existsSync(target)){fs.writeFileSync(target,data,'utf8');created.push(target)}
+    }
+    for(const rel of Object.keys(files)){
+      const target=path.join(dir,rel);
+      if(!fs.existsSync(target)||!fs.statSync(target).isFile())throw new Error('Doğrulama başarısız: '+rel);
+    }
+    return{ok:true,message:'Proje paketi doğrulandı: '+path.relative(WORKSPACE,dir)+' · '+Object.keys(files).join(', ')};
+  }catch(e){
+    for(const file of created.reverse()){try{fs.unlinkSync(file)}catch(_){}}
+    if(!existed){try{fs.rmdirSync(dir)}catch(_){}}
+    throw e;
+  }
+}
 async function execute(task){
   const c=String(task.command||'').trim().replace(/^(pc|bilgisayar)\s*:\s*/i,'');
   if(/^(hafıza durumu|hafiza durumu|memory status)/i.test(c)){
@@ -55,6 +81,10 @@ async function execute(task){
   }
   if(/^(dosyaları listele|dosya listesi|list files)/i.test(c)){
     return{ok:true,message:'Workspace: '+(listFiles().join(', ')||'(boş)')};
+  }
+  const bundle=c.match(/^(?:proje paketi oluştur|proje paketi olustur|workspace bundle)\s+([^:]+)(?::\s*(.*))?$/i);
+  if(bundle){
+    return createBundle(bundle[1],(bundle[2]||'JARVIS tarafından oluşturulan ve doğrulanan proje çalışma alanı.').trim());
   }
   const folder=c.match(/^(?:klasör oluştur|klasor olustur|make folder|proje klasörü oluştur|proje klasoru olustur)\s+(.+)$/i);
   if(folder){
