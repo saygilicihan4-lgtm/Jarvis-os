@@ -123,6 +123,7 @@ const server=http.createServer((req,res)=>{
       if(!command)return json(res,400,{error:'command required'});
       const t={
         id:state.tasks.length+1,
+        uid:'J-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,7).toUpperCase(),
         command,
         agent:agentFor(command),
         status:'queued',
