@@ -9,7 +9,7 @@ const TOKEN=process.env.JARVIS_TOKEN||'';
 const state={
   tasks:[],
   audit:[],
-  workers:{pc:{name:null,lastSeen:null,capabilities:[],memory:null}}
+  workers:{pc:{name:null,version:null,lastSeen:null,capabilities:[],memory:null}}
 };
 
 function now(){return new Date().toISOString()}
@@ -92,6 +92,7 @@ function publicState(){
     workers:{
       pc:{
         name:state.workers.pc.name,
+        version:state.workers.pc.version,
         lastSeen:state.workers.pc.lastSeen,
         capabilities:state.workers.pc.capabilities,
         memory:state.workers.pc.memory,
@@ -169,6 +170,7 @@ const server=http.createServer((req,res)=>{
       if(err)return json(res,400,{error:'bad json'});
       state.workers.pc={
         name:String(d.name||'PC Worker'),
+        version:d.version?String(d.version):null,
         lastSeen:now(),
         capabilities:Array.isArray(d.capabilities)?d.capabilities.slice(0,50):[],
         memory:d.memory&&typeof d.memory==='object'?{
