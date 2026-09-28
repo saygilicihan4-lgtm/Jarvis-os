@@ -79,22 +79,25 @@ function deterministicPlan(command){
     ]
   };
 }
-function workerSupports(command,deviceId=null){
+function deviceAllows(w,agent,need){
+  if(!w||!w.approved||!workerOnline(w))return false;
+  const roles=Array.isArray(w.roles)&&w.roles.length?w.roles:['DEVELOPER'];
+  const allowed=Array.isArray(w.allowedCapabilities)&&w.allowedCapabilities.length?w.allowedCapabilities:w.capabilities;
+  return roles.includes(agent)&&w.capabilities.includes(need)&&allowed.includes(need);
+}
+function workerSupports(command,deviceId=null,agent='DEVELOPER'){
   const need=requiredCapability(command);
   if(!need)return{ok:false,need:null};
-  if(deviceId){
-    const w=deviceWorker(deviceId);
-    return{ok:!!w&&!!w.approved&&workerOnline(w)&&w.capabilities.includes(need),need};
-  }
-  const devices=Object.entries(state.workers.devices).filter(([,w])=>w.approved&&workerOnline(w));
-  if(devices.some(([,w])=>w.capabilities.includes(need)))return{ok:true,need};
+  if(deviceId)return{ok:deviceAllows(deviceWorker(deviceId),agent,need),need};
+  const devices=Object.values(state.workers.devices);
+  if(devices.some(w=>deviceAllows(w,agent,need)))return{ok:true,need};
   return{ok:state.workers.pc.capabilities.includes(need)&&pcOnline(),need};
 }
-function chooseDevice(command){
+function chooseDevice(command,agent='DEVELOPER'){
   const need=requiredCapability(command);
   if(!need)return null;
   const eligible=Object.entries(state.workers.devices)
-    .filter(([,w])=>w.approved&&workerOnline(w)&&w.capabilities.includes(need))
+    .filter(([,w])=>deviceAllows(w,agent,need))
     .sort((a,b)=>new Date(b[1].lastSeen)-new Date(a[1].lastSeen));
   return eligible.length?eligible[0][0]:null;
 }
@@ -104,7 +107,7 @@ function pcOnline(){return workerOnline(state.workers.pc)}
 function deviceWorker(id){return id&&state.workers.devices[id]||null}
 function deviceOnline(id){return workerOnline(deviceWorker(id))}
 function publicDevices(){
-  return Object.fromEntries(Object.entries(state.workers.devices).map(([id,w])=>[id,{name:w.name,version:w.version,lastSeen:w.lastSeen,capabilities:w.capabilities,memory:w.memory,approved:!!w.approved,online:workerOnline(w)}]));
+  return Object.fromEntries(Object.entries(state.workers.devices).map(([id,w])=>[id,{name:w.name,version:w.version,lastSeen:w.lastSeen,capabilities:w.capabilities,memory:w.memory,approved:!!w.approved,roles:w.roles||[],allowedCapabilities:w.allowedCapabilities||[],online:workerOnline(w)}]));
 }
 function prepareTask(t,approved=false){
   if(risky(t.command)&&!approved){
@@ -115,7 +118,7 @@ function prepareTask(t,approved=false){
   }
   if(remoteAgent(t.agent)){
     const requested=t.targetDeviceId||null;
-    const support=workerSupports(t.command,requested);
+    const support=workerSupports(t.command,requested,t.agent);
     const anyOnline=pcOnline()||Object.values(state.workers.devices).some(w=>w.approved&&workerOnline(w));
     if(requested&&!deviceWorker(requested)){
       t.status='needs_tool';t.message='Hedef bilgisayar kayıtlı değil: '+requested;log('ROUTE_FAIL','#'+t.id+' '+t.message);return;
@@ -130,7 +133,7 @@ function prepareTask(t,approved=false){
       return;
     }
     t.status='waiting_worker';
-    t.targetDeviceId=requested||chooseDevice(t.command)||null;
+    t.targetDeviceId=requested||chooseDevice(t.command,t.agent)||null;
     t.message=t.targetDeviceId?'Hedef PC bekleniyor: '+t.targetDeviceId:'Uygun PC Worker bekleniyor.';
     log('ROUTE','#'+t.id+' '+(t.targetDeviceId?'hedef '+t.targetDeviceId:'uygun Worker')+' kuyruğuna gönderildi');
     return;
@@ -311,11 +314,11 @@ const server=http.createServer((req,res)=>{
     for(const candidate of queued){
       if(candidate.targetDeviceId&&candidate.targetDeviceId!==deviceId)continue;
       if(!candidate.targetDeviceId&&deviceId){
-        const selected=chooseDevice(candidate.command);
+        const selected=chooseDevice(candidate.command,candidate.agent);
         if(selected&&selected!==deviceId)continue;
         if(selected)candidate.targetDeviceId=selected;
       }
-      const support=workerSupports(candidate.command,deviceId||null);
+      const support=workerSupports(candidate.command,deviceId||null,candidate.agent);
       if(support.ok){t=candidate;break}
       if(support.need){
         candidate.status='needs_tool';
