@@ -44,8 +44,8 @@ function authorized(req){
   const h=req.headers.authorization||'';
   return h===('Bearer '+TOKEN)||req.headers['x-jarvis-token']===TOKEN;
 }
-function deviceTokenPayload(deviceId,ttlMs=7*24*60*60*1000){
-  return{deviceId,exp:Date.now()+ttlMs,v:1};
+function deviceTokenPayload(deviceId,ttlMs=7*24*60*60*1000,extra={}){
+  return{deviceId,exp:Date.now()+ttlMs,v:1,...extra};
 }
 function signDevicePayload(p){
   if(!DEVICE_SECRET)throw new Error('device secret unavailable');
@@ -302,7 +302,9 @@ const server=http.createServer((req,res)=>{
       if(headerId!==ident.deviceId)return json(res,401,{error:'device identity mismatch'});
       if(pathname!=='/api/state/restore'){
         let dw=deviceWorker(ident.deviceId);
-        if((!dw||!dw.approved)&&BOOTSTRAP_DEVICE_ID===ident.deviceId&&Date.now()<BOOTSTRAP_DEVICE_EXP){
+        const claimBootstrap=Number.isFinite(ident.bootstrapUntil)&&Date.now()<ident.bootstrapUntil;
+        const envBootstrap=BOOTSTRAP_DEVICE_ID===ident.deviceId&&Date.now()<BOOTSTRAP_DEVICE_EXP;
+        if((!dw||!dw.approved)&&(claimBootstrap||envBootstrap)){
           state.workers.devices[ident.deviceId]={name:ident.deviceId,version:null,lastSeen:null,capabilities:[],memory:null,approved:true,roles:['DEVELOPER'],allowedCapabilities:[],authMode:'signed',credentialIssuedAt:now()};
           dw=deviceWorker(ident.deviceId);touchState();log('DEVICE_BOOTSTRAP',ident.deviceId+' signed bootstrap approval restored');
         }
@@ -334,7 +336,7 @@ const server=http.createServer((req,res)=>{
       const caps=Array.isArray(d.capabilities)?d.capabilities.map(String).slice(0,50):[];
       state.workers.devices[deviceId]={name:String(d.name||deviceId).slice(0,100),version:d.version?String(d.version):null,lastSeen:now(),capabilities:caps,memory:null,approved:true,roles:['DEVELOPER'],allowedCapabilities:caps,authMode:'signed',credentialIssuedAt:now()};
       touchState();
-      const token=signDevicePayload(deviceTokenPayload(deviceId));
+      const token=signDevicePayload(deviceTokenPayload(deviceId,7*24*60*60*1000,{pairedAt:Date.now(),bootstrapUntil:Date.now()+15*60*1000}));
       log('PAIRING_EXCHANGE',deviceId+' tek kullanımlık kodla eşleştirildi');
       delete state.pairingCodes[code];
       return json(res,200,{ok:true,deviceId,token,expiresInSeconds:604800});
