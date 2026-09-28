@@ -18,8 +18,9 @@ const MEMORY_DIR=path.join(WORKSPACE,'.jarvis-memory');
 const MEMORY_FILE=path.join(MEMORY_DIR,'task-history.jsonl');
 const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
-const WORKER_VERSION='1.4.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','local_memory'];
+const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
+const WORKER_VERSION='1.5.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','local_memory'];
 
 if(!TOKEN){console.error('JARVIS_TOKEN gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
@@ -274,9 +275,32 @@ async function execute(task){
   }
   return{ok:false,retryable:false,message:'Bu görev henüz güvenli PC araç kataloğunda yok; tamamlandı sayılmadı.'};
 }
+async function syncCloudState(){
+  try{
+    const s=await api('/api/state/snapshot');
+    const tmp=CLOUD_STATE_FILE+'.tmp';
+    fs.writeFileSync(tmp,JSON.stringify(s),'utf8');fs.renameSync(tmp,CLOUD_STATE_FILE);
+  }catch(e){}
+}
+async function tryRestoreCloudState(){
+  if(!fs.existsSync(CLOUD_STATE_FILE))return;
+  try{
+    const s=JSON.parse(fs.readFileSync(CLOUD_STATE_FILE,'utf8'));
+    await api('/api/state/restore',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(s)});
+    console.log('[JARVIS] Cloud state yerel snapshot ile geri yüklendi.');
+  }catch(e){
+    if(!/not empty|approved device required|device awaiting approval/i.test(e.message))console.error('[JARVIS] State restore:',e.message);
+  }
+}
+let lastStateSync=0;
 async function poll(){
   try{
     await api('/api/worker/heartbeat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:NAME,deviceId:DEVICE_ID,version:WORKER_VERSION,capabilities:CAPS,memory:memoryStats()})});
+    if(Date.now()-lastStateSync>30000){
+      await tryRestoreCloudState();
+      await syncCloudState();
+      lastStateSync=Date.now();
+    }
     const r=await api('/api/worker/next');
     if(!r.task)return;
     let result;
