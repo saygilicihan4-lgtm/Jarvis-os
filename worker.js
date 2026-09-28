@@ -119,7 +119,8 @@ async function migrateDeviceCredential(){
   if(DEVICE_TOKEN&&exp>Date.now()+24*60*60*1000)return false;
   if(!TOKEN)return false;
   try{
-    const r=await fetch(BASE+'/api/worker/device-token',{method:'POST',headers:{authorization:'Bearer '+TOKEN,'x-jarvis-device-id':DEVICE_ID,'content-type':'application/json'},body:JSON.stringify({deviceId:DEVICE_ID})});
+    const auth=DEVICE_TOKEN?'Device '+DEVICE_TOKEN:'Bearer '+TOKEN;
+    const r=await fetch(BASE+'/api/worker/device-token',{method:'POST',headers:{authorization:auth,'x-jarvis-device-id':DEVICE_ID,'content-type':'application/json'},body:JSON.stringify({deviceId:DEVICE_ID})});
     const j=await r.json().catch(()=>({}));if(!r.ok||!j.token)return false;
     const tmp=DEVICE_TOKEN_FILE+'.tmp';fs.writeFileSync(tmp,j.token,{encoding:'utf8',mode:0o600});fs.renameSync(tmp,DEVICE_TOKEN_FILE);DEVICE_TOKEN=j.token;
     remember({kind:'device_credential_migrated',deviceId:DEVICE_ID});return true;
