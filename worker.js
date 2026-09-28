@@ -20,8 +20,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='1.9.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','task_uid_v1','safe_rehydrate_v1','transactional_plan','local_memory'];
+const WORKER_VERSION='2.0.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','local_memory'];
 
 if(!TOKEN){console.error('JARVIS_TOKEN gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
@@ -215,11 +215,11 @@ async function runPlan(task){
     for(let attempt=1;attempt<=MAX_STEP_ATTEMPTS;attempt++){
       try{
         if(step.action==='make_folder'){
-          const dir=safeFile(step.path); journalBefore(task,dir,'dir'); fs.mkdirSync(dir,{recursive:true});
+          const dir=safeFile(step.path); journalBefore(task,dir,'dir'); fs.mkdirSync(dir,{recursive:true}); journalAfter(task,dir,'dir');
           result={ok:verifyPath(step.path,'dir'),message:'Klasör: '+step.path};
         }else if(step.action==='write_file'){
           const file=safeFile(step.path); journalBefore(task,file,'file'); fs.mkdirSync(path.dirname(file),{recursive:true});
-          fs.writeFileSync(file,String(step.content||''),'utf8');
+          fs.writeFileSync(file,String(step.content||''),'utf8'); journalAfter(task,file,'file');
           result={ok:verifyPath(step.path,'file'),message:'Dosya: '+step.path};
         }else if(step.action==='verify_file'){
           result={ok:verifyPath(step.path,'file'),message:'Dosya doğrulama: '+step.path};
@@ -344,6 +344,28 @@ async function execute(task){
   }
   return{ok:false,retryable:false,message:'Bu görev henüz güvenli PC araç kataloğunda yok; tamamlandı sayılmadı.'};
 }
+async function recoverTransactionJournals(){
+  let files=[];try{files=fs.readdirSync(JOURNAL_DIR).filter(x=>x.endsWith('.json')).slice(0,50)}catch(e){return}
+  for(const name of files){
+    try{
+      const j=JSON.parse(fs.readFileSync(path.join(JOURNAL_DIR,name),'utf8')),t=j.task;
+      if(!t||!t.uid||!t.command||!t.plan)continue;
+      const consistency=journalConsistency(t);
+      if(!consistency.ok){
+        remember({kind:'transaction_recovery_blocked',taskUid:t.uid,conflicts:consistency.conflicts});
+        console.error('[JARVIS] Transaction dış değişiklik nedeniyle durduruldu:',t.uid);continue;
+      }
+      const cp=readCheckpoint(t);
+      if(cp.planVersion===t.plan.version&&Number.isInteger(cp.nextStep)){
+        await api('/api/worker/rehydrate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(t)});
+        remember({kind:'transaction_resume_ready',taskUid:t.uid,nextStep:cp.nextStep});
+      }else{
+        const rb=rollbackJournal(t);
+        if(rb.every(x=>x.ok)){clearJournal(t);clearCheckpoint(t)}
+      }
+    }catch(e){remember({kind:'transaction_recovery_error',file:name,error:e.message})}
+  }
+}
 async function rehydrateCheckpoints(){
   let files=[];try{files=fs.readdirSync(CHECKPOINT_DIR).filter(x=>x.endsWith('.json')).slice(0,50)}catch(e){return}
   for(const name of files){
@@ -380,6 +402,7 @@ async function poll(){
     await api('/api/worker/heartbeat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:NAME,deviceId:DEVICE_ID,version:WORKER_VERSION,capabilities:CAPS,memory:memoryStats()})});
     if(Date.now()-lastStateSync>30000){
       await tryRestoreCloudState();
+      await recoverTransactionJournals();
       await rehydrateCheckpoints();
       await syncCloudState();
       lastStateSync=Date.now();
