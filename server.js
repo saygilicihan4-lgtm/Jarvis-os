@@ -476,6 +476,24 @@ const server=http.createServer((req,res)=>{
     return json(res,200,{task:t});
   }
 
+  if(pathname==='/api/worker/rehydrate'&&req.method==='POST'){
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      const deviceId=String(req.headers['x-jarvis-device-id']||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80),w=deviceWorker(deviceId);
+      if(!w||!w.approved)return json(res,403,{error:'approved device required'});
+      const uid=String(d.uid||'');
+      if(!/^J-[A-F0-9-]{36}$/.test(uid))return json(res,400,{error:'valid task uid required'});
+      const existing=taskByUid(uid);if(existing)return json(res,200,{ok:true,existing:true,task:existing});
+      const command=String(d.command||'').trim(),plan=deterministicPlan(command);
+      if(!command||risky(command)||!plan)return json(res,403,{error:'only low-risk deterministic plans may rehydrate'});
+      const suppliedPlan=d.plan;
+      if(!suppliedPlan||JSON.stringify(suppliedPlan)!==JSON.stringify(plan))return json(res,409,{error:'deterministic plan mismatch'});
+      const t={id:state.tasks.length+1,uid,command,agent:'DEVELOPER',status:'waiting_worker',attempts:0,maxRetries:3,message:'Render restart sonrası güvenli checkpoint görevi geri yüklendi.',createdAt:String(d.createdAt||now()),claimedAt:null,completedAt:null,targetDeviceId:deviceId,plan};
+      state.tasks.push(t);touchState();log('REHYDRATE','#'+t.id+' '+uid+' · '+deviceId);
+      return json(res,201,{ok:true,existing:false,task:t});
+    });
+  }
+
   if(pathname==='/api/worker/result'&&req.method==='POST'){
     return readJson(req,(err,d)=>{
       if(err)return json(res,400,{error:'bad json'});
