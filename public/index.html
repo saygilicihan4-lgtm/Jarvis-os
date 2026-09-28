@@ -290,7 +290,7 @@ async function load(){
   const pc=d.workers&&d.workers.pc?d.workers.pc:{online:false};
   pcDot.className='dot '+(pc.online?'online':'offline');
   pcState.textContent=pc.online?'ONLINE':'OFFLINE';
-  const workerCurrent=pc.online&&pc.version==='2.4.0';
+  const workerCurrent=pc.online&&pc.version==='2.5.0';
   workerSetup.textContent=!pc.online?'RUN LAUNCHER ON PC':workerCurrent?('CONNECTED v'+pc.version):'UPDATE REQUIRED';
   workerReadout.textContent=pc.online?'ON':'OFF';
   devAgent.textContent=!pc.online?'STANDBY':workerCurrent?('READY v'+pc.version):'UPDATE REQUIRED';
