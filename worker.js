@@ -5,6 +5,7 @@ const crypto=require('crypto');
 
 const BASE=(process.env.JARVIS_URL||'https://jarvis-os-1iuv.onrender.com').replace(/\/$/,'');
 const TOKEN=process.env.JARVIS_TOKEN||'';
+const PAIR_CODE=process.env.JARVIS_PAIR_CODE||'';
 const NAME=process.env.JARVIS_WORKER_NAME||os.hostname();
 const DEVICE_FILE=path.join(os.homedir(),'.jarvis-device-id');
 function loadDeviceId(){
@@ -24,10 +25,10 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.8.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','local_memory'];
+const WORKER_VERSION='2.9.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','local_memory'];
 
-if(!TOKEN&&!DEVICE_TOKEN){console.error('JARVIS cihaz kimliği veya geçiş tokenı gerekli.');process.exit(1)}
+if(!TOKEN&&!DEVICE_TOKEN&&!PAIR_CODE){console.error('JARVIS signed cihaz kimliği veya pairing code gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
 fs.mkdirSync(MEMORY_DIR,{recursive:true});
 fs.mkdirSync(CHECKPOINT_DIR,{recursive:true});
@@ -115,17 +116,33 @@ async function api(route,options={}){
 function deviceTokenExp(token){
   try{const body=String(token||'').split('.')[0];return Number(JSON.parse(Buffer.from(body,'base64url').toString('utf8')).exp)||0}catch(e){return 0}
 }
-async function migrateDeviceCredential(){
-  const exp=deviceTokenExp(DEVICE_TOKEN);
-  if(DEVICE_TOKEN&&exp>Date.now()+24*60*60*1000)return false;
-  if(!TOKEN)return false;
+async function saveDeviceToken(token,kind){
+  const tmp=DEVICE_TOKEN_FILE+'.tmp';fs.writeFileSync(tmp,token,{encoding:'utf8',mode:0o600});fs.renameSync(tmp,DEVICE_TOKEN_FILE);DEVICE_TOKEN=token;
+  remember({kind,deviceId:DEVICE_ID});
+}
+async function pairDevice(){
+  if(DEVICE_TOKEN||!PAIR_CODE)return false;
   try{
-    const auth=DEVICE_TOKEN?'Device '+DEVICE_TOKEN:'Bearer '+TOKEN;
-    const r=await fetch(BASE+'/api/worker/device-token',{method:'POST',headers:{authorization:auth,'x-jarvis-device-id':DEVICE_ID,'content-type':'application/json'},body:JSON.stringify({deviceId:DEVICE_ID})});
-    const j=await r.json().catch(()=>({}));if(!r.ok||!j.token)return false;
-    const tmp=DEVICE_TOKEN_FILE+'.tmp';fs.writeFileSync(tmp,j.token,{encoding:'utf8',mode:0o600});fs.renameSync(tmp,DEVICE_TOKEN_FILE);DEVICE_TOKEN=j.token;
-    remember({kind:'device_credential_migrated',deviceId:DEVICE_ID});return true;
-  }catch(e){return false}
+    const r=await fetch(BASE+'/api/pairing/exchange',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:PAIR_CODE,deviceId:DEVICE_ID,name:NAME,version:WORKER_VERSION,capabilities:CAPS})});
+    const j=await r.json().catch(()=>({}));if(!r.ok||!j.token)throw new Error(j.error||('HTTP '+r.status));
+    await saveDeviceToken(j.token,'device_paired');return true;
+  }catch(e){console.error('[JARVIS] Pairing:',e.message);return false}
+}
+async function migrateDeviceCredential(){
+  const exp=deviceTokenExp(DEVICE_TOKEN),nowMs=Date.now();
+  if(DEVICE_TOKEN&&exp>nowMs+24*60*60*1000)return false;
+  if(!DEVICE_TOKEN&&!TOKEN)return false;
+  const auths=[];
+  if(DEVICE_TOKEN&&exp>nowMs)auths.push('Device '+DEVICE_TOKEN);
+  if(TOKEN)auths.push('Bearer '+TOKEN);
+  for(const auth of auths.slice(0,2)){
+    try{
+      const r=await fetch(BASE+'/api/worker/device-token',{method:'POST',headers:{authorization:auth,'x-jarvis-device-id':DEVICE_ID,'content-type':'application/json'},body:JSON.stringify({deviceId:DEVICE_ID})});
+      const j=await r.json().catch(()=>({}));if(!r.ok||!j.token)continue;
+      await saveDeviceToken(j.token,'device_credential_migrated');return true;
+    }catch(e){}
+  }
+  return false;
 }
 function listFiles(){
   return fs.readdirSync(WORKSPACE,{withFileTypes:true}).slice(0,100).map(e=>e.name+(e.isDirectory()?'/':''));
@@ -467,6 +484,7 @@ async function tryRestoreCloudState(){
 let lastStateSync=0;
 async function poll(){
   try{
+    await pairDevice();
     await migrateDeviceCredential();
     await api('/api/worker/heartbeat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:NAME,deviceId:DEVICE_ID,version:WORKER_VERSION,capabilities:CAPS,memory:memoryStats()})});
     if(Date.now()-lastStateSync>30000){
