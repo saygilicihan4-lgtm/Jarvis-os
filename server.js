@@ -168,6 +168,23 @@ const server=http.createServer((req,res)=>{
     return json(res,200,publicState());
   }
 
+  const deviceApprove=pathname.match(/^\/api\/devices\/([A-Za-z0-9_.-]+)\/approve$/);
+  if(deviceApprove&&req.method==='POST'){
+    const id=deviceApprove[1],w=state.workers.devices[id];
+    if(!w)return json(res,404,{error:'device not found'});
+    w.approved=true;
+    log('DEVICE_APPROVE',id+' cihazı kullanıcı tarafından onaylandı');
+    return json(res,200,{ok:true,deviceId:id,name:w.name,approved:true});
+  }
+  const deviceRevoke=pathname.match(/^\/api\/devices\/([A-Za-z0-9_.-]+)\/revoke$/);
+  if(deviceRevoke&&req.method==='POST'){
+    const id=deviceRevoke[1],w=state.workers.devices[id];
+    if(!w)return json(res,404,{error:'device not found'});
+    w.approved=false;
+    log('DEVICE_REVOKE',id+' cihazının yetkisi kaldırıldı');
+    return json(res,200,{ok:true,deviceId:id,approved:false});
+  }
+
   if(pathname==='/api/tasks'&&req.method==='POST'){
     return readJson(req,(err,d)=>{
       if(err)return json(res,400,{error:'bad json'});
@@ -241,7 +258,13 @@ const server=http.createServer((req,res)=>{
   }
 
   if(pathname==='/api/worker/next'&&req.method==='GET'){
-    state.workers.pc.lastSeen=now();
+    const deviceId=String(req.headers['x-jarvis-device-id']||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80);
+    if(deviceId){
+      const dw=state.workers.devices[deviceId];
+      if(!dw)return json(res,403,{error:'device not registered'});
+      dw.lastSeen=now();
+      if(!dw.approved)return json(res,403,{error:'device awaiting approval',deviceId});
+    }else state.workers.pc.lastSeen=now();
     const CLAIM_TTL_MS=90_000;
     for(const stale of state.tasks.filter(x=>x.status==='claimed'&&x.claimedAt)){
       if(Date.now()-new Date(stale.claimedAt).getTime()>CLAIM_TTL_MS){
