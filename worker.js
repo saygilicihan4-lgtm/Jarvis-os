@@ -19,8 +19,8 @@ const MEMORY_FILE=path.join(MEMORY_DIR,'task-history.jsonl');
 const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='1.6.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','local_memory'];
+const WORKER_VERSION='1.7.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','task_uid_v1','local_memory'];
 
 if(!TOKEN){console.error('JARVIS_TOKEN gerekli.');process.exit(1)}
 fs.mkdirSync(WORKSPACE,{recursive:true});
@@ -309,8 +309,8 @@ async function poll(){
     let result;
     try{result=await execute(r.task)}
     catch(e){result={ok:false,retryable:true,message:'Worker hatası: '+e.message}}
-    remember({kind:'task_result',taskId:r.task.id,command:r.task.command,agent:r.task.agent,result});
-    await api('/api/worker/result',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.task.id,...result})});
+    remember({kind:'task_result',taskId:r.task.id,taskUid:r.task.uid,command:r.task.command,agent:r.task.agent,result});
+    await api('/api/worker/result',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.task.id,uid:r.task.uid,...result})});
     console.log('#'+r.task.id+' '+(result.ok?'OK':'FAIL')+' '+result.message);
   }catch(e){console.error(new Date().toISOString(),e.message)}
 }
