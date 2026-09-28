@@ -288,6 +288,10 @@ const server=http.createServer((req,res)=>{
     if(workerRoute&&ident){
       const headerId=String(req.headers['x-jarvis-device-id']||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80);
       if(headerId!==ident.deviceId)return json(res,401,{error:'device identity mismatch'});
+      if(pathname!=='/api/state/restore'){
+        const dw=deviceWorker(ident.deviceId);
+        if(!dw||!dw.approved)return json(res,403,{error:'device revoked or not approved'});
+      }
     }else if(!authorized(req))return json(res,401,{error:'unauthorized'});
   }
 
