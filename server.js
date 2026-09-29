@@ -2,6 +2,7 @@ const http=require('http');
 const fs=require('fs');
 const path=require('path');
 const crypto=require('crypto');
+const webpush=require('web-push');
 
 const PORT=process.env.PORT||3000;
 const ROOT=__dirname;
@@ -11,6 +12,10 @@ const DEVICE_SECRET=process.env.JARVIS_DEVICE_SECRET||'';
 const STATE_SECRET=process.env.JARVIS_STATE_SECRET||'';
 const BOOTSTRAP_PAIR_HASH=process.env.JARVIS_BOOTSTRAP_PAIR_HASH||'';
 const BOOTSTRAP_PAIR_EXP=Number(process.env.JARVIS_BOOTSTRAP_PAIR_EXP||0);
+const VAPID_PUBLIC=String(process.env.JARVIS_VAPID_PUBLIC_KEY||'').trim();
+const VAPID_PRIVATE=String(process.env.JARVIS_VAPID_PRIVATE_KEY||'').trim();
+const VAPID_SUBJECT=String(process.env.JARVIS_VAPID_SUBJECT||'mailto:jarvis@localhost').trim();
+if(VAPID_PUBLIC&&VAPID_PRIVATE){try{webpush.setVapidDetails(VAPID_SUBJECT,VAPID_PUBLIC,VAPID_PRIVATE)}catch(e){console.error('[JARVIS] VAPID CONFIG ERROR:',e.message)}}
 let bootstrapPairUsed=false;
 const PHONE_SESSION_SECRET=crypto.createHmac('sha256',DEVICE_SECRET||STATE_SECRET||TOKEN||'jarvis-dev-fallback').update('jarvis:phone-session:v2').digest();
 let phoneCode=String(crypto.randomInt(0,100000000)).padStart(8,'0');
@@ -313,6 +318,26 @@ function publicState(){
     }
   };
 }
+
+async function dispatchDueReminders(){
+  if(!VAPID_PUBLIC||!VAPID_PRIVATE)return;
+  const due=state.reminders.filter(r=>!r.sent&&new Date(r.when).getTime()<=Date.now());
+  for(const r of due){
+    let delivered=0;
+    const payload=JSON.stringify({title:'JARVIS Hatırlatma',body:r.title,url:'/',tag:'jarvis-reminder-'+r.id});
+    for(const [id,sub] of Object.entries(state.pushSubscriptions)){
+      try{
+        await webpush.sendNotification({endpoint:sub.endpoint,keys:sub.keys},payload,{TTL:3600});
+        sub.lastSuccessAt=now();delivered++;
+      }catch(e){
+        if(e&&[404,410].includes(e.statusCode))delete state.pushSubscriptions[id];
+        log('PUSH_FAIL',id+' '+String(e&&e.statusCode||e&&e.message||'send failed').slice(0,120));
+      }
+    }
+    if(delivered>0){r.sent=true;r.sentAt=now();r.delivered=delivered;touchState();log('REMINDER_PUSH',r.id+' delivered '+delivered)}
+  }
+}
+setInterval(()=>dispatchDueReminders().catch(e=>log('PUSH_LOOP_ERROR',String(e.message||e).slice(0,120))),30000);
 
 const server=http.createServer((req,res)=>{
   const u=new URL(req.url,'http://localhost');
