@@ -50,6 +50,7 @@
       <div class="metric"><span>REMOTE QUEUE</span><b id="remoteQueue">0 WAITING</b></div>
       <div class="metric"><span>REMOTE MODE</span><b id="remoteMode">PC REQUIRED</b></div>
       <div class="metric"><span>ASSISTANT</span><b id="assistantState">CALENDAR READY</b></div>
+      <button id="notifyBtn" type="button">ENABLE PHONE ALERTS</button>
       <div class="metric"><span>WORKER SETUP</span><b id="workerSetup">RUN LAUNCHER ON PC</b></div>
       <div class="metric"><span>MEMORY</span><b id="memoryState">VOLATILE</b></div>
       <div class="metric"><span>PROTOCOL</span><b>ZERO-COST FIRST</b></div>
@@ -158,13 +159,30 @@ function speakReminder(text){
   u.lang='tr-TR'; speechSynthesis.speak(u); return true;
 }
 function checkLocalReminders(){
-  for(const r of jarvisCalendar.due()){if(speakReminder(r.title))jarvisCalendar.mark(r.id)}
+  for(const r of jarvisCalendar.due()){const spoken=speakReminder(r.title);const notified=notifyReminder(r.title);if(spoken||notified)jarvisCalendar.mark(r.id)}
 }
 function speakDailyBrief(){
   const list=jarvisCalendar.upcoming(24);
   if(!list.length){speakReminder('Önümüzdeki 24 saat için kayıtlı bir hatırlatmanız yok.');return}
   const parts=list.slice(0,5).map(r=>new Date(r.when).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})+' '+r.title);
   speakReminder('Önümüzdeki 24 saatte '+list.length+' hatırlatmanız var. '+parts.join('. '));
+}
+async function enablePhoneAlerts(){
+  if(!('Notification' in window)){consoleStatus.textContent='PHONE ALERTS · UNSUPPORTED';return}
+  const p=await Notification.requestPermission();
+  if(p==='granted'){
+    localStorage.setItem('jarvisPhoneAlerts','on');
+    notifyBtn.textContent='PHONE ALERTS ON';
+    consoleStatus.textContent='PHONE ALERTS · READY';
+  }else consoleStatus.textContent='PHONE ALERTS · PERMISSION REQUIRED';
+}
+function notifyReminder(text){
+  if(localStorage.getItem('jarvisPhoneAlerts')!=='on'||Notification.permission!=='granted')return false;
+  try{new Notification('JARVIS Hatırlatma',{body:text,tag:'jarvis-reminder'});return true}catch(e){return false}
+}
+if(window.notifyBtn){
+  notifyBtn.addEventListener('click',enablePhoneAlerts);
+  if(localStorage.getItem('jarvisPhoneAlerts')==='on'&&'Notification' in window&&Notification.permission==='granted')notifyBtn.textContent='PHONE ALERTS ON';
 }
 setInterval(checkLocalReminders,30000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkLocalReminders()});
