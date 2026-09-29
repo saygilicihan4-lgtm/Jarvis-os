@@ -370,6 +370,15 @@ function analyzeFrameLocal(){
   captureMeta.textContent=(captureMeta.textContent.split(' · ANALYSIS:')[0])+' · ANALYSIS: '+result;
   visionState.textContent=' · VISION: LOCAL ANALYSIS READY · NO CLOUD';
 }
+function visionPrivacyInvariant(){
+  if(!privacyMode)return true;
+  const clean=!cameraStream&&!capturedFrameUrl&&captureCanvas.width===0&&captureCanvas.height===0&&!lastVisionSummary&&!lastLocalText;
+  if(!clean){
+    stopCamera();
+    clearCapturedFrame();
+  }
+  return clean;
+}
 async function scanTextLocal(){
   if(privacyMode){visionState.textContent=' · OCR: BLOCKED BY PRIVACY';return}
   if(!capturedFrameUrl||!captureCanvas.width){visionState.textContent=' · OCR: CAPTURE REQUIRED';return}
@@ -394,13 +403,15 @@ async function scanTextLocal(){
 function enterPrivacyMode(){
   privacyMode=true;
   stopCamera();
+  clearCapturedFrame();
   try{if(recognition&&listening)recognition.abort()}catch(e){}
   cmd.value='';
   document.body.classList.remove('listening');
+  const clean=visionPrivacyInvariant();
   voiceState.textContent='VOICE: PRIVACY / SPEECH OFF';
   voiceBtn.textContent='WAKE';
-  coreSubtitle.textContent='Privacy mode · speech recognition disabled';
-  consoleStatus.textContent='PRIVACY MODE · SPEECH OFF';
+  coreSubtitle.textContent=clean?'Privacy mode · speech and camera data cleared':'Privacy mode · cleanup enforced';
+  consoleStatus.textContent=clean?'PRIVACY MODE · LOCAL VISION CLEARED':'PRIVACY MODE · CLEANUP ENFORCED';
 }
 function exitPrivacyMode(source){
   privacyMode=false;
