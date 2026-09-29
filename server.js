@@ -20,12 +20,16 @@ const DATABASE_URL=String(process.env.DATABASE_URL||'').trim();
 const db=DATABASE_URL?new Pool({connectionString:DATABASE_URL,ssl:DATABASE_URL.includes('localhost')?false:{rejectUnauthorized:false}}):null;
 let dbReady=false;
 async function initDurableMemory(){
- if(!db)return;
+ if(!db){log('DB_CONFIG','DATABASE_URL missing; volatile mode');return;}
+ log('DB_CONNECT','DATABASE_URL present; PostgreSQL connection starting');
+ const timer=setTimeout(()=>log('DB_CONNECT_TIMEOUT','PostgreSQL init still pending after 8s'),8000);
+ try{
  await db.query('CREATE TABLE IF NOT EXISTS jarvis_push_subscriptions(id text PRIMARY KEY,endpoint text NOT NULL,p256dh text NOT NULL,auth text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),last_success_at timestamptz)');
  await db.query('CREATE TABLE IF NOT EXISTS jarvis_reminders(id uuid PRIMARY KEY,title text NOT NULL,remind_at timestamptz NOT NULL,sent boolean NOT NULL DEFAULT false,created_at timestamptz NOT NULL DEFAULT now(),sent_at timestamptz,delivered integer NOT NULL DEFAULT 0)');
  const ps=await db.query('SELECT * FROM jarvis_push_subscriptions');state.pushSubscriptions={};for(const x of ps.rows)state.pushSubscriptions[x.id]={endpoint:x.endpoint,keys:{p256dh:x.p256dh,auth:x.auth},createdAt:x.created_at,lastSuccessAt:x.last_success_at};
  const rs=await db.query('SELECT * FROM jarvis_reminders ORDER BY remind_at');state.reminders=rs.rows.map(x=>({id:x.id,title:x.title,when:new Date(x.remind_at).toISOString(),sent:x.sent,createdAt:x.created_at,sentAt:x.sent_at,delivered:x.delivered}));
  dbReady=true;log('DB_READY','durable reminders='+state.reminders.length+' push='+Object.keys(state.pushSubscriptions).length);
+ } finally { clearTimeout(timer); }
 }
 async function persistPush(id,s){if(dbReady)await db.query('INSERT INTO jarvis_push_subscriptions(id,endpoint,p256dh,auth,last_success_at) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET endpoint=EXCLUDED.endpoint,p256dh=EXCLUDED.p256dh,auth=EXCLUDED.auth,last_success_at=EXCLUDED.last_success_at',[id,s.endpoint,s.keys.p256dh,s.keys.auth,s.lastSuccessAt])}
 async function persistReminder(r){if(dbReady)await db.query('INSERT INTO jarvis_reminders(id,title,remind_at,sent,sent_at,delivered) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET title=EXCLUDED.title,remind_at=EXCLUDED.remind_at,sent=EXCLUDED.sent,sent_at=EXCLUDED.sent_at,delivered=EXCLUDED.delivered',[r.id,r.title,r.when,!!r.sent,r.sentAt||null,r.delivered||0])}
@@ -796,7 +800,7 @@ const server=http.createServer((req,res)=>{
   });
 });
 
-initDurableMemory().catch(e=>log('DB_INIT_ERROR',String(e.message||e).slice(0,160)));
+initDurableMemory().catch(e=>{const code=e&&e.code?String(e.code):'NO_CODE';log('DB_INIT_ERROR',code+' '+String(e&&e.message||e).slice(0,160));});
 server.listen(PORT,'0.0.0.0',()=>{
   log('BOOT','JARVIS OS v0.2 started');
   console.log('JARVIS OS listening on '+PORT);
