@@ -3,6 +3,7 @@ const fs=require('fs');
 const path=require('path');
 const crypto=require('crypto');
 const webpush=require('web-push');
+const {Pool}=require('pg');
 
 const PORT=process.env.PORT||3000;
 const ROOT=__dirname;
@@ -15,6 +16,20 @@ const BOOTSTRAP_PAIR_EXP=Number(process.env.JARVIS_BOOTSTRAP_PAIR_EXP||0);
 const VAPID_PUBLIC=String(process.env.JARVIS_VAPID_PUBLIC_KEY||'').trim();
 const VAPID_PRIVATE=String(process.env.JARVIS_VAPID_PRIVATE_KEY||'').trim();
 const VAPID_SUBJECT=String(process.env.JARVIS_VAPID_SUBJECT||'mailto:jarvis@localhost').trim();
+const DATABASE_URL=String(process.env.DATABASE_URL||'').trim();
+const db=DATABASE_URL?new Pool({connectionString:DATABASE_URL,ssl:DATABASE_URL.includes('localhost')?false:{rejectUnauthorized:false}}):null;
+let dbReady=false;
+async function initDurableMemory(){
+ if(!db)return;
+ await db.query('CREATE TABLE IF NOT EXISTS jarvis_push_subscriptions(id text PRIMARY KEY,endpoint text NOT NULL,p256dh text NOT NULL,auth text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),last_success_at timestamptz)');
+ await db.query('CREATE TABLE IF NOT EXISTS jarvis_reminders(id uuid PRIMARY KEY,title text NOT NULL,remind_at timestamptz NOT NULL,sent boolean NOT NULL DEFAULT false,created_at timestamptz NOT NULL DEFAULT now(),sent_at timestamptz,delivered integer NOT NULL DEFAULT 0)');
+ const ps=await db.query('SELECT * FROM jarvis_push_subscriptions');state.pushSubscriptions={};for(const x of ps.rows)state.pushSubscriptions[x.id]={endpoint:x.endpoint,keys:{p256dh:x.p256dh,auth:x.auth},createdAt:x.created_at,lastSuccessAt:x.last_success_at};
+ const rs=await db.query('SELECT * FROM jarvis_reminders ORDER BY remind_at');state.reminders=rs.rows.map(x=>({id:x.id,title:x.title,when:new Date(x.remind_at).toISOString(),sent:x.sent,createdAt:x.created_at,sentAt:x.sent_at,delivered:x.delivered}));
+ dbReady=true;log('DB_READY','durable reminders='+state.reminders.length+' push='+Object.keys(state.pushSubscriptions).length);
+}
+async function persistPush(id,s){if(dbReady)await db.query('INSERT INTO jarvis_push_subscriptions(id,endpoint,p256dh,auth,last_success_at) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET endpoint=EXCLUDED.endpoint,p256dh=EXCLUDED.p256dh,auth=EXCLUDED.auth,last_success_at=EXCLUDED.last_success_at',[id,s.endpoint,s.keys.p256dh,s.keys.auth,s.lastSuccessAt])}
+async function persistReminder(r){if(dbReady)await db.query('INSERT INTO jarvis_reminders(id,title,remind_at,sent,sent_at,delivered) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET title=EXCLUDED.title,remind_at=EXCLUDED.remind_at,sent=EXCLUDED.sent,sent_at=EXCLUDED.sent_at,delivered=EXCLUDED.delivered',[r.id,r.title,r.when,!!r.sent,r.sentAt||null,r.delivered||0])}
+
 if(VAPID_PUBLIC&&VAPID_PRIVATE){try{webpush.setVapidDetails(VAPID_SUBJECT,VAPID_PUBLIC,VAPID_PRIVATE)}catch(e){console.error('[JARVIS] VAPID CONFIG ERROR:',e.message)}}
 let bootstrapPairUsed=false;
 const PHONE_SESSION_SECRET=crypto.createHmac('sha256',DEVICE_SECRET||STATE_SECRET||TOKEN||'jarvis-dev-fallback').update('jarvis:phone-session:v2').digest();
@@ -339,7 +354,7 @@ async function dispatchDueReminders(){
         log('PUSH_FAIL',id+' '+String(e&&e.statusCode||e&&e.message||'send failed').slice(0,120));
       }
     }
-    if(delivered>0){r.sent=true;r.sentAt=now();r.delivered=delivered;touchState();log('REMINDER_PUSH',r.id+' delivered '+delivered)}
+    if(delivered>0){r.sent=true;r.sentAt=now();r.delivered=delivered;touchState();persistReminder(r).catch(e=>log('DB_REMINDER_ERROR',String(e.message||e).slice(0,120)));log('REMINDER_PUSH',r.id+' delivered '+delivered)}
   }
 }
 setInterval(()=>dispatchDueReminders().catch(e=>log('PUSH_LOOP_ERROR',String(e.message||e).slice(0,120))),30000);
@@ -393,7 +408,7 @@ const server=http.createServer((req,res)=>{
       const endpoint=String(d.endpoint||''),keys=d.keys||{};
       if(!/^https:\/\//.test(endpoint)||!keys.p256dh||!keys.auth)return json(res,400,{error:'invalid push subscription'});
       const id=crypto.createHash('sha256').update(endpoint).digest('hex').slice(0,24);
-      state.pushSubscriptions[id]={endpoint,keys:{p256dh:String(keys.p256dh),auth:String(keys.auth)},createdAt:now(),lastSuccessAt:null};
+      state.pushSubscriptions[id]={endpoint,keys:{p256dh:String(keys.p256dh),auth:String(keys.auth)},createdAt:now(),lastSuccessAt:null};persistPush(id,state.pushSubscriptions[id]).catch(e=>log('DB_PUSH_ERROR',String(e.message||e).slice(0,120)));
       touchState();log('PUSH_SUBSCRIBE','phone push subscription registered '+id);
       return json(res,200,{ok:true,id});
     });
@@ -423,7 +438,7 @@ const server=http.createServer((req,res)=>{
       const title=String(d.title||'').trim().slice(0,180),when=new Date(d.when);
       if(!title||!Number.isFinite(when.getTime()))return json(res,400,{error:'title and valid when required'});
       const r={id:crypto.randomUUID(),title,when:when.toISOString(),sent:false,createdAt:now()};
-      state.reminders.push(r);state.reminders=state.reminders.slice(-500);touchState();log('REMINDER_CREATE',r.id+' '+r.when);
+      state.reminders.push(r);state.reminders=state.reminders.slice(-500);touchState();persistReminder(r).catch(e=>log('DB_REMINDER_ERROR',String(e.message||e).slice(0,120)));log('REMINDER_CREATE',r.id+' '+r.when);
       return json(res,201,{ok:true,reminder:r});
     });
   }
@@ -781,6 +796,7 @@ const server=http.createServer((req,res)=>{
   });
 });
 
+initDurableMemory().catch(e=>log('DB_INIT_ERROR',String(e.message||e).slice(0,160)));
 server.listen(PORT,'0.0.0.0',()=>{
   log('BOOT','JARVIS OS v0.2 started');
   console.log('JARVIS OS listening on '+PORT);
