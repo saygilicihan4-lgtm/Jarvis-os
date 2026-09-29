@@ -384,7 +384,7 @@ const server=http.createServer((req,res)=>{
   }
 
   if(pathname==='/api/db/status'&&req.method==='GET'){
-    return json(res,200,{configured:!!db,ready:dbReady,persistent:true,reminders:state.reminders.length,pushSubscriptions:Object.keys(state.pushSubscriptions).length,reminderStorage:dbReady?'postgresql':'unavailable',pushStorage:dbReady?'postgresql':'unavailable'});
+    return json(res,200,{configured:!!db,ready:dbReady,persistent:dbReady,reminders:state.reminders.length,pushSubscriptions:Object.keys(state.pushSubscriptions).length,reminderStorage:dbReady?'postgresql':'unavailable',pushStorage:dbReady?'postgresql':'unavailable'});
   }
 
   if(pathname==='/api/health'){
