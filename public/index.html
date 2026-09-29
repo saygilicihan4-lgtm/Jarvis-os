@@ -171,15 +171,27 @@ async function ensurePushWorker(){
   if(!('serviceWorker' in navigator))return null;
   try{return await navigator.serviceWorker.register('/sw.js',{scope:'/'});}catch(e){return null}
 }
+function urlB64ToBytes(s){
+  const pad='='.repeat((4-s.length%4)%4),b=(s+pad).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=atob(b);return Uint8Array.from([...raw].map(ch=>ch.charCodeAt(0)));
+}
 async function enablePhoneAlerts(){
-  if(!('Notification' in window)){consoleStatus.textContent='PHONE ALERTS · UNSUPPORTED';return}
-  await ensurePushWorker();
+  if(!('Notification' in window)||!('serviceWorker' in navigator)){consoleStatus.textContent='PHONE ALERTS · UNSUPPORTED';return}
+  const reg=await ensurePushWorker();
+  if(!reg){consoleStatus.textContent='PHONE ALERTS · SERVICE WORKER FAILED';return}
   const p=await Notification.requestPermission();
-  if(p==='granted'){
+  if(p!=='granted'){consoleStatus.textContent='PHONE ALERTS · PERMISSION REQUIRED';return}
+  try{
+    const k=await fetch('/api/push/public-key',{credentials:'same-origin'}).then(r=>r.ok?r.json():null);
+    if(!k||!k.publicKey){consoleStatus.textContent='PHONE ALERTS · PUSH SERVER NOT READY';return}
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlB64ToBytes(k.publicKey)});
+    const saved=await fetch('/api/push/subscribe',{method:'POST',headers:{'content-type':'application/json'},credentials:'same-origin',body:JSON.stringify(sub)});
+    if(!saved.ok)throw new Error('subscription save failed');
     localStorage.setItem('jarvisPhoneAlerts','on');
     notifyBtn.textContent='PHONE ALERTS ON';
-    consoleStatus.textContent='PHONE ALERTS · READY';
-  }else consoleStatus.textContent='PHONE ALERTS · PERMISSION REQUIRED';
+    consoleStatus.textContent='PHONE ALERTS · PUSH SUBSCRIBED';
+  }catch(e){consoleStatus.textContent='PHONE ALERTS · SETUP INCOMPLETE'}
 }
 function notifyReminder(text){
   if(localStorage.getItem('jarvisPhoneAlerts')!=='on'||Notification.permission!=='granted')return false;
