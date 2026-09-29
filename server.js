@@ -34,8 +34,8 @@ async function initDurableMemory(){
  dbReady=true;log('DB_READY','durable reminders='+state.reminders.length+' push='+Object.keys(state.pushSubscriptions).length);
  } finally { clearTimeout(timer); }
 }
-async function persistPush(id,s){if(dbReady)await db.query('INSERT INTO jarvis_push_subscriptions(id,endpoint,p256dh,auth,last_success_at) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET endpoint=EXCLUDED.endpoint,p256dh=EXCLUDED.p256dh,auth=EXCLUDED.auth,last_success_at=EXCLUDED.last_success_at',[id,s.endpoint,s.keys.p256dh,s.keys.auth,s.lastSuccessAt])}
-async function persistReminder(r){if(dbReady)await db.query('INSERT INTO jarvis_reminders(id,title,remind_at,sent,sent_at,delivered) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET title=EXCLUDED.title,remind_at=EXCLUDED.remind_at,sent=EXCLUDED.sent,sent_at=EXCLUDED.sent_at,delivered=EXCLUDED.delivered',[r.id,r.title,r.when,!!r.sent,r.sentAt||null,r.delivered||0])}
+async function persistPush(id,s){if(!dbReady)throw new Error('database not ready');await db.query('INSERT INTO jarvis_push_subscriptions(id,endpoint,p256dh,auth,last_success_at) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET endpoint=EXCLUDED.endpoint,p256dh=EXCLUDED.p256dh,auth=EXCLUDED.auth,last_success_at=EXCLUDED.last_success_at',[id,s.endpoint,s.keys.p256dh,s.keys.auth,s.lastSuccessAt])}
+async function persistReminder(r){if(!dbReady)throw new Error('database not ready');await db.query('INSERT INTO jarvis_reminders(id,title,remind_at,sent,sent_at,delivered) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET title=EXCLUDED.title,remind_at=EXCLUDED.remind_at,sent=EXCLUDED.sent,sent_at=EXCLUDED.sent_at,delivered=EXCLUDED.delivered',[r.id,r.title,r.when,!!r.sent,r.sentAt||null,r.delivered||0])}
 
 if(VAPID_PUBLIC&&VAPID_PRIVATE){try{webpush.setVapidDetails(VAPID_SUBJECT,VAPID_PUBLIC,VAPID_PRIVATE)}catch(e){console.error('[JARVIS] VAPID CONFIG ERROR:',e.message)}}
 let bootstrapPairUsed=false;
