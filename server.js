@@ -378,6 +378,10 @@ const server=http.createServer((req,res)=>{
     return json(res,200,{ok:true,existing:false,expiresAt:new Date(exp).toISOString()});
   }
 
+  if(pathname==='/api/db/status'&&req.method==='GET'){
+    return json(res,200,{configured:!!db,ready:dbReady,reminders:state.reminders.length,pushSubscriptions:Object.keys(state.pushSubscriptions).length});
+  }
+
   if(pathname==='/api/health'){
     const devices=Object.values(state.workers.devices),approved=devices.filter(w=>w.approved),online=approved.filter(workerOnline),signed=approved.filter(w=>w.authMode==='signed');
     const latest=online.slice().sort((a,b)=>String(b.lastSeen||'').localeCompare(String(a.lastSeen||'')))[0]||null;
