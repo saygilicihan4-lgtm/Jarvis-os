@@ -149,7 +149,8 @@ const jarvisCalendar={
   save(){localStorage.setItem('jarvisCalendarReminders',JSON.stringify(this.reminders))},
   add(title,when){const t=new Date(when);if(!title||Number.isNaN(t.getTime()))return false;this.reminders.push({id:Date.now(),title:String(title).slice(0,160),when:t.toISOString(),spoken:false});this.save();return true},
   due(){const now=Date.now();return this.reminders.filter(r=>!r.spoken&&new Date(r.when).getTime()<=now)},
-  mark(id){const r=this.reminders.find(x=>x.id===id);if(r){r.spoken=true;this.save()}}
+  mark(id){const r=this.reminders.find(x=>x.id===id);if(r){r.spoken=true;this.save()}},
+  upcoming(hours=24){const now=Date.now(),end=now+hours*3600000;return this.reminders.filter(r=>{const t=new Date(r.when).getTime();return !r.spoken&&t>=now&&t<=end}).sort((a,b)=>new Date(a.when)-new Date(b.when))}
 };
 function speakReminder(text){
   if(!('speechSynthesis' in window))return false;
@@ -158,6 +159,12 @@ function speakReminder(text){
 }
 function checkLocalReminders(){
   for(const r of jarvisCalendar.due()){if(speakReminder(r.title))jarvisCalendar.mark(r.id)}
+}
+function speakDailyBrief(){
+  const list=jarvisCalendar.upcoming(24);
+  if(!list.length){speakReminder('Önümüzdeki 24 saat için kayıtlı bir hatırlatmanız yok.');return}
+  const parts=list.slice(0,5).map(r=>new Date(r.when).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})+' '+r.title);
+  speakReminder('Önümüzdeki 24 saatte '+list.length+' hatırlatmanız var. '+parts.join('. '));
 }
 setInterval(checkLocalReminders,30000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkLocalReminders()});
@@ -556,6 +563,9 @@ async function send(){
   const command=cmd.value.trim();
   if(!command)return;
   if(localVisionCommand(command)){cmd.value='';return}
+  if(/^(bugün ne var|bugun ne var|günlük özet|gunluk ozet|takvim özeti|takvim ozeti)$/i.test(command)){
+    speakDailyBrief();consoleStatus.textContent='ASSISTANT · 24 SAATLIK ÖZET';cmd.value='';return;
+  }
   const rm=command.match(/^hatırlat(?:ma)?\s*:\s*(.+?)\s*\|\s*(.+)$/i);
   if(rm){
     if(jarvisCalendar.add(rm[1],rm[2])){consoleStatus.textContent='HATIRLATMA KAYDEDILDI · '+rm[1];cmd.value='';checkLocalReminders();return}
