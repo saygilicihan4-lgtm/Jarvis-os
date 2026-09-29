@@ -305,7 +305,7 @@ const server=http.createServer((req,res)=>{
   }
 
   if(pathname.startsWith('/api/')&&!['/api/pairing/exchange','/api/session/exchange'].includes(pathname)){
-    const ident=workerIdentity(req),workerRoute=pathname.startsWith('/api/worker/')||pathname==='/api/state/snapshot'||pathname==='/api/state/restore';
+    const ident=workerIdentity(req),workerRoute=pathname.startsWith('/api/worker/')||pathname==='/api/state/snapshot'||pathname==='/api/state/restore'||pathname==='/api/session/create';
     if(workerRoute&&ident){
       const signedWorker=deviceWorker(ident.deviceId);if(signedWorker)signedWorker.authMode='signed';
       const headerId=String(req.headers['x-jarvis-device-id']||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80);
@@ -321,6 +321,13 @@ const server=http.createServer((req,res)=>{
         if(!dw||!dw.approved)return json(res,403,{error:'device revoked or not approved'});
       }
     }else if(!authorized(req))return json(res,401,{error:'unauthorized'});
+  }
+
+  if(pathname==='/api/session/create'&&req.method==='POST'){
+    phoneCode=String(crypto.randomInt(0,100000000)).padStart(8,'0');
+    phoneCodeExp=Date.now()+5*60*1000;phoneCodeUsed=false;
+    log('PHONE_SESSION_CREATE','approved signed device generated one-time phone session code');
+    return json(res,200,{code:phoneCode,expiresAt:new Date(phoneCodeExp).toISOString(),expiresInSeconds:300});
   }
 
   if(pathname==='/api/session/exchange'&&req.method==='POST'){
