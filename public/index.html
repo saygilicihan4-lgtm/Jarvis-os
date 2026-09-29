@@ -644,15 +644,21 @@ async function send(){
   }
   const rm=command.match(/^hatırlat(?:ma)?\s*:\s*(.+?)\s*\|\s*(.+)$/i);
   if(rm){
-    if(jarvisCalendar.add(rm[1],rm[2])){
-      const title=rm[1],when=new Date(rm[2]).toISOString();
-      consoleStatus.textContent='HATIRLATMA KAYDEDILDI · CLOUD SENKRON';
-      fetch('/api/reminders',{method:'POST',headers:{'content-type':'application/json'},credentials:'same-origin',body:JSON.stringify({title,when})})
-        .then(r=>{if(!r.ok)throw new Error('cloud');consoleStatus.textContent='HATIRLATMA · CLOUD READY'})
-        .catch(()=>{consoleStatus.textContent='HATIRLATMA · YEREL READY · CLOUD HATA'});
+    const title=rm[1],parsed=new Date(rm[2]);
+    if(Number.isNaN(parsed.getTime())){consoleStatus.textContent='HATIRLATMA TARIHI ANLASILAMADI';return}
+    const when=parsed.toISOString();
+    consoleStatus.textContent='HATIRLATMA · POSTGRESQL KAYDI BEKLENIYOR';
+    try{
+      const r=await fetch('/api/reminders',{method:'POST',headers:{'content-type':'application/json'},credentials:'same-origin',body:JSON.stringify({title,when})});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok||d.durable!==true)throw new Error(d.error||'durable storage unavailable');
+      jarvisCalendar.add(title,when);
+      consoleStatus.textContent='HATIRLATMA · POSTGRESQL DURABLE';
       cmd.value='';checkLocalReminders();return
+    }catch(e){
+      consoleStatus.textContent='HATIRLATMA KAYDEDILMEDI · CLOUD HATA';
+      return
     }
-    consoleStatus.textContent='HATIRLATMA TARIHI ANLASILAMADI';return;
   }
   if(!/^pc\s*:/i.test(command)&&/^(sistem durumu|system status|pc durumu|disk durumu|disk status|depolama durumu|ağ durumu|ag durumu|network status|internet durumu|işlemleri listele|islemleri listele|process list|çalışan işlemler|calisan islemler|yerel ai durumu|local ai status|ai readiness)/i.test(command))cmd.value='PC: '+command;
   try{
