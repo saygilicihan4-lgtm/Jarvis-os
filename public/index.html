@@ -694,6 +694,10 @@ async function bootstrapSession(){
       consoleStatus.textContent='F8 WAKE · SECURE CHANNEL ACTIVE';
     }
   }catch(e){
+    try{
+      const r=await fetch('/api/session/bootstrap',{credentials:'same-origin'});
+      if(r.ok){await load();setAuthenticated(true);return}
+    }catch(_){}
     setAuthenticated(false);
     if(wakeSource==='f8'){
       coreSubtitle.textContent='F8 global wake · one-time authorization required';
