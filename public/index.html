@@ -393,9 +393,26 @@ cmd.addEventListener('keydown',e=>{
 
 if(SpeechRecognition)voiceState.textContent='VOICE MODULE: READY';
 else voiceState.textContent='VOICE MODULE: BROWSER UNSUPPORTED';
-if(KEY)load().catch(()=>setAuthenticated(false));
-else setAuthenticated(false);
-setInterval(()=>{if(KEY)load().catch(()=>{})},2500);
+// Cookie-first trusted session bootstrap: F8/reload should reuse the existing
+// HttpOnly JARVIS session without asking for another one-time code.
+async function bootstrapSession(){
+  try{
+    await load();
+    setAuthenticated(true);
+    if(wakeSource==='f8'){
+      coreSubtitle.textContent='F8 global wake · trusted session restored';
+      consoleStatus.textContent='F8 WAKE · SECURE CHANNEL ACTIVE';
+    }
+  }catch(e){
+    setAuthenticated(false);
+    if(wakeSource==='f8'){
+      coreSubtitle.textContent='F8 global wake · one-time authorization required';
+      consoleStatus.textContent='F8 WAKE · ONE-TIME AUTHORIZATION REQUIRED';
+    }
+  }
+}
+bootstrapSession();
+setInterval(()=>{if(!loginOverlay.classList.contains('hidden'))return;load().catch(()=>setAuthenticated(false))},2500);
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
 </script>
 </body>
