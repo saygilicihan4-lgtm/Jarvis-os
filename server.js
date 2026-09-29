@@ -12,15 +12,24 @@ const STATE_SECRET=process.env.JARVIS_STATE_SECRET||'';
 const BOOTSTRAP_PAIR_HASH=process.env.JARVIS_BOOTSTRAP_PAIR_HASH||'';
 const BOOTSTRAP_PAIR_EXP=Number(process.env.JARVIS_BOOTSTRAP_PAIR_EXP||0);
 let bootstrapPairUsed=false;
-const PHONE_SESSION_SECRET=crypto.randomBytes(32);
+const PHONE_SESSION_SECRET=crypto.createHmac('sha256',DEVICE_SECRET||STATE_SECRET||TOKEN||'jarvis-dev-fallback').update('jarvis:phone-session:v2').digest();
 let phoneCode=String(crypto.randomInt(0,100000000)).padStart(8,'0');
 let phoneCodeExp=Date.now()+5*60*1000;
 let phoneCodeUsed=false;
 function cookieMap(req){return Object.fromEntries(String(req.headers.cookie||'').split(';').map(x=>x.trim().split('=').map(decodeURIComponent)).filter(x=>x.length===2))}
-function signPhoneSession(exp){const body=Buffer.from(JSON.stringify({scope:'admin-ui',exp})).toString('base64url');return body+'.'+crypto.createHmac('sha256',PHONE_SESSION_SECRET).update(body).digest('base64url')}
+function clientIp(req){return String(req.headers['cf-connecting-ip']||req.headers['x-forwarded-for']||req.socket.remoteAddress||'').split(',')[0].trim()}
+function ipTag(req){return crypto.createHmac('sha256',PHONE_SESSION_SECRET).update('ip:'+clientIp(req)).digest('base64url').slice(0,16)}
+function signPhoneSession(req,exp){const body=Buffer.from(JSON.stringify({scope:'admin-ui',exp,ip:ipTag(req),v:2})).toString('base64url');return body+'.'+crypto.createHmac('sha256',PHONE_SESSION_SECRET).update(body).digest('base64url')}
 function validPhoneSession(req){
  const t=cookieMap(req).jarvis_session;if(!t||!t.includes('.'))return false;
- try{const [body,sig]=t.split('.'),expected=crypto.createHmac('sha256',PHONE_SESSION_SECRET).update(body).digest(),got=Buffer.from(sig,'base64url');if(got.length!==expected.length||!crypto.timingSafeEqual(got,expected))return false;const p=JSON.parse(Buffer.from(body,'base64url').toString());return p.scope==='admin-ui'&&p.exp>Date.now()}catch{return false}
+ try{
+  const [body,sig]=t.split('.'),expected=crypto.createHmac('sha256',PHONE_SESSION_SECRET).update(body).digest(),got=Buffer.from(sig,'base64url');
+  if(got.length!==expected.length||!crypto.timingSafeEqual(got,expected))return false;
+  const p=JSON.parse(Buffer.from(body,'base64url').toString());
+  if(p.scope!=='admin-ui'||p.exp<=Date.now())return false;
+  req.jarvisSessionRisk={ipChanged:!!p.ip&&p.ip!==ipTag(req)};
+  return true;
+ }catch{return false}
 }
 const BOOTSTRAP_DEVICE_ID=process.env.JARVIS_BOOTSTRAP_DEVICE_ID||'';
 const BOOTSTRAP_DEVICE_EXP=Number(process.env.JARVIS_BOOTSTRAP_DEVICE_EXP||0);
@@ -339,8 +348,8 @@ const server=http.createServer((req,res)=>{
       const code=String(d.code||'').replace(/\D/g,'');
       if(phoneCodeUsed||Date.now()>phoneCodeExp||code!==phoneCode)return json(res,403,{error:'invalid or expired session code'});
       phoneCodeUsed=true;phoneCode='';
-      const exp=Date.now()+12*60*60*1000,token=signPhoneSession(exp);
-      res.writeHead(200,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','set-cookie':'jarvis_session='+encodeURIComponent(token)+'; Max-Age=43200; Path=/; HttpOnly; Secure; SameSite=Strict'});
+      const exp=Date.now()+7*24*60*60*1000,token=signPhoneSession(req,exp);
+      res.writeHead(200,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','set-cookie':'jarvis_session='+encodeURIComponent(token)+'; Max-Age=604800; Path=/; HttpOnly; Secure; SameSite=Strict'});
       res.end(JSON.stringify({ok:true,expiresAt:new Date(exp).toISOString()}));
     });
   }
