@@ -392,6 +392,18 @@ async function execute(task){
     const s=memoryStats();
     return{ok:true,message:'Yerel kalıcı hafıza aktif · '+s.records+' kayıt · '+s.bytes+' bayt · '+MEMORY_FILE};
   }
+  if(/^(yerel ai durumu|local ai status|ai readiness)/i.test(c)){
+    const bins=['tesseract','ollama'];
+    const found=[];
+    for(const bin of bins){
+      try{
+        const cmd=process.platform==='win32'?'where.exe':'which';
+        const out=childProcess.execFileSync(cmd,[bin],{encoding:'utf8',windowsHide:true,timeout:3000,maxBuffer:65536}).trim();
+        if(out)found.push(bin);
+      }catch(e){}
+    }
+    return{ok:true,message:'Yerel AI hazırlık · OCR '+(found.includes('tesseract')?'READY':'NOT INSTALLED')+' · VISION '+(found.includes('ollama')?'RUNTIME FOUND':'NOT INSTALLED')+' · yalnızca yerel binary kontrolü'};
+  }
   if(/^(sistem durumu|system status|pc durumu)/i.test(c)){
     return{ok:true,message:'PC aktif · '+os.platform()+' '+os.release()+' · Node '+process.version+' · RAM '+Math.round(os.freemem()/1024/1024)+'MB boş'};
   }
