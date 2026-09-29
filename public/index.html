@@ -108,14 +108,20 @@
     <textarea id="cmd" class="command" placeholder="COMMAND JARVIS..."></textarea>
     <button id="voiceBtn" class="send" onclick="toggleVoice()" aria-label="Voice command">VOICE</button>
     <button id="cameraBtn" class="send" onclick="toggleCamera()" aria-label="Camera">CAMERA</button>
+    <button id="captureBtn" class="send" onclick="captureFrame()" aria-label="Capture local camera frame" disabled>CAPTURE</button>
     <button class="send" onclick="send()">EXECUTE</button>
   </div>
   <div class="console-meta">
     <span id="consoleStatus">SECURE CHANNEL LOCKED</span>
-    <span id="voiceState">VOICE MODULE: CHECKING</span><span id="clapState"> · DOUBLE CLAP: OFF</span><span id="cameraState"> · CAMERA: OFF</span>
+    <span id="voiceState">VOICE MODULE: CHECKING</span><span id="clapState"> · DOUBLE CLAP: OFF</span><span id="cameraState"> · CAMERA: OFF</span><span id="visionState"> · VISION: LOCAL ONLY</span>
   </div>
   <div id="cameraPanel" hidden style="margin-top:8px;text-align:center">
     <video id="cameraPreview" autoplay playsinline muted style="width:min(100%,480px);max-height:280px;object-fit:cover;border:1px solid rgba(101,230,255,.45);border-radius:8px;background:#000"></video>
+    <canvas id="captureCanvas" hidden></canvas>
+    <div id="capturePanel" hidden style="margin-top:8px">
+      <img id="capturePreview" alt="Local camera snapshot" style="width:min(100%,480px);max-height:280px;object-fit:contain;border:1px solid rgba(101,255,191,.45);border-radius:8px;background:#000">
+      <div id="captureMeta" style="margin-top:5px;font-size:10px;opacity:.75"></div>
+    </div>
   </div>
 </div>
 
@@ -127,6 +133,7 @@ let listening=false;
 let privacyMode=false;
 let clapStream=null,clapCtx=null,clapRAF=null,lastClap=0,clapArmed=false,clapCooldown=0;
 let cameraStream=null;
+let capturedFrameUrl='';
 let activeLanguage='tr-TR';
 const LANGUAGE_NAMES={tr:'Türkçe',en:'English',de:'Deutsch',fr:'Français',es:'Español',it:'Italiano',pt:'Português',ru:'Русский',ar:'العربية',ja:'日本語',ko:'한국어',zh:'中文',nl:'Nederlands',pl:'Polski'};
 const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -256,12 +263,21 @@ async function wakeJarvis(){
   }
   speak(greeting);
 }
+function clearCapturedFrame(){
+  if(capturedFrameUrl){URL.revokeObjectURL(capturedFrameUrl);capturedFrameUrl=''}
+  if(window.capturePreview)capturePreview.removeAttribute('src');
+  if(window.capturePanel)capturePanel.hidden=true;
+  if(window.captureMeta)captureMeta.textContent='';
+  if(window.visionState)visionState.textContent=' · VISION: LOCAL ONLY';
+}
 function stopCamera(){
   if(cameraStream){for(const track of cameraStream.getTracks())track.stop();cameraStream=null}
   if(window.cameraPreview)cameraPreview.srcObject=null;
   if(window.cameraPanel)cameraPanel.hidden=true;
   if(window.cameraState)cameraState.textContent=' · CAMERA: OFF';
   if(window.cameraBtn)cameraBtn.textContent='CAMERA';
+  if(window.captureBtn)captureBtn.disabled=true;
+  clearCapturedFrame();
 }
 async function toggleCamera(){
   if(cameraStream){stopCamera();return}
@@ -273,10 +289,31 @@ async function toggleCamera(){
     cameraPanel.hidden=false;
     cameraState.textContent=' · CAMERA: ACTIVE LOCAL PREVIEW';
     cameraBtn.textContent='CAM OFF';
+    captureBtn.disabled=false;
+    visionState.textContent=' · VISION: LOCAL READY';
   }catch(e){
     stopCamera();
     cameraState.textContent=' · CAMERA: PERMISSION DENIED';
   }
+}
+async function captureFrame(){
+  if(privacyMode){visionState.textContent=' · VISION: BLOCKED BY PRIVACY';return}
+  if(!cameraStream||!cameraPreview.videoWidth||!cameraPreview.videoHeight){visionState.textContent=' · VISION: CAMERA NOT READY';return}
+  const maxWidth=1280;
+  const scale=Math.min(1,maxWidth/cameraPreview.videoWidth);
+  const width=Math.max(1,Math.round(cameraPreview.videoWidth*scale));
+  const height=Math.max(1,Math.round(cameraPreview.videoHeight*scale));
+  captureCanvas.width=width;captureCanvas.height=height;
+  const ctx=captureCanvas.getContext('2d',{alpha:false});
+  ctx.drawImage(cameraPreview,0,0,width,height);
+  const blob=await new Promise(resolve=>captureCanvas.toBlob(resolve,'image/jpeg',0.88));
+  if(!blob){visionState.textContent=' · VISION: CAPTURE FAILED';return}
+  clearCapturedFrame();
+  capturedFrameUrl=URL.createObjectURL(blob);
+  capturePreview.src=capturedFrameUrl;
+  capturePanel.hidden=false;
+  captureMeta.textContent='LOCAL SNAPSHOT · '+width+'×'+height+' · '+Math.max(1,Math.round(blob.size/1024))+' KB · '+new Date().toLocaleTimeString();
+  visionState.textContent=' · VISION: SNAPSHOT LOCAL · NOT UPLOADED';
 }
 function enterPrivacyMode(){
   privacyMode=true;
