@@ -79,6 +79,7 @@ function touchState(){state.stateRevision++;}
 function log(type,message){
   state.audit.push({at:now(),type,message});
   if(state.audit.length>300)state.audit.shift();
+  if(String(type).startsWith('DB_')) console.log('[JARVIS] '+type+': '+String(message));
 }
 function json(res,code,obj){
   res.writeHead(code,{'content-type':'application/json; charset=utf-8','cache-control':'no-store'});
