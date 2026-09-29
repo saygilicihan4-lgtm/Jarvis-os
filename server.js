@@ -176,7 +176,7 @@ function taskById(id){return state.tasks.find(t=>t.id===Number(id))}
 function taskByUid(uid){return state.tasks.find(t=>t.uid===String(uid||''))}
 function taskLookup(id,uid){return uid?taskByUid(uid):taskById(id)}
 function workerOnline(w){const t=w&&w.lastSeen;return !!t&&(Date.now()-new Date(t).getTime()<15000)}
-function pcOnline(){return workerOnline(state.workers.pc)}
+function pcOnline(){return workerOnline(state.workers.pc)||Object.values(state.workers.devices).some(w=>w.approved&&workerOnline(w))}
 function deviceWorker(id){return id&&state.workers.devices[id]||null}
 function deviceOnline(id){return workerOnline(deviceWorker(id))}
 function publicDevices(){
