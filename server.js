@@ -417,6 +417,38 @@ const server=http.createServer((req,res)=>{
     });
   }
 
+  if(pathname==='/api/webauthn/auth/options'&&req.method==='POST'){
+    if(!validPhoneSession(req))return json(res,401,{error:'trusted session required'});
+    if(!dbReady)return json(res,503,{error:'durable storage unavailable'});
+    db.query('SELECT id,transports FROM jarvis_webauthn_credentials ORDER BY created_at').then(async q=>{
+      if(!q.rows.length)return json(res,409,{error:'no passkey enrolled'});
+      const options=await generateAuthenticationOptions({rpID,userVerification:'required',allowCredentials:q.rows.map(x=>({id:x.id,transports:Array.isArray(x.transports)?x.transports:[]}))});
+      state.webauthnChallenges.authentication.set(challengeKey(),{challenge:options.challenge,expires:Date.now()+5*60*1000});
+      return json(res,200,options);
+    }).catch(e=>json(res,500,{error:'authentication options failed'}));
+    return;
+  }
+
+  if(pathname==='/api/webauthn/auth/verify'&&req.method==='POST'){
+    if(!validPhoneSession(req))return json(res,401,{error:'trusted session required'});
+    if(!dbReady)return json(res,503,{error:'durable storage unavailable'});
+    const pending=state.webauthnChallenges.authentication.get(challengeKey());
+    if(!pending||pending.expires<Date.now())return json(res,400,{error:'authentication challenge expired'});
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      db.query('SELECT id,public_key,counter,transports FROM jarvis_webauthn_credentials WHERE id=$1',[String(d.id||'')]).then(async q=>{
+        if(!q.rows.length)return json(res,403,{error:'unknown passkey'});
+        const a=q.rows[0];
+        const v=await verifyAuthenticationResponse({response:d,expectedChallenge:pending.challenge,expectedOrigin,expectedRPID:rpID,credential:{id:a.id,publicKey:new Uint8Array(a.public_key),counter:Number(a.counter),transports:Array.isArray(a.transports)?a.transports:[]},requireUserVerification:true});
+        if(!v.verified)return json(res,403,{error:'passkey verification failed'});
+        await db.query('UPDATE jarvis_webauthn_credentials SET counter=$2,last_used_at=now() WHERE id=$1',[a.id,Number(v.authenticationInfo.newCounter)]);
+        state.webauthnChallenges.authentication.delete(challengeKey());
+        log('WEBAUTHN_AUTH','server-verified passkey assertion accepted');
+        return json(res,200,{ok:true,verified:true});
+      }).catch(e=>{log('WEBAUTHN_AUTH_FAIL',String(e.message||e).slice(0,120));return json(res,403,{error:'passkey verification failed'})});
+    });
+  }
+
   if(pathname==='/api/session/bootstrap'&&req.method==='GET'){
     if(validPhoneSession(req))return json(res,200,{ok:true,existing:true});
     // Never mint an admin session from User-Agent alone. New browsers/devices
