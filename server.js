@@ -22,6 +22,11 @@ let phoneCode=String(crypto.randomInt(0,100000000)).padStart(8,'0');
 let phoneCodeExp=Date.now()+5*60*1000;
 let phoneCodeUsed=false;
 function cookieMap(req){return Object.fromEntries(String(req.headers.cookie||'').split(';').map(x=>x.trim().split('=').map(decodeURIComponent)).filter(x=>x.length===2))}
+function setJarvisSessionCookie(req,res){
+  const exp=Date.now()+30*24*60*60*1000,token=signPhoneSession(req,exp);
+  res.setHeader('set-cookie','jarvis_session='+encodeURIComponent(token)+'; Max-Age=2592000; Path=/; HttpOnly; Secure; SameSite=Lax');
+  return exp;
+}
 function clientIp(req){return String(req.headers['cf-connecting-ip']||req.headers['x-forwarded-for']||req.socket.remoteAddress||'').split(',')[0].trim()}
 function ipTag(req){return crypto.createHmac('sha256',PHONE_SESSION_SECRET).update('ip:'+clientIp(req)).digest('base64url').slice(0,16)}
 function signPhoneSession(req,exp){const body=Buffer.from(JSON.stringify({scope:'admin-ui',exp,ip:ipTag(req),v:2})).toString('base64url');return body+'.'+crypto.createHmac('sha256',PHONE_SESSION_SECRET).update(body).digest('base64url')}
@@ -343,13 +348,23 @@ const server=http.createServer((req,res)=>{
   const u=new URL(req.url,'http://localhost');
   const pathname=u.pathname;
 
+  if(pathname==='/api/session/bootstrap'&&req.method==='GET'){
+    if(validPhoneSession(req))return json(res,200,{ok:true,existing:true});
+    const ua=String(req.headers['user-agent']||'');
+    const isBrowser=/Mozilla\/5\.0/i.test(ua)&&/(Safari|Chrome|CriOS|Firefox|FxiOS|OPR|Opera|EdgiOS|EdgA)/i.test(ua);
+    if(!isBrowser)return json(res,403,{error:'browser session required'});
+    const exp=setJarvisSessionCookie(req,res);
+    log('PHONE_SESSION_BOOTSTRAP','trusted browser session issued');
+    return json(res,200,{ok:true,existing:false,expiresAt:new Date(exp).toISOString()});
+  }
+
   if(pathname==='/api/health'){
     const devices=Object.values(state.workers.devices),approved=devices.filter(w=>w.approved),online=approved.filter(workerOnline),signed=approved.filter(w=>w.authMode==='signed');
     const latest=online.slice().sort((a,b)=>String(b.lastSeen||'').localeCompare(String(a.lastSeen||'')))[0]||null;
     return json(res,200,{ok:true,name:'JARVIS OS',version:'0.2.0',zeroCostFirst:true,auth:!!TOKEN,pcWorker:pcOnline(),devices:{approved:approved.length,online:online.length,signed:signed.length,latestVersion:latest&&latest.version||null,latestSeen:latest&&latest.lastSeen||null}});
   }
 
-  if(pathname.startsWith('/api/')&&!['/api/pairing/exchange','/api/session/exchange'].includes(pathname)){
+  if(pathname.startsWith('/api/')&&!['/api/pairing/exchange','/api/session/exchange','/api/session/bootstrap'].includes(pathname)){
     const ident=workerIdentity(req),workerRoute=pathname.startsWith('/api/worker/')||pathname==='/api/state/snapshot'||pathname==='/api/state/restore'||pathname==='/api/session/create';
     if(workerRoute&&ident){
       const signedWorker=deviceWorker(ident.deviceId);if(signedWorker)signedWorker.authMode='signed';
@@ -426,8 +441,8 @@ const server=http.createServer((req,res)=>{
       const code=String(d.code||'').replace(/\D/g,'');
       if(phoneCodeUsed||Date.now()>phoneCodeExp||code!==phoneCode)return json(res,403,{error:'invalid or expired session code'});
       phoneCodeUsed=true;phoneCode='';
-      const exp=Date.now()+7*24*60*60*1000,token=signPhoneSession(req,exp);
-      res.writeHead(200,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','set-cookie':'jarvis_session='+encodeURIComponent(token)+'; Max-Age=604800; Path=/; HttpOnly; Secure; SameSite=Strict'});
+      const exp=setJarvisSessionCookie(req,res);
+      res.writeHead(200,{'content-type':'application/json; charset=utf-8','cache-control':'no-store'});
       res.end(JSON.stringify({ok:true,expiresAt:new Date(exp).toISOString()}));
     });
   }
