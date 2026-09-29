@@ -82,6 +82,7 @@ function agentFor(c){
   c=String(c||'').toLowerCase();
   if(/shopify|ürün|stok|sipariş|varova/.test(c))return'COMMERCE';
   if(/video|short|reels|youtube/.test(c))return'CREATOR';
+  if(requiredCapability(c))return'DEVELOPER';
   if(/kod|uygulama|site|deploy|github|dosya|klasör|bilgisayar|pc:|proje oluştur|proje olustur|yeni proje/.test(c))return'DEVELOPER';
   if(/araştır|bul|incele/.test(c))return'RESEARCH';
   if(/reklam|büyü|satış|seo/.test(c))return'GROWTH';
