@@ -51,6 +51,7 @@
       <div class="metric"><span>REMOTE MODE</span><b id="remoteMode">PC REQUIRED</b></div>
       <div class="metric"><span>ASSISTANT</span><b id="assistantState">CALENDAR READY</b></div>
       <button id="notifyBtn" type="button">ENABLE PHONE ALERTS</button>
+      <button id="deviceLockBtn" type="button">ENABLE DEVICE LOCK</button>
       <div class="metric"><span>WORKER SETUP</span><b id="workerSetup">RUN LAUNCHER ON PC</b></div>
       <div class="metric"><span>MEMORY</span><b id="memoryState">VOLATILE</b></div>
       <div class="metric"><span>PROTOCOL</span><b>ZERO-COST FIRST</b></div>
@@ -553,6 +554,25 @@ function listenSessionCode(){
   try{r.start()}catch(e){b.disabled=false;b.textContent='KODU SESLE GİR';authmsg.textContent='Mikrofon başlatılamadı.'}
 }
 
+async function enableDeviceLock(){
+  if(!window.PublicKeyCredential){consoleStatus.textContent='DEVICE LOCK · BROWSER UNSUPPORTED';return}
+  try{
+    const challenge=crypto.getRandomValues(new Uint8Array(32));
+    const userId=crypto.getRandomValues(new Uint8Array(16));
+    const cred=await navigator.credentials.create({publicKey:{
+      challenge,rp:{name:'JARVIS OS'},user:{id:userId,name:'jarvis-owner',displayName:'JARVIS Owner'},
+      pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
+      authenticatorSelection:{authenticatorAttachment:'platform',residentKey:'preferred',userVerification:'required'},
+      timeout:60000,attestation:'none'
+    }});
+    if(!cred)throw new Error('cancelled');
+    localStorage.setItem('jarvisDeviceLock','enabled');
+    deviceLockBtn.textContent='DEVICE LOCK ON';
+    consoleStatus.textContent='DEVICE LOCK · FACE ID / DEVICE AUTH READY';
+  }catch(e){consoleStatus.textContent='DEVICE LOCK · NOT ENABLED'}
+}
+deviceLockBtn.onclick=enableDeviceLock;
+
 async function connect(){
   const code=token.value.trim();
   try{
@@ -685,9 +705,19 @@ if(SpeechRecognition)voiceState.textContent='VOICE MODULE: READY';
 else voiceState.textContent='VOICE MODULE: BROWSER UNSUPPORTED';
 // Cookie-first trusted session bootstrap: F8/reload should reuse the existing
 // HttpOnly JARVIS session without asking for another one-time code.
+async function requireLocalDeviceUnlock(){
+  if(localStorage.getItem('jarvisDeviceLock')!=='enabled')return true;
+  if(!window.PublicKeyCredential)return false;
+  try{
+    const challenge=crypto.getRandomValues(new Uint8Array(32));
+    await navigator.credentials.get({publicKey:{challenge,timeout:60000,userVerification:'required'}});
+    return true;
+  }catch(e){return false}
+}
 async function bootstrapSession(){
   try{
     await load();
+    if(!(await requireLocalDeviceUnlock())){setAuthenticated(false);authmsg.textContent='DEVICE UNLOCK REQUIRED';return}
     setAuthenticated(true);
     if(wakeSource==='f8'){
       coreSubtitle.textContent='F8 global wake · trusted session restored';
