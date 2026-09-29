@@ -136,6 +136,7 @@ let privacyMode=false;
 let clapStream=null,clapCtx=null,clapRAF=null,lastClap=0,clapArmed=false,clapCooldown=0;
 let cameraStream=null;
 let capturedFrameUrl='';
+let captureGeneration=0;
 let lastVisionSummary=null;
 let lastLocalText='';
 let activeLanguage='tr-TR';
@@ -268,10 +269,12 @@ async function wakeJarvis(){
   speak(greeting);
 }
 function clearCapturedFrame(){
+  captureGeneration++;
   if(capturedFrameUrl){URL.revokeObjectURL(capturedFrameUrl);capturedFrameUrl=''}
   if(window.capturePreview)capturePreview.removeAttribute('src');
   if(window.capturePanel)capturePanel.hidden=true;
   if(window.captureMeta)captureMeta.textContent='';
+  if(window.captureCanvas){captureCanvas.width=0;captureCanvas.height=0}
   lastVisionSummary=null;
   lastLocalText='';
   if(window.analyzeBtn)analyzeBtn.disabled=true;
@@ -307,6 +310,7 @@ async function toggleCamera(){
 async function captureFrame(){
   if(privacyMode){visionState.textContent=' · VISION: BLOCKED BY PRIVACY';return}
   if(!cameraStream||!cameraPreview.videoWidth||!cameraPreview.videoHeight){visionState.textContent=' · VISION: CAMERA NOT READY';return}
+  const generation=++captureGeneration;
   const maxWidth=1280;
   const scale=Math.min(1,maxWidth/cameraPreview.videoWidth);
   const width=Math.max(1,Math.round(cameraPreview.videoWidth*scale));
@@ -315,8 +319,18 @@ async function captureFrame(){
   const ctx=captureCanvas.getContext('2d',{alpha:false});
   ctx.drawImage(cameraPreview,0,0,width,height);
   const blob=await new Promise(resolve=>captureCanvas.toBlob(resolve,'image/jpeg',0.88));
+  if(generation!==captureGeneration||privacyMode||!cameraStream){
+    captureCanvas.width=0;captureCanvas.height=0;
+    return;
+  }
   if(!blob){visionState.textContent=' · VISION: CAPTURE FAILED';return}
-  clearCapturedFrame();
+  if(capturedFrameUrl)URL.revokeObjectURL(capturedFrameUrl);
+  capturedFrameUrl='';
+  capturePreview.removeAttribute('src');
+  capturePanel.hidden=true;
+  captureMeta.textContent='';
+  lastVisionSummary=null;lastLocalText='';
+  analyzeBtn.disabled=true;scanTextBtn.disabled=true;
   capturedFrameUrl=URL.createObjectURL(blob);
   capturePreview.src=capturedFrameUrl;
   capturePanel.hidden=false;
