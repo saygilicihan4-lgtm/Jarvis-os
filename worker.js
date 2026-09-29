@@ -2,6 +2,7 @@ const fs=require('fs');
 const path=require('path');
 const os=require('os');
 const crypto=require('crypto');
+const childProcess=require('child_process');
 
 const BASE=(process.env.JARVIS_URL||'https://jarvis-os-1iuv.onrender.com').replace(/\/$/,'');
 const TOKEN=process.env.JARVIS_TOKEN||'';
@@ -25,10 +26,22 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.12.1';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','phone_session_code_v1','local_memory'];
+const WORKER_VERSION='2.13.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory'];
 
 if(!TOKEN&&!DEVICE_TOKEN&&!PAIR_CODE){console.error('JARVIS signed cihaz kimliği veya pairing code gerekli.');process.exit(1)}
+function startWindowsWakeHelper(){
+  if(process.platform!=='win32')return;
+  const helper=path.join(__dirname,'jarvis-wake-hotkey.ps1');
+  if(!fs.existsSync(helper)){console.error('[JARVIS] F8 WAKE: helper bulunamadi:',helper);return}
+  try{
+    const p=childProcess.spawn('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',helper],{windowsHide:true,stdio:['ignore','pipe','pipe']});
+    p.stdout.on('data',d=>process.stdout.write(String(d)));
+    p.stderr.on('data',d=>process.stderr.write('[JARVIS] F8 WAKE ERROR: '+String(d)));
+    p.on('exit',code=>{if(code!==0)console.error('[JARVIS] F8 WAKE helper kapandi. code='+code)});
+    p.on('error',e=>console.error('[JARVIS] F8 WAKE baslatilamadi:',e.message));
+  }catch(e){console.error('[JARVIS] F8 WAKE baslatma hatasi:',e.message)}
+}
 fs.mkdirSync(WORKSPACE,{recursive:true});
 fs.mkdirSync(MEMORY_DIR,{recursive:true});
 fs.mkdirSync(CHECKPOINT_DIR,{recursive:true});
@@ -523,6 +536,7 @@ async function poll(){
   }catch(e){console.error(new Date().toISOString(),e.message)}
 }
 console.log('JARVIS PC Worker '+WORKER_VERSION+' başladı');
+startWindowsWakeHelper();
 console.log('Cloud:',BASE);
 console.log('Workspace:',WORKSPACE);
 poll();
