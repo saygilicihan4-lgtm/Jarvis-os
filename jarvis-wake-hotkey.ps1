@@ -1,7 +1,5 @@
 # JARVIS OS Windows global F8 wake helper
 # Zero dependency: Win32 RegisterHotKey + opens the trusted JARVIS HUD.
-$mutex=New-Object Threading.Mutex($false,'Local\\JARVIS_F8_WAKE_SINGLETON')
-if(-not $mutex.WaitOne(0)){ exit 0 }
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
@@ -30,6 +28,4 @@ try {
   }
 } finally {
   [void][JarvisHotKey]::UnregisterHotKey([IntPtr]::Zero,$HOTKEY_ID)
-  try{$mutex.ReleaseMutex()}catch{}
-  $mutex.Dispose()
 }
