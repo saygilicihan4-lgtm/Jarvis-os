@@ -48,6 +48,7 @@
       <div class="metric"><span>CLOUD NODE</span><b>RENDER / FRA</b></div>
       <div class="metric"><span>PC BRIDGE</span><b id="pcState">OFFLINE</b></div>
       <div class="metric"><span>REMOTE QUEUE</span><b id="remoteQueue">0 WAITING</b></div>
+      <div class="metric"><span>REMOTE MODE</span><b id="remoteMode">PC REQUIRED</b></div>
       <div class="metric"><span>WORKER SETUP</span><b id="workerSetup">RUN LAUNCHER ON PC</b></div>
       <div class="metric"><span>MEMORY</span><b id="memoryState">VOLATILE</b></div>
       <div class="metric"><span>PROTOCOL</span><b>ZERO-COST FIRST</b></div>
@@ -536,11 +537,12 @@ async function send(){
   const command=cmd.value.trim();
   if(!command)return;
   if(localVisionCommand(command)){cmd.value='';return}
+  if(!/^pc\s*:/i.test(command)&&/^(sistem durumu|system status|pc durumu|disk durumu|disk status|depolama durumu|ağ durumu|ag durumu|network status|internet durumu|işlemleri listele|islemleri listele|process list|çalışan işlemler|calisan islemler|yerel ai durumu|local ai status|ai readiness)/i.test(command))cmd.value='PC: '+command;
   try{
     await api('/api/tasks',{
       method:'POST',
       headers:{'content-type':'application/json'},
-      body:JSON.stringify({command,source:'phone-web'})
+      body:JSON.stringify({command:cmd.value.trim()||command,source:'phone-web'})
     });
     cmd.value='';
     await load();
@@ -571,6 +573,7 @@ async function load(){
   pcDot.className='dot '+(pc.online?'online':'offline');
   pcState.textContent=pc.online?'ONLINE':'OFFLINE';
   if(window.remoteQueue){const rc=d.remoteControl||{};remoteQueue.textContent=String(rc.queued||0)+' WAITING · '+String(rc.running||0)+' RUNNING';}
+  if(window.remoteMode){const rc=d.remoteControl||{};remoteMode.textContent=rc.pcOnline?'READY':'PC OFFLINE';remoteMode.style.color=rc.pcOnline?'#65ffbf':'#ffca66';}
   const workerCurrent=pc.online&&/^2\.(?:1[3-9]|[2-9]\d)\./.test(String(pc.version||''));
   workerSetup.textContent=!pc.online?'RUN LAUNCHER ON PC':workerCurrent?('CONNECTED v'+pc.version):'UPDATE REQUIRED';
   workerReadout.textContent=pc.online?'ON':'OFF';
