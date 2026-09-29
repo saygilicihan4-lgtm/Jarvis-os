@@ -422,9 +422,11 @@ const server=http.createServer((req,res)=>{
       const endpoint=String(d.endpoint||''),keys=d.keys||{};
       if(!/^https:\/\//.test(endpoint)||!keys.p256dh||!keys.auth)return json(res,400,{error:'invalid push subscription'});
       const id=crypto.createHash('sha256').update(endpoint).digest('hex').slice(0,24);
-      state.pushSubscriptions[id]={endpoint,keys:{p256dh:String(keys.p256dh),auth:String(keys.auth)},createdAt:now(),lastSuccessAt:null};persistPush(id,state.pushSubscriptions[id]).catch(e=>log('DB_PUSH_ERROR',String(e.message||e).slice(0,120)));
-      touchState();log('PUSH_SUBSCRIBE','phone push subscription registered '+id);
-      return json(res,200,{ok:true,id});
+      const sub={endpoint,keys:{p256dh:String(keys.p256dh),auth:String(keys.auth)},createdAt:now(),lastSuccessAt:null};
+      persistPush(id,sub).then(()=>{
+        state.pushSubscriptions[id]=sub;touchState();log('PUSH_SUBSCRIBE','phone push subscription durably registered '+id);
+        return json(res,200,{ok:true,id,durable:true});
+      }).catch(e=>{log('DB_PUSH_ERROR',String(e.message||e).slice(0,120));return json(res,503,{error:'durable storage unavailable'})});
     });
   }
   if(pathname==='/api/push/test'&&req.method==='POST'){
@@ -452,8 +454,10 @@ const server=http.createServer((req,res)=>{
       const title=String(d.title||'').trim().slice(0,180),when=new Date(d.when);
       if(!title||!Number.isFinite(when.getTime()))return json(res,400,{error:'title and valid when required'});
       const r={id:crypto.randomUUID(),title,when:when.toISOString(),sent:false,createdAt:now()};
-      state.reminders.push(r);state.reminders=state.reminders.slice(-500);touchState();persistReminder(r).catch(e=>log('DB_REMINDER_ERROR',String(e.message||e).slice(0,120)));log('REMINDER_CREATE',r.id+' '+r.when);
-      return json(res,201,{ok:true,reminder:r});
+      persistReminder(r).then(()=>{
+        state.reminders.push(r);state.reminders=state.reminders.slice(-500);touchState();log('REMINDER_CREATE',r.id+' '+r.when+' durable');
+        return json(res,201,{ok:true,durable:true,reminder:r});
+      }).catch(e=>{log('DB_REMINDER_ERROR',String(e.message||e).slice(0,120));return json(res,503,{error:'durable storage unavailable'})});
     });
   }
 
