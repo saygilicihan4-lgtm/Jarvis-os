@@ -4,6 +4,7 @@ const path=require('path');
 const crypto=require('crypto');
 const webpush=require('web-push');
 const {Pool}=require('pg');
+const {generateRegistrationOptions,verifyRegistrationResponse,generateAuthenticationOptions,verifyAuthenticationResponse}=require('@simplewebauthn/server');
 
 const PORT=process.env.PORT||3000;
 const ROOT=__dirname;
@@ -26,6 +27,7 @@ async function initDurableMemory(){
  try{
  await db.query('CREATE TABLE IF NOT EXISTS jarvis_push_subscriptions(id text PRIMARY KEY,endpoint text NOT NULL,p256dh text NOT NULL,auth text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),last_success_at timestamptz)');
  await db.query('CREATE TABLE IF NOT EXISTS jarvis_reminders(id uuid PRIMARY KEY,title text NOT NULL,remind_at timestamptz NOT NULL,sent boolean NOT NULL DEFAULT false,created_at timestamptz NOT NULL DEFAULT now(),sent_at timestamptz,delivered integer NOT NULL DEFAULT 0)');
+ await db.query('CREATE TABLE IF NOT EXISTS jarvis_webauthn_credentials(id text PRIMARY KEY,public_key bytea NOT NULL,counter bigint NOT NULL DEFAULT 0,transports jsonb NOT NULL DEFAULT \'[]\'::jsonb,device_type text,backed_up boolean NOT NULL DEFAULT false,created_at timestamptz NOT NULL DEFAULT now(),last_used_at timestamptz)');
  await db.query("CREATE TABLE IF NOT EXISTS jarvis_persistence_probe(id text PRIMARY KEY,boot_count integer NOT NULL DEFAULT 0,updated_at timestamptz NOT NULL DEFAULT now())");
  const probe=await db.query("INSERT INTO jarvis_persistence_probe(id,boot_count,updated_at) VALUES('cloud-memory',1,now()) ON CONFLICT(id) DO UPDATE SET boot_count=jarvis_persistence_probe.boot_count+1,updated_at=now() RETURNING boot_count");
  log('DB_PERSISTENCE','boot_count='+probe.rows[0].boot_count);
@@ -75,6 +77,7 @@ const state={
   pairingCodes:{},
   pushSubscriptions:{},
   reminders:[],
+  webauthnChallenges:{registration:new Map(),authentication:new Map()},
   stateRevision:0,
   workers:{pc:{name:null,version:null,lastSeen:null,capabilities:[],memory:null},devices:{}}
 };
