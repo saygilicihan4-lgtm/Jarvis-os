@@ -1,8 +1,8 @@
 @echo off
 setlocal
 title JARVIS PC WORKER
-set "LAUNCHER_VERSION=3.2"
-echo [JARVIS] LAUNCHER 3.2
+set "LAUNCHER_VERSION=3.3"
+echo [JARVIS] LAUNCHER 3.3
 cd /d "%~dp0"
 where node >nul 2>nul
 if errorlevel 1 (
@@ -21,6 +21,16 @@ if "%JARVIS_PAIR_CODE%"=="" if not exist "%USERPROFILE%\.jarvis-device-token" (
   exit /b 1
 )
 if "%JARVIS_WORKSPACE%"=="" set "JARVIS_WORKSPACE=%USERPROFILE%\JARVIS-Workspace"
+if /I "%~1"=="--install-autostart" (
+  echo [JARVIS] Windows oturum acilisinda otomatik baslatma ayarlaniyor...
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "$a=[Environment]::GetFolderPath('Startup'); $p=(Resolve-Path '%~f0').Path; $w=Join-Path $a 'JARVIS-PC-Worker.cmd'; ('@echo off'+[Environment]::NewLine+'start "" /min "'+$p+'" --autostart') | Set-Content -Encoding ASCII $w; Write-Host ('[JARVIS] AUTOSTART READY: '+$w)"
+  if errorlevel 1 (
+    echo [JARVIS] AUTOSTART kurulumu basarisiz.
+    exit /b 1
+  )
+  echo [JARVIS] AUTOSTART hazir. Bir sonraki Windows oturum acilisinda Worker otomatik baslayacak.
+  exit /b 0
+)
 echo.
 echo [JARVIS] Cloud: %JARVIS_URL%
 echo [JARVIS] Workspace: %JARVIS_WORKSPACE%
