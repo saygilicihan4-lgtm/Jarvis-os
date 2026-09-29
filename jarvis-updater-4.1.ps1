@@ -14,5 +14,5 @@ function Get-VerifiedFile([string]$Url,[string]$Name,[string]$Signature,[bool]$N
 }
 Get-VerifiedFile 'https://raw.githubusercontent.com/saygilicihan4-lgtm/Jarvis-os/main/worker.js?u=41' 'worker.js' "WORKER_VERSION='2.13.0'" $true
 Get-VerifiedFile 'https://raw.githubusercontent.com/saygilicihan4-lgtm/Jarvis-os/main/start-worker-windows.bat?u=41' 'start-worker-windows.bat' 'LAUNCHER_VERSION=3.2' $false
-Get-VerifiedFile 'https://raw.githubusercontent.com/saygilicihan4-lgtm/Jarvis-os/main/jarvis-wake-hotkey.ps1?u=4134' 'jarvis-wake-hotkey.ps1' "HELPER_VERSION='3.4'" $false
-Write-Host '[JARVIS] UPDATER 4.1 VERIFIED: launcher 3.2 + worker 2.13.0 + F8 3.4'
+Get-VerifiedFile 'https://raw.githubusercontent.com/saygilicihan4-lgtm/Jarvis-os/main/jarvis-wake-hotkey.ps1?u=4135' 'jarvis-wake-hotkey.ps1' "HELPER_VERSION='3.5'" $false
+Write-Host '[JARVIS] UPDATER 4.1 VERIFIED: launcher 3.2 + worker 2.13.0 + F8 3.5'
