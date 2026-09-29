@@ -49,6 +49,7 @@
       <div class="metric"><span>PC BRIDGE</span><b id="pcState">OFFLINE</b></div>
       <div class="metric"><span>REMOTE QUEUE</span><b id="remoteQueue">0 WAITING</b></div>
       <div class="metric"><span>REMOTE MODE</span><b id="remoteMode">PC REQUIRED</b></div>
+      <div class="metric"><span>ASSISTANT</span><b id="assistantState">CALENDAR READY</b></div>
       <div class="metric"><span>WORKER SETUP</span><b id="workerSetup">RUN LAUNCHER ON PC</b></div>
       <div class="metric"><span>MEMORY</span><b id="memoryState">VOLATILE</b></div>
       <div class="metric"><span>PROTOCOL</span><b>ZERO-COST FIRST</b></div>
@@ -143,6 +144,24 @@ let captureGeneration=0;
 let lastVisionSummary=null;
 let lastLocalText='';
 let activeLanguage='tr-TR';
+const jarvisCalendar={
+  reminders:JSON.parse(localStorage.getItem('jarvisCalendarReminders')||'[]'),
+  save(){localStorage.setItem('jarvisCalendarReminders',JSON.stringify(this.reminders))},
+  add(title,when){const t=new Date(when);if(!title||Number.isNaN(t.getTime()))return false;this.reminders.push({id:Date.now(),title:String(title).slice(0,160),when:t.toISOString(),spoken:false});this.save();return true},
+  due(){const now=Date.now();return this.reminders.filter(r=>!r.spoken&&new Date(r.when).getTime()<=now)},
+  mark(id){const r=this.reminders.find(x=>x.id===id);if(r){r.spoken=true;this.save()}}
+};
+function speakReminder(text){
+  if(!('speechSynthesis' in window))return false;
+  const u=new SpeechSynthesisUtterance('Cihan Bey, hatırlatma: '+text);
+  u.lang='tr-TR'; speechSynthesis.speak(u); return true;
+}
+function checkLocalReminders(){
+  for(const r of jarvisCalendar.due()){if(speakReminder(r.title))jarvisCalendar.mark(r.id)}
+}
+setInterval(checkLocalReminders,30000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkLocalReminders()});
+
 const LANGUAGE_NAMES={tr:'Türkçe',en:'English',de:'Deutsch',fr:'Français',es:'Español',it:'Italiano',pt:'Português',ru:'Русский',ar:'العربية',ja:'日本語',ko:'한국어',zh:'中文',nl:'Nederlands',pl:'Polski'};
 const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
 if(SpeechRecognition){
@@ -537,6 +556,11 @@ async function send(){
   const command=cmd.value.trim();
   if(!command)return;
   if(localVisionCommand(command)){cmd.value='';return}
+  const rm=command.match(/^hatırlat(?:ma)?\s*:\s*(.+?)\s*\|\s*(.+)$/i);
+  if(rm){
+    if(jarvisCalendar.add(rm[1],rm[2])){consoleStatus.textContent='HATIRLATMA KAYDEDILDI · '+rm[1];cmd.value='';checkLocalReminders();return}
+    consoleStatus.textContent='HATIRLATMA TARIHI ANLASILAMADI';return;
+  }
   if(!/^pc\s*:/i.test(command)&&/^(sistem durumu|system status|pc durumu|disk durumu|disk status|depolama durumu|ağ durumu|ag durumu|network status|internet durumu|işlemleri listele|islemleri listele|process list|çalışan işlemler|calisan islemler|yerel ai durumu|local ai status|ai readiness)/i.test(command))cmd.value='PC: '+command;
   try{
     await api('/api/tasks',{
