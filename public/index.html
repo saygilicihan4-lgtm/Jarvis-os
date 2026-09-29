@@ -176,6 +176,17 @@ function urlB64ToBytes(s){
   const pad='='.repeat((4-s.length%4)%4),b=(s+pad).replace(/-/g,'+').replace(/_/g,'/');
   const raw=atob(b);return Uint8Array.from([...raw].map(ch=>ch.charCodeAt(0)));
 }
+async function resyncExistingPush(){
+  try{
+    if(!('serviceWorker' in navigator)||!('PushManager' in window))return false;
+    const reg=await ensurePushWorker();if(!reg)return false;
+    const sub=await reg.pushManager.getSubscription();if(!sub)return false;
+    const r=await fetch('/api/push/subscribe',{method:'POST',headers:{'content-type':'application/json'},credentials:'same-origin',body:JSON.stringify(sub.toJSON())});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||d.durable!==true)throw new Error(d.error||'push sync failed');
+    return true;
+  }catch(e){return false}
+}
 async function enablePhoneAlerts(){
   notifyBtn.disabled=true;
   const fail=(msg,detail='')=>{consoleStatus.textContent=msg+(detail?' · '+detail:'');notifyBtn.textContent='RETRY PHONE ALERTS';notifyBtn.disabled=false};
@@ -742,6 +753,7 @@ async function bootstrapSession(){
     await load();
     if(!(await requireLocalDeviceUnlock())){setAuthenticated(false);authmsg.textContent='DEVICE UNLOCK REQUIRED';return}
     setAuthenticated(true);
+    resyncExistingPush().catch(()=>{});
     if(wakeSource==='f8'){
       coreSubtitle.textContent='F8 global wake · trusted session restored';
       consoleStatus.textContent='F8 WAKE · SECURE CHANNEL ACTIVE';
@@ -749,7 +761,7 @@ async function bootstrapSession(){
   }catch(e){
     try{
       const r=await fetch('/api/session/bootstrap',{credentials:'same-origin'});
-      if(r.ok){await load();setAuthenticated(true);return}
+      if(r.ok){await load();setAuthenticated(true);resyncExistingPush().catch(()=>{});return}
     }catch(_){}
     setAuthenticated(false);
     if(wakeSource==='f8'){
