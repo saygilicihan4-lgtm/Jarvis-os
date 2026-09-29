@@ -167,8 +167,13 @@ function speakDailyBrief(){
   const parts=list.slice(0,5).map(r=>new Date(r.when).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})+' '+r.title);
   speakReminder('Önümüzdeki 24 saatte '+list.length+' hatırlatmanız var. '+parts.join('. '));
 }
+async function ensurePushWorker(){
+  if(!('serviceWorker' in navigator))return null;
+  try{return await navigator.serviceWorker.register('/sw.js',{scope:'/'});}catch(e){return null}
+}
 async function enablePhoneAlerts(){
   if(!('Notification' in window)){consoleStatus.textContent='PHONE ALERTS · UNSUPPORTED';return}
+  await ensurePushWorker();
   const p=await Notification.requestPermission();
   if(p==='granted'){
     localStorage.setItem('jarvisPhoneAlerts','on');
