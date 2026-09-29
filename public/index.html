@@ -127,10 +127,12 @@ let listening=false;
 let privacyMode=false;
 let clapStream=null,clapCtx=null,clapRAF=null,lastClap=0,clapArmed=false,clapCooldown=0;
 let cameraStream=null;
+let activeLanguage='tr-TR';
+const LANGUAGE_NAMES={tr:'Türkçe',en:'English',de:'Deutsch',fr:'Français',es:'Español',it:'Italiano',pt:'Português',ru:'Русский',ar:'العربية',ja:'日本語',ko:'한국어',zh:'中文',nl:'Nederlands',pl:'Polski'};
 const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
 if(SpeechRecognition){
   recognition=new SpeechRecognition();
-  recognition.lang='tr-TR';
+  recognition.lang=activeLanguage;
   recognition.interimResults=true;
   recognition.continuous=false;
   recognition.onstart=()=>setVoiceMode(true);
@@ -145,8 +147,10 @@ if(SpeechRecognition){
         enterPrivacyMode();return;
       }
       if(privacyMode)return;
+      activeLanguage=detectLanguage(captured);
+      recognition.lang=activeLanguage;
       cmd.value=captured;
-      voiceState.textContent='VOICE: COMMAND CAPTURED';
+      voiceState.textContent='VOICE: '+(LANGUAGE_NAMES[activeLanguage.split('-')[0]]||activeLanguage)+' · COMMAND CAPTURED';
       setTimeout(()=>send(),180);
     }
   };
@@ -298,11 +302,30 @@ function toggleVoice(){
   if(!recognition){voiceState.textContent='VOICE: BROWSER UNSUPPORTED';return}
   try{listening?recognition.stop():recognition.start()}catch(e){}
 }
-function speak(text){
+function detectLanguage(text){
+  const s=String(text||'').toLowerCase();
+  if(/[ğüşöçı]/.test(s)||/\b(merhaba|lütfen|bilgisayar|aç|kapat|nasıl|nedir|yap)\b/.test(s))return 'tr-TR';
+  if(/[а-яё]/i.test(s))return 'ru-RU';
+  if(/[\u0600-\u06ff]/.test(s))return 'ar-SA';
+  if(/[\u3040-\u30ff]/.test(s))return 'ja-JP';
+  if(/[\uac00-\ud7af]/.test(s))return 'ko-KR';
+  if(/[\u4e00-\u9fff]/.test(s))return 'zh-CN';
+  if(/\b(hallo|bitte|öffne|schließe|computer)\b/.test(s))return 'de-DE';
+  if(/\b(bonjour|merci|ouvre|ferme|ordinateur)\b/.test(s))return 'fr-FR';
+  if(/\b(hola|gracias|abre|cierra|ordenador|computadora)\b/.test(s))return 'es-ES';
+  if(/\b(ciao|grazie|apri|chiudi|computer)\b/.test(s))return 'it-IT';
+  if(/\b(olá|obrigado|abra|feche|computador)\b/.test(s))return 'pt-PT';
+  return 'en-US';
+}
+function speak(text,lang=activeLanguage){
   if(!('speechSynthesis' in window)||!text)return;
   speechSynthesis.cancel();
   const u=new SpeechSynthesisUtterance(text);
-  u.lang='tr-TR';u.rate=.95;u.pitch=.85;
+  u.lang=lang||activeLanguage;u.rate=.95;u.pitch=.85;
+  const voices=speechSynthesis.getVoices();
+  const base=String(u.lang).split('-')[0].toLowerCase();
+  const matching=voices.find(v=>String(v.lang||'').toLowerCase().startsWith(base));
+  if(matching)u.voice=matching;
   u.onstart=()=>document.body.classList.add('speaking');
   u.onend=()=>document.body.classList.remove('speaking');
   speechSynthesis.speak(u);
