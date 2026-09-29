@@ -110,6 +110,7 @@
     <button id="cameraBtn" class="send" onclick="toggleCamera()" aria-label="Camera">CAMERA</button>
     <button id="captureBtn" class="send" onclick="captureFrame()" aria-label="Capture local camera frame" disabled>CAPTURE</button>
     <button id="analyzeBtn" class="send" onclick="analyzeFrameLocal()" aria-label="Analyze local camera frame" disabled>ANALYZE</button>
+    <button id="scanTextBtn" class="send" onclick="scanTextLocal()" aria-label="Read visible text locally" disabled>READ TEXT</button>
     <button class="send" onclick="send()">EXECUTE</button>
   </div>
   <div class="console-meta">
@@ -136,6 +137,7 @@ let clapStream=null,clapCtx=null,clapRAF=null,lastClap=0,clapArmed=false,clapCoo
 let cameraStream=null;
 let capturedFrameUrl='';
 let lastVisionSummary=null;
+let lastLocalText='';
 let activeLanguage='tr-TR';
 const LANGUAGE_NAMES={tr:'Türkçe',en:'English',de:'Deutsch',fr:'Français',es:'Español',it:'Italiano',pt:'Português',ru:'Русский',ar:'العربية',ja:'日本語',ko:'한국어',zh:'中文',nl:'Nederlands',pl:'Polski'};
 const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -271,7 +273,9 @@ function clearCapturedFrame(){
   if(window.capturePanel)capturePanel.hidden=true;
   if(window.captureMeta)captureMeta.textContent='';
   lastVisionSummary=null;
+  lastLocalText='';
   if(window.analyzeBtn)analyzeBtn.disabled=true;
+  if(window.scanTextBtn)scanTextBtn.disabled=true;
   if(window.visionState)visionState.textContent=' · VISION: LOCAL ONLY';
 }
 function stopCamera(){
@@ -317,6 +321,7 @@ async function captureFrame(){
   capturePreview.src=capturedFrameUrl;
   capturePanel.hidden=false;
   analyzeBtn.disabled=false;
+  scanTextBtn.disabled=false;
   captureMeta.textContent='LOCAL SNAPSHOT · '+width+'×'+height+' · '+Math.max(1,Math.round(blob.size/1024))+' KB · '+new Date().toLocaleTimeString();
   visionState.textContent=' · VISION: SNAPSHOT LOCAL · NOT UPLOADED';
 }
@@ -350,6 +355,27 @@ function analyzeFrameLocal(){
   lastVisionSummary={light,quality,brightness:Math.round(avg),contrast:Math.round(contrast),color:Math.round(saturation),detail:Math.round(detail),capturedAt:new Date().toISOString()};
   captureMeta.textContent=(captureMeta.textContent.split(' · ANALYSIS:')[0])+' · ANALYSIS: '+result;
   visionState.textContent=' · VISION: LOCAL ANALYSIS READY · NO CLOUD';
+}
+async function scanTextLocal(){
+  if(privacyMode){visionState.textContent=' · OCR: BLOCKED BY PRIVACY';return}
+  if(!capturedFrameUrl||!captureCanvas.width){visionState.textContent=' · OCR: CAPTURE REQUIRED';return}
+  if(!('TextDetector' in window)){
+    lastLocalText='';
+    visionState.textContent=' · OCR: LOCAL API UNSUPPORTED · NO CLOUD FALLBACK';
+    captureMeta.textContent=(captureMeta.textContent.split(' · OCR:')[0])+' · OCR: browser local TextDetector unavailable';
+    return;
+  }
+  try{
+    visionState.textContent=' · OCR: LOCAL SCANNING';
+    const detector=new TextDetector();
+    const blocks=await detector.detect(captureCanvas);
+    lastLocalText=(blocks||[]).map(x=>String(x.rawValue||'').trim()).filter(Boolean).join(' ').slice(0,1200);
+    captureMeta.textContent=(captureMeta.textContent.split(' · OCR:')[0])+' · OCR: '+(lastLocalText||'text not detected');
+    visionState.textContent=' · OCR: LOCAL READY · NO CLOUD';
+  }catch(e){
+    lastLocalText='';
+    visionState.textContent=' · OCR: LOCAL FAILED · NO CLOUD FALLBACK';
+  }
 }
 function enterPrivacyMode(){
   privacyMode=true;
@@ -453,7 +479,16 @@ async function connect(){
 
 function localVisionCommand(command){
   const c=String(command||'').trim().toLocaleLowerCase('tr-TR');
-  if(!/^(ne görüyorsun|ne goruyorsun|görüntü durumu|goruntu durumu|vision status|frame status)$/.test(c))return false;
+  const wantsVision=/^(ne görüyorsun|ne goruyorsun|görüntü durumu|goruntu durumu|vision status|frame status)$/.test(c);
+  const wantsText=/^(ne yazıyor|ne yaziyor|yazıyı oku|yaziyi oku|read text|what does it say)$/.test(c);
+  if(!wantsVision&&!wantsText)return false;
+  if(wantsText){
+    if(privacyMode){consoleStatus.textContent='OCR BLOCKED BY PRIVACY';return true}
+    if(!lastLocalText){consoleStatus.textContent='Yerel OCR sonucu yok. CAPTURE → READ TEXT çalıştırın.';return true}
+    consoleStatus.textContent='LOCAL OCR · '+lastLocalText.slice(0,500);
+    coreSubtitle.textContent='Yerel OCR sonucu · görüntü Cloud’a gönderilmedi';
+    return true;
+  }
   if(privacyMode){consoleStatus.textContent='VISION BLOCKED BY PRIVACY';return true}
   if(!lastVisionSummary){consoleStatus.textContent='Önce CAMERA → CAPTURE → ANALYZE çalıştırın.';return true}
   const v=lastVisionSummary;
