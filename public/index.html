@@ -19,6 +19,7 @@
     <p>PERSONAL AUTONOMOUS SYSTEM<br>Secure command interface</p>
     <input id="token" type="password" autocomplete="off" placeholder="8 HANELİ SESSION CODE" inputmode="numeric" maxlength="8">
     <button onclick="connect()">INITIALIZE</button>
+    <button id="voiceCodeBtn" type="button" onclick="listenSessionCode()" style="margin-top:8px">KODU SESLE GİR</button>
     <div id="authmsg" style="margin-top:10px;color:#ff7c87;font-size:10px"></div>
   </div>
 </div>
@@ -277,6 +278,36 @@ function speak(text){
   u.onstart=()=>document.body.classList.add('speaking');
   u.onend=()=>document.body.classList.remove('speaking');
   speechSynthesis.speak(u);
+}
+
+function spokenDigits(text){
+  const map={sifir:'0','sıfır':'0',bir:'1',iki:'2',uc:'3','üç':'3',dort:'4','dört':'4',bes:'5','beş':'5',alti:'6','altı':'6',yedi:'7',sekiz:'8',dokuz:'9'};
+  const normalized=String(text||'').toLocaleLowerCase('tr-TR').replace(/[^0-9a-zçğıöşüı\s]/gi,' ');
+  const parts=normalized.split(/\s+/).filter(Boolean);
+  let out='';
+  for(const p of parts){
+    if(/^\d+$/.test(p))out+=p;
+    else if(Object.prototype.hasOwnProperty.call(map,p))out+=map[p];
+  }
+  return out.slice(0,8);
+}
+function listenSessionCode(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){authmsg.textContent='Bu tarayıcı sesli kod girişini desteklemiyor.';return}
+  const b=document.getElementById('voiceCodeBtn');
+  const r=new SR();r.lang='tr-TR';r.interimResults=false;r.continuous=false;
+  b.disabled=true;b.textContent='DİNLİYOR...';authmsg.textContent='8 haneli kodu söyleyin.';
+  r.onresult=e=>{
+    const transcript=Array.from(e.results).map(x=>x[0].transcript).join(' ');
+    const digits=spokenDigits(transcript);
+    transcript='';
+    if(digits.length!==8){token.value='';authmsg.textContent='8 hane algılanamadı. Tekrar deneyin.';return}
+    token.value=digits;
+    setTimeout(()=>connect(),120);
+  };
+  r.onerror=()=>{token.value='';authmsg.textContent='Sesli kod algılanamadı.'};
+  r.onend=()=>{b.disabled=false;b.textContent='KODU SESLE GİR'};
+  try{r.start()}catch(e){b.disabled=false;b.textContent='KODU SESLE GİR';authmsg.textContent='Mikrofon başlatılamadı.'}
 }
 
 async function connect(){
