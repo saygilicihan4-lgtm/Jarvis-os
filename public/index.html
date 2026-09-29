@@ -150,10 +150,9 @@ const wakeSource=new URLSearchParams(location.search).get('wake');
 if(wakeSource==='f8'){
   history.replaceState({},document.title,location.pathname);
   setTimeout(()=>{
-    coreSubtitle.textContent='F8 global wake detected';
-    if(!privacyMode)speak('Merhaba Cihan Bey. JARVIS hazır.');
-    else consoleStatus.textContent='PRIVACY MODE · F8 HUD WAKE ONLY';
-  },700);
+    coreSubtitle.textContent='F8 global wake detected · authorization required';
+    consoleStatus.textContent='F8 WAKE · SECURE AUTHORIZATION REQUIRED';
+  },300);
 }
 const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
@@ -290,6 +289,7 @@ async function connect(){
     await load();
     authmsg.textContent='';
     setAuthenticated(true);
+    if(!privacyMode)speak('Merhaba efendim, sizin için ne yapabilirim?');
   }catch(e){
     setAuthenticated(false);
     authmsg.textContent=e.message;
@@ -333,7 +333,7 @@ async function load(){
   const pc=d.workers&&d.workers.pc?d.workers.pc:{online:false};
   pcDot.className='dot '+(pc.online?'online':'offline');
   pcState.textContent=pc.online?'ONLINE':'OFFLINE';
-  const workerCurrent=pc.online&&pc.version==='2.12.0';
+  const workerCurrent=pc.online&&/^2\.(?:1[3-9]|[2-9]\d)\./.test(String(pc.version||''));
   workerSetup.textContent=!pc.online?'RUN LAUNCHER ON PC':workerCurrent?('CONNECTED v'+pc.version):'UPDATE REQUIRED';
   workerReadout.textContent=pc.online?'ON':'OFF';
   devAgent.textContent=!pc.online?'STANDBY':workerCurrent?('READY v'+pc.version):'UPDATE REQUIRED';
