@@ -135,6 +135,7 @@ let privacyMode=false;
 let clapStream=null,clapCtx=null,clapRAF=null,lastClap=0,clapArmed=false,clapCooldown=0;
 let cameraStream=null;
 let capturedFrameUrl='';
+let lastVisionSummary=null;
 let activeLanguage='tr-TR';
 const LANGUAGE_NAMES={tr:'Türkçe',en:'English',de:'Deutsch',fr:'Français',es:'Español',it:'Italiano',pt:'Português',ru:'Русский',ar:'العربية',ja:'日本語',ko:'한국어',zh:'中文',nl:'Nederlands',pl:'Polski'};
 const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -269,6 +270,7 @@ function clearCapturedFrame(){
   if(window.capturePreview)capturePreview.removeAttribute('src');
   if(window.capturePanel)capturePanel.hidden=true;
   if(window.captureMeta)captureMeta.textContent='';
+  lastVisionSummary=null;
   if(window.analyzeBtn)analyzeBtn.disabled=true;
   if(window.visionState)visionState.textContent=' · VISION: LOCAL ONLY';
 }
@@ -345,6 +347,7 @@ function analyzeFrameLocal(){
   const light=avg<65?'LOW LIGHT':avg>205?'VERY BRIGHT':'NORMAL LIGHT';
   const quality=contrast<18?'LOW CONTRAST':detail<6?'LOW DETAIL':'FRAME OK';
   const result=light+' · '+quality+' · BRIGHTNESS '+Math.round(avg)+'/255 · CONTRAST '+Math.round(contrast)+' · COLOR '+Math.round(saturation)+'%';
+  lastVisionSummary={light,quality,brightness:Math.round(avg),contrast:Math.round(contrast),color:Math.round(saturation),detail:Math.round(detail),capturedAt:new Date().toISOString()};
   captureMeta.textContent=(captureMeta.textContent.split(' · ANALYSIS:')[0])+' · ANALYSIS: '+result;
   visionState.textContent=' · VISION: LOCAL ANALYSIS READY · NO CLOUD';
 }
@@ -448,9 +451,22 @@ async function connect(){
   }
 }
 
+function localVisionCommand(command){
+  const c=String(command||'').trim().toLocaleLowerCase('tr-TR');
+  if(!/^(ne görüyorsun|ne goruyorsun|görüntü durumu|goruntu durumu|vision status|frame status)$/.test(c))return false;
+  if(privacyMode){consoleStatus.textContent='VISION BLOCKED BY PRIVACY';return true}
+  if(!lastVisionSummary){consoleStatus.textContent='Önce CAMERA → CAPTURE → ANALYZE çalıştırın.';return true}
+  const v=lastVisionSummary;
+  const trLight=v.light==='LOW LIGHT'?'düşük ışık':v.light==='VERY BRIGHT'?'çok parlak':'normal ışık';
+  const trQuality=v.quality==='LOW CONTRAST'?'düşük kontrast':v.quality==='LOW DETAIL'?'düşük detay':'kare teknik olarak uygun';
+  consoleStatus.textContent='LOCAL VISION · '+trLight+' · '+trQuality+' · parlaklık '+v.brightness+'/255 · kontrast '+v.contrast+' · renk '+v.color+'%';
+  coreSubtitle.textContent='Yerel Vision özeti hazır · görüntü Cloud’a gönderilmedi';
+  return true;
+}
 async function send(){
   const command=cmd.value.trim();
   if(!command)return;
+  if(localVisionCommand(command)){cmd.value='';return}
   try{
     await api('/api/tasks',{
       method:'POST',
