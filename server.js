@@ -296,6 +296,7 @@ function publicState(){
     accountPolicies:Object.values(state.accountPolicies).map(p=>({...p,secretStored:false})),
     tasks:state.tasks,
     audit:state.audit,
+    remoteControl:{pcOnline:pcOnline(),queued:state.tasks.filter(x=>x.status==='waiting_worker').length,running:state.tasks.filter(x=>x.status==='claimed').length},
     workers:{
       pc:{
         name:pc.name,
@@ -486,6 +487,7 @@ const server=http.createServer((req,res)=>{
       if(!command)return json(res,400,{error:'command required'});
       const t={
         id:state.tasks.length+1,
+        source:String(d.source||'phone-web').slice(0,40),
         uid:'J-'+crypto.randomUUID().toUpperCase(),
         command,
         agent:agentFor(command),
