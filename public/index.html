@@ -119,6 +119,7 @@ let KEY='';
 localStorage.removeItem('jarvis_token');
 let recognition=null;
 let listening=false;
+let privacyMode=false;
 let clapStream=null,clapCtx=null,clapRAF=null,lastClap=0,clapArmed=false,clapCooldown=0;
 const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
 if(SpeechRecognition){
@@ -132,8 +133,13 @@ if(SpeechRecognition){
   recognition.onresult=e=>{
     let text='';
     for(let i=e.resultIndex;i<e.results.length;i++)text+=e.results[i][0].transcript;
-    cmd.value=text.trim();
+    const captured=text.trim();
     if(e.results[e.results.length-1].isFinal){
+      if(/jarvis.*(bu konuşmayı|bu konusmayi).*dinleme|dinlemeyi (durdur|kapat)|gizlilik modu/i.test(captured)){
+        enterPrivacyMode();return;
+      }
+      if(privacyMode)return;
+      cmd.value=captured;
       voiceState.textContent='VOICE: COMMAND CAPTURED';
       setTimeout(()=>send(),180);
     }
@@ -208,6 +214,10 @@ async function enableClapWake(){
   }
 }
 async function wakeJarvis(){
+  if(privacyMode){
+    exitPrivacyMode('DOUBLE CLAP');
+    return;
+  }
   document.body.classList.add('speaking');
   coreSubtitle.textContent='Double-clap wake detected';
   let greeting='Merhaba Cihan Bey. JARVIS hazır.';
@@ -228,7 +238,26 @@ async function wakeJarvis(){
   }
   speak(greeting);
 }
+function enterPrivacyMode(){
+  privacyMode=true;
+  try{if(recognition&&listening)recognition.abort()}catch(e){}
+  cmd.value='';
+  document.body.classList.remove('listening');
+  voiceState.textContent='VOICE: PRIVACY / SPEECH OFF';
+  voiceBtn.textContent='WAKE';
+  coreSubtitle.textContent='Privacy mode · speech recognition disabled';
+  consoleStatus.textContent='PRIVACY MODE · SPEECH OFF';
+}
+function exitPrivacyMode(source){
+  privacyMode=false;
+  voiceState.textContent='VOICE: READY';
+  voiceBtn.textContent='VOICE';
+  coreSubtitle.textContent='Privacy mode ended by '+source;
+  consoleStatus.textContent='SECURE CHANNEL ACTIVE';
+  speak('JARVIS dinlemeye hazır.');
+}
 function toggleVoice(){
+  if(privacyMode){exitPrivacyMode('BUTTON');return}
   if(!recognition){voiceState.textContent='VOICE: BROWSER UNSUPPORTED';return}
   try{listening?recognition.stop():recognition.start()}catch(e){}
 }
