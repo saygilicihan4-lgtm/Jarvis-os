@@ -383,6 +383,22 @@ const server=http.createServer((req,res)=>{
       return json(res,200,{ok:true,id});
     });
   }
+  if(pathname==='/api/push/test'&&req.method==='POST'){
+    if(!VAPID_PUBLIC||!VAPID_PRIVATE)return json(res,503,{error:'push not configured'});
+    const ids=Object.keys(state.pushSubscriptions);
+    if(!ids.length)return json(res,409,{error:'no push subscription'});
+    const payload=JSON.stringify({title:'JARVIS TEST',body:'Cihan Bey, telefon bildirim bağlantısı çalışıyor.',url:'/',tag:'jarvis-push-test'});
+    Promise.allSettled(ids.map(async id=>{
+      const sub=state.pushSubscriptions[id];
+      try{await webpush.sendNotification({endpoint:sub.endpoint,keys:sub.keys},payload,{TTL:300});sub.lastSuccessAt=now();return true}
+      catch(e){if(e&&[404,410].includes(e.statusCode))delete state.pushSubscriptions[id];throw e}
+    })).then(results=>{
+      const ok=results.filter(x=>x.status==='fulfilled').length;
+      log('PUSH_TEST','delivered '+ok+'/'+results.length);
+    });
+    return json(res,202,{ok:true,queued:ids.length});
+  }
+
   if(pathname==='/api/reminders'&&req.method==='GET'){
     return json(res,200,{reminders:state.reminders.slice().sort((a,b)=>a.when.localeCompare(b.when))});
   }
