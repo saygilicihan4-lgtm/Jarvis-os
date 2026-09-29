@@ -1,4 +1,5 @@
 # JARVIS OS Windows global F8 wake helper
+$HELPER_VERSION='3.1'
 # Zero dependency: Win32 RegisterHotKey + opens the trusted JARVIS HUD.
 Add-Type @"
 using System;
