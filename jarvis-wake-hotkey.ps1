@@ -23,7 +23,17 @@ try {
   $msg=New-Object JarvisHotKey+MSG
   while([JarvisHotKey]::GetMessage([ref]$msg,[IntPtr]::Zero,0,0) -gt 0){
     if($msg.message -eq $WM_HOTKEY -and $msg.wParam.ToUInt32() -eq $HOTKEY_ID){
-      Start-Process "https://jarvis-os-1iuv.onrender.com/?wake=f8"
+      $now=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+      if($script:lastWake -and ($now-$script:lastWake) -lt 450){ continue }
+      $script:lastWake=$now
+      Write-Host '[JARVIS] F8 WAKE: TRIGGER'
+      try {
+        Start-Process "https://jarvis-os-1iuv.onrender.com/?wake=f8&t=$now"
+      } catch {
+        Write-Host ('[JARVIS] F8 WAKE: OPEN RETRY · '+$_.Exception.Message)
+        Start-Sleep -Milliseconds 250
+        Start-Process "https://jarvis-os-1iuv.onrender.com/?wake=f8&t=$now"
+      }
     }
   }
 } finally {
