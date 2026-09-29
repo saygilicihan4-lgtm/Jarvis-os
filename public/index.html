@@ -107,11 +107,15 @@
   <div class="console-row">
     <textarea id="cmd" class="command" placeholder="COMMAND JARVIS..."></textarea>
     <button id="voiceBtn" class="send" onclick="toggleVoice()" aria-label="Voice command">VOICE</button>
+    <button id="cameraBtn" class="send" onclick="toggleCamera()" aria-label="Camera">CAMERA</button>
     <button class="send" onclick="send()">EXECUTE</button>
   </div>
   <div class="console-meta">
     <span id="consoleStatus">SECURE CHANNEL LOCKED</span>
-    <span id="voiceState">VOICE MODULE: CHECKING</span><span id="clapState"> · DOUBLE CLAP: OFF</span>
+    <span id="voiceState">VOICE MODULE: CHECKING</span><span id="clapState"> · DOUBLE CLAP: OFF</span><span id="cameraState"> · CAMERA: OFF</span>
+  </div>
+  <div id="cameraPanel" hidden style="margin-top:8px;text-align:center">
+    <video id="cameraPreview" autoplay playsinline muted style="width:min(100%,480px);max-height:280px;object-fit:cover;border:1px solid rgba(101,230,255,.45);border-radius:8px;background:#000"></video>
   </div>
 </div>
 
@@ -122,6 +126,7 @@ let recognition=null;
 let listening=false;
 let privacyMode=false;
 let clapStream=null,clapCtx=null,clapRAF=null,lastClap=0,clapArmed=false,clapCooldown=0;
+let cameraStream=null;
 const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
 if(SpeechRecognition){
   recognition=new SpeechRecognition();
@@ -247,8 +252,31 @@ async function wakeJarvis(){
   }
   speak(greeting);
 }
+function stopCamera(){
+  if(cameraStream){for(const track of cameraStream.getTracks())track.stop();cameraStream=null}
+  if(window.cameraPreview)cameraPreview.srcObject=null;
+  if(window.cameraPanel)cameraPanel.hidden=true;
+  if(window.cameraState)cameraState.textContent=' · CAMERA: OFF';
+  if(window.cameraBtn)cameraBtn.textContent='CAMERA';
+}
+async function toggleCamera(){
+  if(cameraStream){stopCamera();return}
+  if(privacyMode){cameraState.textContent=' · CAMERA: BLOCKED BY PRIVACY';return}
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){cameraState.textContent=' · CAMERA: UNSUPPORTED';return}
+  try{
+    cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:false});
+    cameraPreview.srcObject=cameraStream;
+    cameraPanel.hidden=false;
+    cameraState.textContent=' · CAMERA: ACTIVE LOCAL PREVIEW';
+    cameraBtn.textContent='CAM OFF';
+  }catch(e){
+    stopCamera();
+    cameraState.textContent=' · CAMERA: PERMISSION DENIED';
+  }
+}
 function enterPrivacyMode(){
   privacyMode=true;
+  stopCamera();
   try{if(recognition&&listening)recognition.abort()}catch(e){}
   cmd.value='';
   document.body.classList.remove('listening');
@@ -298,7 +326,7 @@ function listenSessionCode(){
   const r=new SR();r.lang='tr-TR';r.interimResults=false;r.continuous=false;
   b.disabled=true;b.textContent='DİNLİYOR...';authmsg.textContent='8 haneli kodu söyleyin.';
   r.onresult=e=>{
-    const transcript=Array.from(e.results).map(x=>x[0].transcript).join(' ');
+    let transcript=Array.from(e.results).map(x=>x[0].transcript).join(' ');
     const digits=spokenDigits(transcript);
     transcript='';
     if(digits.length!==8){token.value='';authmsg.textContent='8 hane algılanamadı. Tekrar deneyin.';return}
