@@ -26,6 +26,9 @@ async function initDurableMemory(){
  try{
  await db.query('CREATE TABLE IF NOT EXISTS jarvis_push_subscriptions(id text PRIMARY KEY,endpoint text NOT NULL,p256dh text NOT NULL,auth text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),last_success_at timestamptz)');
  await db.query('CREATE TABLE IF NOT EXISTS jarvis_reminders(id uuid PRIMARY KEY,title text NOT NULL,remind_at timestamptz NOT NULL,sent boolean NOT NULL DEFAULT false,created_at timestamptz NOT NULL DEFAULT now(),sent_at timestamptz,delivered integer NOT NULL DEFAULT 0)');
+ await db.query("CREATE TABLE IF NOT EXISTS jarvis_persistence_probe(id text PRIMARY KEY,boot_count integer NOT NULL DEFAULT 0,updated_at timestamptz NOT NULL DEFAULT now())");
+ const probe=await db.query("INSERT INTO jarvis_persistence_probe(id,boot_count,updated_at) VALUES('cloud-memory',1,now()) ON CONFLICT(id) DO UPDATE SET boot_count=jarvis_persistence_probe.boot_count+1,updated_at=now() RETURNING boot_count");
+ log('DB_PERSISTENCE','boot_count='+probe.rows[0].boot_count);
  const ps=await db.query('SELECT * FROM jarvis_push_subscriptions');state.pushSubscriptions={};for(const x of ps.rows)state.pushSubscriptions[x.id]={endpoint:x.endpoint,keys:{p256dh:x.p256dh,auth:x.auth},createdAt:x.created_at,lastSuccessAt:x.last_success_at};
  const rs=await db.query('SELECT * FROM jarvis_reminders ORDER BY remind_at');state.reminders=rs.rows.map(x=>({id:x.id,title:x.title,when:new Date(x.remind_at).toISOString(),sent:x.sent,createdAt:x.created_at,sentAt:x.sent_at,delivered:x.delivered}));
  dbReady=true;log('DB_READY','durable reminders='+state.reminders.length+' push='+Object.keys(state.pushSubscriptions).length);
