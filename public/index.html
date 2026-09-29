@@ -177,26 +177,43 @@ function urlB64ToBytes(s){
   const raw=atob(b);return Uint8Array.from([...raw].map(ch=>ch.charCodeAt(0)));
 }
 async function enablePhoneAlerts(){
-  if(!('Notification' in window)||!('serviceWorker' in navigator)){consoleStatus.textContent='PHONE ALERTS · UNSUPPORTED';return}
-  const reg=await ensurePushWorker();
-  if(!reg){consoleStatus.textContent='PHONE ALERTS · SERVICE WORKER FAILED';return}
-  const p=await Notification.requestPermission();
-  if(p!=='granted'){consoleStatus.textContent='PHONE ALERTS · PERMISSION REQUIRED';return}
+  notifyBtn.disabled=true;
+  const fail=(msg,detail='')=>{consoleStatus.textContent=msg+(detail?' · '+detail:'');notifyBtn.textContent='RETRY PHONE ALERTS';notifyBtn.disabled=false};
   try{
-    const k=await fetch('/api/push/public-key',{credentials:'same-origin'}).then(r=>r.ok?r.json():null);
-    if(!k||!k.publicKey){consoleStatus.textContent='PHONE ALERTS · PUSH SERVER NOT READY';return}
+    if(!window.isSecureContext)return fail('PHONE ALERTS · HTTPS REQUIRED');
+    if(!('Notification' in window))return fail('PHONE ALERTS · NOTIFICATION UNSUPPORTED');
+    if(!('serviceWorker' in navigator))return fail('PHONE ALERTS · SERVICE WORKER UNSUPPORTED');
+    const standalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+    const isiOS=/iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if(isiOS&&!standalone)return fail('PHONE ALERTS · ADD JARVIS TO HOME SCREEN');
+    consoleStatus.textContent='PHONE ALERTS · REGISTERING WORKER';
+    const reg=await ensurePushWorker();
+    if(!reg)return fail('PHONE ALERTS · SERVICE WORKER FAILED');
+    await navigator.serviceWorker.ready;
+    if(!reg.pushManager)return fail('PHONE ALERTS · PUSH API UNSUPPORTED');
+    consoleStatus.textContent='PHONE ALERTS · REQUESTING PERMISSION';
+    const p=Notification.permission==='granted'?'granted':await Notification.requestPermission();
+    if(p!=='granted')return fail('PHONE ALERTS · PERMISSION '+String(p).toUpperCase());
+    consoleStatus.textContent='PHONE ALERTS · FETCHING KEY';
+    const kr=await fetch('/api/push/public-key',{credentials:'same-origin'});
+    if(!kr.ok)return fail('PHONE ALERTS · PUSH SERVER HTTP '+kr.status);
+    const k=await kr.json();
+    if(!k||!k.publicKey)return fail('PHONE ALERTS · VAPID KEY MISSING');
+    consoleStatus.textContent='PHONE ALERTS · SUBSCRIBING';
     let sub=await reg.pushManager.getSubscription();
     if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlB64ToBytes(k.publicKey)});
+    consoleStatus.textContent='PHONE ALERTS · SAVING SUBSCRIPTION';
     const saved=await fetch('/api/push/subscribe',{method:'POST',headers:{'content-type':'application/json'},credentials:'same-origin',body:JSON.stringify(sub)});
-    if(!saved.ok)throw new Error('subscription save failed');
+    if(!saved.ok)return fail('PHONE ALERTS · SAVE HTTP '+saved.status);
     localStorage.setItem('jarvisPhoneAlerts','on');
     notifyBtn.textContent='TEST PHONE ALERT';
+    notifyBtn.disabled=false;
     notifyBtn.onclick=async()=>{
       consoleStatus.textContent='PHONE ALERT · TEST SENDING';
-      try{const r=await fetch('/api/push/test',{method:'POST',credentials:'same-origin'});if(!r.ok)throw new Error('test failed');consoleStatus.textContent='PHONE ALERT · TEST QUEUED'}catch(e){consoleStatus.textContent='PHONE ALERT · TEST FAILED'}
+      try{const r=await fetch('/api/push/test',{method:'POST',credentials:'same-origin'});if(!r.ok)throw new Error('HTTP '+r.status);consoleStatus.textContent='PHONE ALERT · TEST QUEUED'}catch(e){consoleStatus.textContent='PHONE ALERT · TEST FAILED · '+String(e.message||e)}
     };
     consoleStatus.textContent='PHONE ALERTS · PUSH SUBSCRIBED';
-  }catch(e){consoleStatus.textContent='PHONE ALERTS · SETUP INCOMPLETE'}
+  }catch(e){fail('PHONE ALERTS · SETUP ERROR',String(e&&e.name||'')+' '+String(e&&e.message||e).slice(0,80))}
 }
 function notifyReminder(text){
   if(localStorage.getItem('jarvisPhoneAlerts')!=='on'||Notification.permission!=='granted')return false;
