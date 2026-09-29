@@ -189,7 +189,11 @@ async function enablePhoneAlerts(){
     const saved=await fetch('/api/push/subscribe',{method:'POST',headers:{'content-type':'application/json'},credentials:'same-origin',body:JSON.stringify(sub)});
     if(!saved.ok)throw new Error('subscription save failed');
     localStorage.setItem('jarvisPhoneAlerts','on');
-    notifyBtn.textContent='PHONE ALERTS ON';
+    notifyBtn.textContent='TEST PHONE ALERT';
+    notifyBtn.onclick=async()=>{
+      consoleStatus.textContent='PHONE ALERT · TEST SENDING';
+      try{const r=await fetch('/api/push/test',{method:'POST',credentials:'same-origin'});if(!r.ok)throw new Error('test failed');consoleStatus.textContent='PHONE ALERT · TEST QUEUED'}catch(e){consoleStatus.textContent='PHONE ALERT · TEST FAILED'}
+    };
     consoleStatus.textContent='PHONE ALERTS · PUSH SUBSCRIBED';
   }catch(e){consoleStatus.textContent='PHONE ALERTS · SETUP INCOMPLETE'}
 }
