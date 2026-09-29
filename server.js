@@ -39,6 +39,8 @@ const state={
   audit:[],
   accountPolicies:{},
   pairingCodes:{},
+  pushSubscriptions:{},
+  reminders:[],
   stateRevision:0,
   workers:{pc:{name:null,version:null,lastSeen:null,capabilities:[],memory:null},devices:{}}
 };
@@ -297,6 +299,7 @@ function publicState(){
     tasks:state.tasks,
     audit:state.audit,
     remoteControl:{pcOnline:pcOnline(),queued:state.tasks.filter(x=>x.status==='waiting_worker').length,running:state.tasks.filter(x=>x.status==='claimed').length},
+    assistant:{pushConfigured:!!process.env.JARVIS_VAPID_PUBLIC_KEY,pushSubscriptions:Object.keys(state.pushSubscriptions).length,reminders:state.reminders.length},
     workers:{
       pc:{
         name:pc.name,
@@ -338,6 +341,35 @@ const server=http.createServer((req,res)=>{
         if(!dw||!dw.approved)return json(res,403,{error:'device revoked or not approved'});
       }
     }else if(!authorized(req))return json(res,401,{error:'unauthorized'});
+  }
+
+  if(pathname==='/api/push/public-key'&&req.method==='GET'){
+    const publicKey=String(process.env.JARVIS_VAPID_PUBLIC_KEY||'').trim();
+    return json(res,publicKey?200:503,{ok:!!publicKey,publicKey:publicKey||null});
+  }
+  if(pathname==='/api/push/subscribe'&&req.method==='POST'){
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      const endpoint=String(d.endpoint||''),keys=d.keys||{};
+      if(!/^https:\/\//.test(endpoint)||!keys.p256dh||!keys.auth)return json(res,400,{error:'invalid push subscription'});
+      const id=crypto.createHash('sha256').update(endpoint).digest('hex').slice(0,24);
+      state.pushSubscriptions[id]={endpoint,keys:{p256dh:String(keys.p256dh),auth:String(keys.auth)},createdAt:now(),lastSuccessAt:null};
+      touchState();log('PUSH_SUBSCRIBE','phone push subscription registered '+id);
+      return json(res,200,{ok:true,id});
+    });
+  }
+  if(pathname==='/api/reminders'&&req.method==='GET'){
+    return json(res,200,{reminders:state.reminders.slice().sort((a,b)=>a.when.localeCompare(b.when))});
+  }
+  if(pathname==='/api/reminders'&&req.method==='POST'){
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      const title=String(d.title||'').trim().slice(0,180),when=new Date(d.when);
+      if(!title||!Number.isFinite(when.getTime()))return json(res,400,{error:'title and valid when required'});
+      const r={id:crypto.randomUUID(),title,when:when.toISOString(),sent:false,createdAt:now()};
+      state.reminders.push(r);state.reminders=state.reminders.slice(-500);touchState();log('REMINDER_CREATE',r.id+' '+r.when);
+      return json(res,201,{ok:true,reminder:r});
+    });
   }
 
   if(pathname==='/api/session/create'&&req.method==='POST'){
