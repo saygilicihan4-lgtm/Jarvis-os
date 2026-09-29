@@ -276,18 +276,20 @@ function restoreSnapshot(s){
   }
 }
 function publicState(){
+  const signedPc=Object.values(state.workers.devices).filter(w=>w.approved&&workerOnline(w)).sort((a,b)=>new Date(b.lastSeen)-new Date(a.lastSeen))[0];
+  const pc=signedPc||state.workers.pc;
   return{
     accountPolicies:Object.values(state.accountPolicies).map(p=>({...p,secretStored:false})),
     tasks:state.tasks,
     audit:state.audit,
     workers:{
       pc:{
-        name:state.workers.pc.name,
-        version:state.workers.pc.version,
-        lastSeen:state.workers.pc.lastSeen,
-        capabilities:state.workers.pc.capabilities,
-        memory:state.workers.pc.memory,
-        online:pcOnline()
+        name:pc.name,
+        version:pc.version,
+        lastSeen:pc.lastSeen,
+        capabilities:pc.capabilities||[],
+        memory:pc.memory||null,
+        online:workerOnline(pc)
       },
       devices:publicDevices()
     }
