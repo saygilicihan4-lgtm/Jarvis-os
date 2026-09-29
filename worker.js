@@ -26,8 +26,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.13.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory'];
+const WORKER_VERSION='2.14.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1'];
 
 if(!TOKEN&&!DEVICE_TOKEN&&!PAIR_CODE){console.error('JARVIS signed cihaz kimliği veya pairing code gerekli.');process.exit(1)}
 function startWindowsWakeHelper(){
@@ -392,8 +392,29 @@ async function execute(task){
     const s=memoryStats();
     return{ok:true,message:'Yerel kalıcı hafıza aktif · '+s.records+' kayıt · '+s.bytes+' bayt · '+MEMORY_FILE};
   }
+  if(/^(işlemleri listele|islemleri listele|process list|çalışan işlemler|calisan islemler)/i.test(c))return'process_list_v1';
+  if(/^(disk durumu|disk status|depolama durumu)/i.test(c))return'disk_status_v1';
+  if(/^(ağ durumu|ag durumu|network status|internet durumu)/i.test(c))return'network_status_v1';
   if(/^(sistem durumu|system status|pc durumu)/i.test(c)){
     return{ok:true,message:'PC aktif · '+os.platform()+' '+os.release()+' · Node '+process.version+' · RAM '+Math.round(os.freemem()/1024/1024)+'MB boş'};
+  }
+  if(/^(işlemleri listele|islemleri listele|process list|çalışan işlemler|calisan islemler)/i.test(c)){
+    if(process.platform!=='win32')return{ok:false,retryable:false,message:'Process list şu anda Windows için etkin'};
+    const out=childProcess.execFileSync('tasklist.exe',['/FO','CSV','/NH'],{encoding:'utf8',windowsHide:true,timeout:5000,maxBuffer:512*1024});
+    const rows=out.split(/\r?\n/).filter(Boolean).slice(0,40).map(x=>x.replace(/^"|"$/g,'').split('","').slice(0,2).join(' #'));
+    return{ok:true,message:'Çalışan işlemler (ilk '+rows.length+'): '+rows.join(' · ')};
+  }
+  if(/^(disk durumu|disk status|depolama durumu)/i.test(c)){
+    if(process.platform!=='win32')return{ok:false,retryable:false,message:'Disk status şu anda Windows için etkin'};
+    const ps='Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | Select-Object DeviceID,Size,FreeSpace | ConvertTo-Json -Compress';
+    const raw=childProcess.execFileSync('powershell.exe',['-NoProfile','-Command',ps],{encoding:'utf8',windowsHide:true,timeout:6000,maxBuffer:256*1024}).trim();
+    const data=raw?JSON.parse(raw):[]; const list=Array.isArray(data)?data:[data];
+    return{ok:true,message:list.map(d=>d.DeviceID+' '+Math.round(Number(d.FreeSpace||0)/1073741824)+'GB boş / '+Math.round(Number(d.Size||0)/1073741824)+'GB').join(' · ')||'Yerel disk bulunamadı'};
+  }
+  if(/^(ağ durumu|ag durumu|network status|internet durumu)/i.test(c)){
+    const nets=os.networkInterfaces(),active=[];
+    for(const [name,arr] of Object.entries(nets))for(const x of (arr||[]))if(!x.internal&&x.family==='IPv4')active.push(name+' '+x.address);
+    return{ok:true,message:'Ağ arayüzleri: '+(active.join(' · ')||'aktif IPv4 arayüzü bulunamadı')};
   }
   if(/^(dosyaları listele|dosya listesi|list files)/i.test(c)){
     return{ok:true,message:'Workspace: '+(listFiles().join(', ')||'(boş)')};
