@@ -376,6 +376,47 @@ const server=http.createServer((req,res)=>{
   const u=new URL(req.url,'http://localhost');
   const pathname=u.pathname;
 
+  // WEBAUTHN_V1: server-verified passkey enrollment. Enrollment requires an
+  // already trusted JARVIS session; it does not weaken the existing auth path.
+  const rpID=String(req.headers.host||'').split(':')[0];
+  const expectedOrigin='https://'+rpID;
+  const challengeKey=()=>crypto.createHash('sha256').update(String(cookieMap(req).jarvis_session||clientIp(req))).digest('hex');
+
+  if(pathname==='/api/webauthn/register/options'&&req.method==='POST'){
+    if(!validPhoneSession(req))return json(res,401,{error:'trusted session required'});
+    if(!dbReady)return json(res,503,{error:'durable storage unavailable'});
+    Promise.resolve(generateRegistrationOptions({
+      rpName:'JARVIS OS',rpID,
+      userName:'jarvis-owner',userDisplayName:'JARVIS Owner',
+      attestationType:'none',
+      authenticatorSelection:{residentKey:'preferred',userVerification:'required'},
+      supportedAlgorithmIDs:[-7,-257],
+    })).then(options=>{
+      state.webauthnChallenges.registration.set(challengeKey(),{challenge:options.challenge,expires:Date.now()+5*60*1000});
+      return json(res,200,options);
+    }).catch(e=>json(res,500,{error:'registration options failed'}));
+    return;
+  }
+
+  if(pathname==='/api/webauthn/register/verify'&&req.method==='POST'){
+    if(!validPhoneSession(req))return json(res,401,{error:'trusted session required'});
+    if(!dbReady)return json(res,503,{error:'durable storage unavailable'});
+    const pending=state.webauthnChallenges.registration.get(challengeKey());
+    if(!pending||pending.expires<Date.now())return json(res,400,{error:'registration challenge expired'});
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      Promise.resolve(verifyRegistrationResponse({response:d,expectedChallenge:pending.challenge,expectedOrigin,expectedRPID:rpID,requireUserVerification:true}))
+      .then(async v=>{
+        if(!v.verified||!v.registrationInfo)return json(res,403,{error:'passkey verification failed'});
+        const a=v.registrationInfo.credential;
+        await db.query('INSERT INTO jarvis_webauthn_credentials(id,public_key,counter,transports,device_type,backed_up,last_used_at) VALUES($1,$2,$3,$4,$5,$6,now()) ON CONFLICT(id) DO UPDATE SET public_key=EXCLUDED.public_key,counter=EXCLUDED.counter,transports=EXCLUDED.transports,device_type=EXCLUDED.device_type,backed_up=EXCLUDED.backed_up,last_used_at=now()',[a.id,Buffer.from(a.publicKey),Number(a.counter||0),JSON.stringify(a.transports||[]),String(v.registrationInfo.credentialDeviceType||''),!!v.registrationInfo.credentialBackedUp]);
+        state.webauthnChallenges.registration.delete(challengeKey());
+        log('WEBAUTHN_REGISTER','server-verified passkey enrolled');
+        return json(res,200,{ok:true,verified:true});
+      }).catch(e=>{log('WEBAUTHN_REGISTER_FAIL',String(e.message||e).slice(0,120));return json(res,403,{error:'passkey verification failed'})});
+    });
+  }
+
   if(pathname==='/api/session/bootstrap'&&req.method==='GET'){
     if(validPhoneSession(req))return json(res,200,{ok:true,existing:true});
     // Never mint an admin session from User-Agent alone. New browsers/devices
