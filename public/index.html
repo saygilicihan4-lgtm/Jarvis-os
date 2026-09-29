@@ -146,6 +146,15 @@ if(SpeechRecognition){
   };
 }
 token.value='';
+const wakeSource=new URLSearchParams(location.search).get('wake');
+if(wakeSource==='f8'){
+  history.replaceState({},document.title,location.pathname);
+  setTimeout(()=>{
+    coreSubtitle.textContent='F8 global wake detected';
+    if(!privacyMode)speak('Merhaba Cihan Bey. JARVIS hazır.');
+    else consoleStatus.textContent='PRIVACY MODE · F8 HUD WAKE ONLY';
+  },700);
+}
 const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
 async function api(url,options={}){
