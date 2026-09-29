@@ -1,6 +1,8 @@
 @echo off
 setlocal
 title JARVIS PC WORKER
+set "LAUNCHER_VERSION=3.1"
+echo [JARVIS] LAUNCHER 3.1
 cd /d "%~dp0"
 where node >nul 2>nul
 if errorlevel 1 (
