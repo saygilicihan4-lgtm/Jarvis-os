@@ -111,6 +111,7 @@ function requiredCapability(command){
   if(/^(işlemleri listele|islemleri listele|process list|çalışan işlemler|calisan islemler)/.test(c))return'process_list_v1';
   if(/^(disk durumu|disk status|depolama durumu)/.test(c))return'disk_status_v1';
   if(/^(ağ durumu|ag durumu|network status|internet durumu)/.test(c))return'network_status_v1';
+  if(/^(yerel ai durumu|local ai status|ai readiness)/.test(c))return'local_ai_readiness_v1';
   if(/^(sistem durumu|system status|pc durumu)/.test(c))return'system_status';
   if(/^(dosyaları listele|dosya listesi|list files)/.test(c))return'list_files';
   if(/^(dosya oluştur|dosya olustur|write file)/.test(c))return'write_file';
