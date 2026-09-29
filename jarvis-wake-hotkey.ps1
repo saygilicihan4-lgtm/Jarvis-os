@@ -1,8 +1,8 @@
 # JARVIS OS Windows global F8 wake helper
-$HELPER_VERSION='3.2'
+$HELPER_VERSION='3.3'
 $created=$false
-$mutex=New-Object System.Threading.Mutex($true,'Local\\JARVIS_F8_WAKE_V3',[ref]$created)
-if(-not $created){ Write-Host '[JARVIS] GLOBAL WAKE: existing helper active'; exit 0 }
+$mutex=[System.Threading.Mutex]::new($true,'Local\JARVIS_F8_WAKE_V3',[ref]$created)
+if(-not $created){ Write-Host '[JARVIS] GLOBAL WAKE: existing helper active'; $mutex.Dispose(); exit 0 }
 # Zero dependency: Win32 RegisterHotKey + opens the trusted JARVIS HUD.
 Add-Type @"
 using System;
