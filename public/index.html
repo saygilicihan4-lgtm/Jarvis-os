@@ -109,6 +109,7 @@
     <button id="voiceBtn" class="send" onclick="toggleVoice()" aria-label="Voice command">VOICE</button>
     <button id="cameraBtn" class="send" onclick="toggleCamera()" aria-label="Camera">CAMERA</button>
     <button id="captureBtn" class="send" onclick="captureFrame()" aria-label="Capture local camera frame" disabled>CAPTURE</button>
+    <button id="analyzeBtn" class="send" onclick="analyzeFrameLocal()" aria-label="Analyze local camera frame" disabled>ANALYZE</button>
     <button class="send" onclick="send()">EXECUTE</button>
   </div>
   <div class="console-meta">
@@ -268,6 +269,7 @@ function clearCapturedFrame(){
   if(window.capturePreview)capturePreview.removeAttribute('src');
   if(window.capturePanel)capturePanel.hidden=true;
   if(window.captureMeta)captureMeta.textContent='';
+  if(window.analyzeBtn)analyzeBtn.disabled=true;
   if(window.visionState)visionState.textContent=' · VISION: LOCAL ONLY';
 }
 function stopCamera(){
@@ -312,8 +314,39 @@ async function captureFrame(){
   capturedFrameUrl=URL.createObjectURL(blob);
   capturePreview.src=capturedFrameUrl;
   capturePanel.hidden=false;
+  analyzeBtn.disabled=false;
   captureMeta.textContent='LOCAL SNAPSHOT · '+width+'×'+height+' · '+Math.max(1,Math.round(blob.size/1024))+' KB · '+new Date().toLocaleTimeString();
   visionState.textContent=' · VISION: SNAPSHOT LOCAL · NOT UPLOADED';
+}
+function analyzeFrameLocal(){
+  if(privacyMode){visionState.textContent=' · VISION: BLOCKED BY PRIVACY';return}
+  if(!capturedFrameUrl||!captureCanvas.width||!captureCanvas.height){visionState.textContent=' · VISION: CAPTURE REQUIRED';return}
+  const src=captureCanvas.getContext('2d',{willReadFrequently:true});
+  const sample=document.createElement('canvas');
+  const sw=Math.min(160,captureCanvas.width),sh=Math.max(1,Math.round(captureCanvas.height*(sw/captureCanvas.width)));
+  sample.width=sw;sample.height=sh;
+  const sctx=sample.getContext('2d',{willReadFrequently:true});
+  sctx.drawImage(captureCanvas,0,0,sw,sh);
+  const p=sctx.getImageData(0,0,sw,sh).data;
+  let lum=0,lum2=0,sat=0,edges=0,n=0;
+  const gray=new Float32Array(sw*sh);
+  for(let i=0,j=0;i<p.length;i+=4,j++){
+    const r=p[i],g=p[i+1],b=p[i+2];
+    const y=.2126*r+.7152*g+.0722*b;
+    const mx=Math.max(r,g,b),mn=Math.min(r,g,b);
+    gray[j]=y;lum+=y;lum2+=y*y;sat+=mx?((mx-mn)/mx):0;n++;
+  }
+  for(let y=1;y<sh;y++)for(let x=1;x<sw;x++){
+    const i=y*sw+x;
+    edges+=Math.abs(gray[i]-gray[i-1])+Math.abs(gray[i]-gray[i-sw]);
+  }
+  const avg=lum/Math.max(1,n),variance=Math.max(0,lum2/Math.max(1,n)-avg*avg);
+  const contrast=Math.sqrt(variance),saturation=(sat/Math.max(1,n))*100,detail=edges/Math.max(1,(sw-1)*(sh-1)*2);
+  const light=avg<65?'LOW LIGHT':avg>205?'VERY BRIGHT':'NORMAL LIGHT';
+  const quality=contrast<18?'LOW CONTRAST':detail<6?'LOW DETAIL':'FRAME OK';
+  const result=light+' · '+quality+' · BRIGHTNESS '+Math.round(avg)+'/255 · CONTRAST '+Math.round(contrast)+' · COLOR '+Math.round(saturation)+'%';
+  captureMeta.textContent=(captureMeta.textContent.split(' · ANALYSIS:')[0])+' · ANALYSIS: '+result;
+  visionState.textContent=' · VISION: LOCAL ANALYSIS READY · NO CLOUD';
 }
 function enterPrivacyMode(){
   privacyMode=true;
