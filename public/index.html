@@ -111,6 +111,7 @@
     <button id="captureBtn" class="send" onclick="captureFrame()" aria-label="Capture local camera frame" disabled>CAPTURE</button>
     <button id="analyzeBtn" class="send" onclick="analyzeFrameLocal()" aria-label="Analyze local camera frame" disabled>ANALYZE</button>
     <button id="scanTextBtn" class="send" onclick="scanTextLocal()" aria-label="Read visible text locally" disabled>READ TEXT</button>
+    <button id="aiCheckBtn" class="send" onclick="checkLocalAI()" aria-label="Check local AI readiness">LOCAL AI</button>
     <button class="send" onclick="send()">EXECUTE</button>
   </div>
   <div class="console-meta">
@@ -522,6 +523,13 @@ function localVisionCommand(command){
   consoleStatus.textContent='LOCAL VISION · '+trLight+' · '+trQuality+' · parlaklık '+v.brightness+'/255 · kontrast '+v.contrast+' · renk '+v.color+'%';
   coreSubtitle.textContent='Yerel Vision özeti hazır · görüntü Cloud’a gönderilmedi';
   return true;
+}
+async function checkLocalAI(){
+  if(privacyMode){consoleStatus.textContent='LOCAL AI CHECK BLOCKED BY PRIVACY';return}
+  const previous=cmd.value;
+  cmd.value='Yerel AI durumu';
+  consoleStatus.textContent='LOCAL AI · PC CHECK QUEUED';
+  try{await send()}catch(e){cmd.value=previous;consoleStatus.textContent='LOCAL AI CHECK FAILED'}
 }
 async function send(){
   const command=cmd.value.trim();
