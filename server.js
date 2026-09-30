@@ -403,7 +403,7 @@ const server=http.createServer((req,res)=>{
       rpName:'JARVIS OS',rpID,
       userName:'jarvis-owner',userDisplayName:'JARVIS Owner',
       attestationType:'none',
-      authenticatorSelection:{residentKey:'preferred',userVerification:'required'},
+      authenticatorSelection:{residentKey:'required',userVerification:'required',authenticatorAttachment:'platform'},
       supportedAlgorithmIDs:[-7,-257],
     })).then(options=>{
       state.webauthnChallenges.registration.set(challengeKey(),{challenge:options.challenge,expires:Date.now()+5*60*1000});
