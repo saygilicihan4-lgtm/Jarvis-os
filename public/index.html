@@ -620,15 +620,49 @@ function speak(text,lang=activeLanguage){
 }
 
 function spokenDigits(text){
-  const map={sifir:'0','sıfır':'0',bir:'1',iki:'2',uc:'3','üç':'3',dort:'4','dört':'4',bes:'5','beş':'5',alti:'6','altı':'6',yedi:'7',sekiz:'8',dokuz:'9'};
+  const digit={sifir:'0','sıfır':'0',bir:'1',iki:'2',uc:'3','üç':'3',dort:'4','dört':'4',bes:'5','beş':'5',alti:'6','altı':'6',yedi:'7',sekiz:'8',dokuz:'9'};
+  const tens={on:10,yirmi:20,otuz:30,kirk:40,'kırk':40,elli:50,altmis:60,'altmış':60,yetmis:70,'yetmiş':70,seksen:80,doksan:90};
   const normalized=String(text||'').toLocaleLowerCase('tr-TR').replace(/[^0-9a-zçğıöşüı\s]/gi,' ');
+  const raw=(normalized.match(/\d+/g)||[]).join('');
+  if(raw.length>=8)return raw.slice(0,8);
+
   const parts=normalized.split(/\s+/).filter(Boolean);
-  let out='';
-  for(const p of parts){
-    if(/^\d+$/.test(p))out+=p;
-    else if(Object.prototype.hasOwnProperty.call(map,p))out+=map[p];
+  if(parts.length&&parts.every(p=>Object.prototype.hasOwnProperty.call(digit,p))){
+    return parts.map(p=>digit[p]).join('').slice(0,8);
   }
-  return out.slice(0,8);
+
+  // Handle grouped spoken pairs such as "yirmi beş on beş doksan iki on sekiz".
+  let grouped='',groupOk=true;
+  for(let i=0;i<parts.length;i++){
+    const p=parts[i];
+    if(Object.prototype.hasOwnProperty.call(tens,p)){
+      let n=tens[p];
+      if(i+1<parts.length&&Object.prototype.hasOwnProperty.call(digit,parts[i+1])){
+        n+=Number(digit[parts[++i]]);
+      }
+      grouped+=String(n).padStart(2,'0');
+    }else if(Object.prototype.hasOwnProperty.call(digit,p)){
+      grouped+=digit[p];
+    }else{
+      groupOk=false;break;
+    }
+  }
+  if(groupOk&&grouped.length>=8)return grouped.slice(0,8);
+
+  // Full Turkish number phrase fallback: "yirmi beş milyon ..."
+  let total=0,current=0,seen=false;
+  for(const p of parts){
+    if(Object.prototype.hasOwnProperty.call(digit,p)){current+=Number(digit[p]);seen=true;continue}
+    if(Object.prototype.hasOwnProperty.call(tens,p)){current+=tens[p];seen=true;continue}
+    if(p==='yuz'||p==='yüz'){current=(current||1)*100;seen=true;continue}
+    if(p==='bin'){total+=(current||1)*1000;current=0;seen=true;continue}
+    if(p==='milyon'){total+=(current||1)*1000000;current=0;seen=true;continue}
+  }
+  if(seen){
+    const n=total+current;
+    if(Number.isFinite(n)&&n>=0&&n<=99999999)return String(Math.trunc(n)).padStart(8,'0');
+  }
+  return raw.slice(0,8);
 }
 function listenSessionCode(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -637,19 +671,18 @@ function listenSessionCode(){
   const r=new SR();r.lang='tr-TR';r.interimResults=false;r.continuous=false;
   b.disabled=true;b.textContent='DİNLİYOR...';authmsg.textContent='8 haneli kodu söyleyin.';
   r.onresult=e=>{
-    const transcript=Array.from(e.results).map(x=>x[0].transcript).join(' ');
-    let digits=spokenDigits(transcript);
-    // iOS often transcribes an 8-digit code as grouped numbers with spaces,
-    // punctuation or Turkish number words. Fall back to every recognized digit.
-    if(digits.length!==8)digits=String(transcript).replace(/\D/g,'').slice(0,8);
+    const transcript=Array.from(e.results).map(x=>x[0].transcript).join(' ').trim();
+    const digits=spokenDigits(transcript);
+    token.focus();
+    token.value=digits;
+    token.dispatchEvent(new Event('input',{bubbles:true}));
+    token.dispatchEvent(new Event('change',{bubbles:true}));
     if(digits.length!==8){
-      token.value=digits;
-      authmsg.textContent='ALGILANAN: '+(digits||'—')+' · 8 hane bekleniyor. Tekrar söyleyin.';
+      authmsg.textContent='DUYULAN: '+(transcript||'—')+' · ALGILANAN: '+(digits||'—')+' · 8 hane bekleniyor.';
       return;
     }
-    token.value=digits;
-    authmsg.textContent='KOD ALGILANDI · DOĞRULANIYOR';
-    setTimeout(()=>connect(),120);
+    authmsg.textContent='KOD ALGILANDI: '+digits+' · DOĞRULANIYOR';
+    setTimeout(()=>connect(),180);
   };
   r.onerror=e=>{authmsg.textContent='SES HATASI · '+String(e.error||'algılanamadı').toUpperCase()};
   r.onend=()=>{b.disabled=false;b.textContent='KODU SESLE GİR'};
@@ -879,7 +912,17 @@ async function bootstrapSession(){
       await load();setAuthenticated(true);resyncExistingPush().catch(()=>{});return;
     }
   }catch(_){}
-  // 2) No trusted cookie: try the enrolled passkey BEFORE showing the 8-digit recovery code.
+  // 2) Same-network fast path: require an approved signed PC Worker online
+  // through the same network egress. IP alone never authenticates the browser.
+  try{
+    const lan=await fetch('/api/session/lan-bootstrap',{method:'POST',credentials:'same-origin'});
+    if(lan.ok){
+      await load();setAuthenticated(true);authmsg.textContent='';resyncExistingPush().catch(()=>{});
+      consoleStatus.textContent='TRUSTED NETWORK · SIGNED PC WORKER VERIFIED';
+      return;
+    }
+  }catch(_){}
+  // 3) No trusted network session: try the enrolled passkey.
   try{
     const unlocked=await requireLocalDeviceUnlock(true);
     if(unlocked){
@@ -888,9 +931,9 @@ async function bootstrapSession(){
       return;
     }
   }catch(_){}
-  // 3) Recovery/new-device path only.
+  // 4) Recovery/new-device path only.
   setAuthenticated(false);
-  authmsg.textContent='FACE ID/PASSKEY KULLANILAMADI · 8 HANELI KURTARMA KODU';
+  authmsg.textContent='OTOMATIK GİRİŞ YOK · 8 HANELİ KURTARMA KODU';
 }
 bootstrapSession();
 setInterval(()=>{if(!loginOverlay.classList.contains('hidden'))return;load().catch(()=>setAuthenticated(false))},2500);
