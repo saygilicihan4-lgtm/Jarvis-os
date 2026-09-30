@@ -19,7 +19,7 @@ public static class JarvisMic {
 $fmt=New-Object JarvisMic+WAVEFORMATEX
 $fmt.wFormatTag=1;$fmt.nChannels=1;$fmt.nSamplesPerSec=16000;$fmt.wBitsPerSample=16;$fmt.nBlockAlign=2;$fmt.nAvgBytesPerSec=32000;$fmt.cbSize=0
 $h=[IntPtr]::Zero
-$rc=[JarvisMic]::waveInOpen([ref]$h,0xffffffff,[ref]$fmt,[IntPtr]::Zero,[IntPtr]::Zero,0)
+$rc=[JarvisMic]::waveInOpen([ref]$h,[uint32]::MaxValue,[ref]$fmt,[IntPtr]::Zero,[IntPtr]::Zero,0)
 if($rc -ne 0){Write-Host "[JARVIS] DOUBLE CLAP: MIC OPEN FAILED ($rc)";exit 3}
 $size=3200;$ptr=[Runtime.InteropServices.Marshal]::AllocHGlobal($size)
 $hdr=New-Object JarvisMic+WAVEHDR;$hdr.lpData=$ptr;$hdr.dwBufferLength=$size
