@@ -892,5 +892,5 @@ initDurableMemory().catch(e=>{const code=e&&e.code?String(e.code):'NO_CODE';log(
 server.listen(PORT,'0.0.0.0',()=>{
   log('BOOT','JARVIS OS v0.2 started');
   console.log('JARVIS OS listening on '+PORT);
-  console.log('[JARVIS] PHONE SESSION CODE: '+phoneCode+' (5 min, one use)');
+  console.log('[JARVIS] PHONE SESSION: one-time codes available only through approved signed Worker');
 });
