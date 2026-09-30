@@ -481,6 +481,24 @@ const server=http.createServer((req,res)=>{
     return json(res,401,{error:'trusted session required',pairingRequired:true});
   }
 
+  if(pathname==='/api/session/lan-bootstrap'&&req.method==='POST'){
+    // Same public egress alone is NOT sufficient. We also require an approved,
+    // recently-online signed PC Worker whose heartbeat came through that same
+    // network tag. This gives convenient home-Wi-Fi entry without making IP
+    // address itself the credential.
+    const tag=ipTag(req);
+    const trusted=Object.values(state.workers.devices).find(w=>
+      w&&w.approved&&w.authMode==='signed'&&workerOnline(w)&&w.networkTag===tag
+    );
+    if(!trusted){
+      log('LAN_SESSION_BOOTSTRAP_DENY','no signed online worker on matching network');
+      return json(res,401,{error:'trusted local network worker required'});
+    }
+    const exp=setJarvisSessionCookie(req,res);
+    log('LAN_SESSION_BOOTSTRAP','same-network signed worker presence accepted');
+    return json(res,200,{ok:true,networkTrusted:true,expiresAt:new Date(exp).toISOString()});
+  }
+
   if(pathname==='/api/db/status'&&req.method==='GET'){
     return json(res,200,{configured:!!db,ready:dbReady,persistent:dbReady,reminders:state.reminders.length,pushSubscriptions:Object.keys(state.pushSubscriptions).length,reminderStorage:dbReady?'postgresql':'unavailable',pushStorage:dbReady?'postgresql':'unavailable'});
   }
@@ -773,6 +791,7 @@ const server=http.createServer((req,res)=>{
         version:d.version?String(d.version):null,
         lastSeen:now(),
         capabilities:Array.isArray(d.capabilities)?d.capabilities.slice(0,50):[],
+        networkTag:ipTag(req),
         memory:d.memory&&typeof d.memory==='object'?{
           records:Number(d.memory.records)||0,
           bytes:Number(d.memory.bytes)||0,
@@ -782,7 +801,7 @@ const server=http.createServer((req,res)=>{
       const deviceId=d.deviceId?String(d.deviceId).replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80):null;
       if(deviceId){
         const previous=state.workers.devices[deviceId];
-        state.workers.devices[deviceId]={...snapshot,approved:previous?!!previous.approved:false,roles:previous&&previous.roles||[],allowedCapabilities:previous&&previous.allowedCapabilities||[]};
+        state.workers.devices[deviceId]={...snapshot,approved:previous?!!previous.approved:false,roles:previous&&previous.roles||[],allowedCapabilities:previous&&previous.allowedCapabilities||[],authMode:previous&&previous.authMode||'signed',credentialIssuedAt:previous&&previous.credentialIssuedAt||now()};
       }else state.workers.pc=snapshot;
       return json(res,200,{ok:true,at:snapshot.lastSeen,deviceId,approved:deviceId?!!state.workers.devices[deviceId].approved:true});
     });
