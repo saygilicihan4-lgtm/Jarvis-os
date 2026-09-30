@@ -184,8 +184,18 @@ async function resyncExistingPush(){
     const r=await fetch('/api/push/subscribe',{method:'POST',headers:{'content-type':'application/json'},credentials:'same-origin',body:JSON.stringify(sub.toJSON())});
     const d=await r.json().catch(()=>({}));
     if(!r.ok||d.durable!==true)throw new Error(d.error||'push sync failed');
+    localStorage.setItem('jarvisPhoneAlerts','on');
+    if(window.notifyBtn){
+      notifyBtn.textContent='TEST PHONE ALERT';
+      notifyBtn.disabled=false;
+      notifyBtn.onclick=sendPhoneAlertTest;
+    }
     return true;
   }catch(e){return false}
+}
+async function sendPhoneAlertTest(){
+  consoleStatus.textContent='PHONE ALERT · TEST SENDING';
+  try{const r=await fetch('/api/push/test',{method:'POST',credentials:'same-origin'});if(!r.ok)throw new Error('HTTP '+r.status);consoleStatus.textContent='PHONE ALERT · TEST QUEUED'}catch(e){consoleStatus.textContent='PHONE ALERT · TEST FAILED · '+String(e.message||e)}
 }
 async function enablePhoneAlerts(){
   notifyBtn.disabled=true;
@@ -219,10 +229,7 @@ async function enablePhoneAlerts(){
     localStorage.setItem('jarvisPhoneAlerts','on');
     notifyBtn.textContent='TEST PHONE ALERT';
     notifyBtn.disabled=false;
-    notifyBtn.onclick=async()=>{
-      consoleStatus.textContent='PHONE ALERT · TEST SENDING';
-      try{const r=await fetch('/api/push/test',{method:'POST',credentials:'same-origin'});if(!r.ok)throw new Error('HTTP '+r.status);consoleStatus.textContent='PHONE ALERT · TEST QUEUED'}catch(e){consoleStatus.textContent='PHONE ALERT · TEST FAILED · '+String(e.message||e)}
-    };
+    notifyBtn.onclick=sendPhoneAlertTest;
     consoleStatus.textContent='PHONE ALERTS · PUSH SUBSCRIBED';
   }catch(e){fail('PHONE ALERTS · SETUP ERROR',String(e&&e.name||'')+' '+String(e&&e.message||e).slice(0,80))}
 }
@@ -232,7 +239,7 @@ function notifyReminder(text){
 }
 if(window.notifyBtn){
   notifyBtn.addEventListener('click',enablePhoneAlerts);
-  if(localStorage.getItem('jarvisPhoneAlerts')==='on'&&'Notification' in window&&Notification.permission==='granted')notifyBtn.textContent='PHONE ALERTS ON';
+  if(localStorage.getItem('jarvisPhoneAlerts')==='on'&&'Notification' in window&&Notification.permission==='granted'){notifyBtn.textContent='TEST PHONE ALERT';notifyBtn.onclick=sendPhoneAlertTest;}
 }
 setInterval(checkLocalReminders,30000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkLocalReminders()});
