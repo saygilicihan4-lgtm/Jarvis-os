@@ -36,7 +36,7 @@ const TTS_VOICE='tr-TR-AhmetNeural';
 const TTS_RATE='-20%';
 const TTS_PITCH='-12Hz';
 const TTS_VOLUME='-3%';
-const MOBILE_TTS_VOLUME='+35%';
+const MOBILE_TTS_VOLUME='+55%';
 
 // Separate creator voice: intentionally different from JARVIS.
 // Used for YouTube Shorts/video narration assets, never for JARVIS replies.
