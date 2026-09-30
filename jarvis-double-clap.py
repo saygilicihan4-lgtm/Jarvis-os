@@ -71,9 +71,27 @@ RESET_GAP = 1.10
 COOLDOWN = 2.20
 
 def wake():
+    # Prefer signaling the already-open Jarvis UI through the local worker.
+    # This avoids launching Edge/new browser windows on every wake.
+    try:
+        import urllib.request
+        req = urllib.request.Request(
+            "http://127.0.0.1:8765/wake",
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=1.5) as r:
+            if 200 <= r.status < 300:
+                print("[JARVIS] DOUBLE CLAP: WAKE LOCAL", flush=True)
+                return
+    except Exception:
+        pass
+
+    # Fallback only if the local bridge is unavailable.
     url = "https://jarvis-os-1iuv.onrender.com/?wake=clap"
     webbrowser.open(url, new=0, autoraise=True)
-    print("[JARVIS] DOUBLE CLAP: WAKE", flush=True)
+    print("[JARVIS] DOUBLE CLAP: WAKE BROWSER FALLBACK", flush=True)
 
 try:
     with sd.InputStream(
