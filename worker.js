@@ -26,8 +26,48 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.15.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1'];
+const WORKER_VERSION='2.16.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1'];
+
+
+const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
+const TTS_VOICE='tr-TR-AhmetNeural';
+const TTS_RATE='-20%';
+const TTS_PITCH='-12Hz';
+const TTS_VOLUME='-3%';
+let speechQueue=Promise.resolve();
+
+function runHidden(file,args,timeoutMs=60000){
+  return new Promise((resolve,reject)=>{
+    let settled=false;
+    const p=childProcess.spawn(file,args,{windowsHide:true,stdio:'ignore'});
+    const finish=(err)=>{
+      if(settled)return;settled=true;clearTimeout(timer);
+      if(err)reject(err);else resolve();
+    };
+    const timer=setTimeout(()=>{try{p.kill()}catch(e){};finish(new Error(file+' zaman aşımına uğradı'))},timeoutMs);
+    p.on('error',finish);
+    p.on('exit',code=>code===0?finish():finish(new Error(file+' çıkış kodu '+code)));
+  });
+}
+async function speakJarvisNow(text){
+  if(!TTS_ENABLED)return;
+  const clean=String(text||'').replace(/\s+/g,' ').trim().slice(0,700);
+  if(!clean)return;
+  const mp3=path.join(os.tmpdir(),'jarvis-tts-'+process.pid+'-'+Date.now()+'-'+crypto.randomBytes(3).toString('hex')+'.mp3');
+  try{
+    await runHidden('py',['-m','edge_tts','--voice',TTS_VOICE,'--rate='+TTS_RATE,'--pitch='+TTS_PITCH,'--volume='+TTS_VOLUME,'--text',clean,'--write-media',mp3],45000);
+    const safe=mp3.replace(/'/g,"''");
+    const ps="Add-Type -AssemblyName PresentationCore; $p=New-Object System.Windows.Media.MediaPlayer; $p.Open([uri]'"+safe+"'); for($i=0;$i -lt 100 -and -not $p.NaturalDuration.HasTimeSpan;$i++){Start-Sleep -Milliseconds 100}; $p.Volume=1.0; $p.Play(); if($p.NaturalDuration.HasTimeSpan){Start-Sleep -Milliseconds ([int]$p.NaturalDuration.TimeSpan.TotalMilliseconds+500)}else{Start-Sleep -Seconds 15}; $p.Close()";
+    await runHidden('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-Command',ps],45000);
+  }finally{
+    try{if(fs.existsSync(mp3))fs.unlinkSync(mp3)}catch(e){}
+  }
+}
+function queueJarvisSpeech(text){
+  if(!TTS_ENABLED)return;
+  speechQueue=speechQueue.then(()=>speakJarvisNow(text)).catch(e=>console.error('[JARVIS] TTS:',e.message));
+}
 
 if(!TOKEN&&!DEVICE_TOKEN&&!PAIR_CODE){console.error('JARVIS signed cihaz kimliği veya pairing code gerekli.');process.exit(1)}
 function startWindowsWakeHelper(){
@@ -571,6 +611,7 @@ async function poll(){
     catch(e){result={ok:false,retryable:true,message:'Worker hatası: '+e.message}}
     remember({kind:'task_result',taskId:r.task.id,taskUid:r.task.uid,command:r.task.command,agent:r.task.agent,result});
     await api('/api/worker/result',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.task.id,uid:r.task.uid,...result})});
+    queueJarvisSpeech(result.message);
     console.log('#'+r.task.id+' '+(result.ok?'OK':'FAIL')+' '+result.message);
   }catch(e){console.error(new Date().toISOString(),e.message)}
 }
