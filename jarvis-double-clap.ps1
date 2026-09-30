@@ -26,7 +26,7 @@ $hdr=New-Object JarvisMic+WAVEHDR;$hdr.lpData=$ptr;$hdr.dwBufferLength=$size
 $hs=[Runtime.InteropServices.Marshal]::SizeOf([type][JarvisMic+WAVEHDR])
 [void][JarvisMic]::waveInPrepareHeader($h,[ref]$hdr,$hs)
 Write-Host '[JARVIS] DOUBLE CLAP: ARMED (LOCAL WINMM)'
-$last=0L;$cool=0L;$baseline=700.0
+$last=0L;$cool=0L;$baseline=500.0
 try{
  while($true){
   $hdr.dwBytesRecorded=0
@@ -35,16 +35,17 @@ try{
   $n=[int]($hdr.dwBytesRecorded/2);if($n -le 0){continue}
   $peak=0;$sum=0.0
   for($i=0;$i -lt $n;$i++){ $v=[Math]::Abs([Runtime.InteropServices.Marshal]::ReadInt16($ptr,$i*2));if($v -gt $peak){$peak=$v};$sum+=$v }
-  $avg=$sum/$n;$baseline=($baseline*.94)+($avg*.06);$threshold=[Math]::Max(5000,$baseline*6.5)
+  $avg=$sum/$n;$baseline=($baseline*.94)+($avg*.06);$threshold=[Math]::Max(2600,$baseline*4.0)
   $now=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
   if($peak -gt $threshold -and $now -gt $cool){
-   if($last -gt 0 -and ($now-$last) -ge 120 -and ($now-$last) -le 850){
+   Write-Host ("[JARVIS] DOUBLE CLAP: HIT peak="+$peak+" threshold="+[int]$threshold)
+   if($last -gt 0 -and ($now-$last) -ge 100 -and ($now-$last) -le 1000){
     $last=0;$cool=$now+2200
     Start-Process 'https://jarvis-os-1iuv.onrender.com/?wake=clap'
     Write-Host '[JARVIS] DOUBLE CLAP: WAKE'
    } else {$last=$now}
   }
-  if($last -gt 0 -and ($now-$last) -gt 900){$last=0}
+  if($last -gt 0 -and ($now-$last) -gt 1100){$last=0}
  }
 } finally {
  [void][JarvisMic]::waveInReset($h);[void][JarvisMic]::waveInUnprepareHeader($h,[ref]$hdr,$hs);[void][JarvisMic]::waveInClose($h);[Runtime.InteropServices.Marshal]::FreeHGlobal($ptr)
