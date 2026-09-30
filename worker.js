@@ -27,8 +27,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.32.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3'];
+const WORKER_VERSION='2.33.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1'];
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -77,6 +77,20 @@ async function speakJarvisNow(text){
     try{if(fs.existsSync(mp3))fs.unlinkSync(mp3)}catch(e){}
     await new Promise(r=>setTimeout(r,900));
     setTtsLock(false);
+  }
+}
+async function renderJarvisMp3Base64(text){
+  if(!TTS_ENABLED)throw new Error('local TTS disabled');
+  const clean=String(text||'').replace(/\s+/g,' ').trim().slice(0,700);
+  if(!clean)throw new Error('text required');
+  const mp3=path.join(os.tmpdir(),'jarvis-mobile-tts-'+process.pid+'-'+Date.now()+'-'+crypto.randomBytes(3).toString('hex')+'.mp3');
+  try{
+    await runHidden('py',['-m','edge_tts','--voice',TTS_VOICE,'--rate='+TTS_RATE,'--pitch='+TTS_PITCH,'--volume='+TTS_VOLUME,'--text',clean,'--write-media',mp3],45000);
+    const buf=fs.readFileSync(mp3);
+    if(!buf.length)throw new Error('empty tts audio');
+    return buf.toString('base64');
+  }finally{
+    try{if(fs.existsSync(mp3))fs.unlinkSync(mp3)}catch(e){}
   }
 }
 function queueJarvisSpeech(text){
@@ -721,6 +735,25 @@ let lastStateSync=0;
 let restoreAttempted=false;
 let lastAuthRecovery=0;
 let phoneSessionCodeShown=false;
+async function serviceMobileTts(){
+  try{
+    const r=await api('/api/worker/mobile-tts-next');
+    if(!r||!r.request)return false;
+    const q=r.request;
+    try{
+      const audio=await renderJarvisMp3Base64(q.text);
+      await api('/api/worker/mobile-tts-result',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:q.id,ok:true,audio})});
+      console.log('[JARVIS] MOBILE TTS READY: '+q.id);
+    }catch(e){
+      await api('/api/worker/mobile-tts-result',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:q.id,ok:false,error:String(e.message||e)})}).catch(()=>{});
+      console.error('[JARVIS] MOBILE TTS:',e.message);
+    }
+    return true;
+  }catch(e){
+    if(!/404|not found/i.test(String(e.message||'')))console.error('[JARVIS] MOBILE TTS POLL:',e.message);
+    return false;
+  }
+}
 async function poll(){
   try{
     await pairDevice();
@@ -742,6 +775,7 @@ async function poll(){
       phoneSessionCodeShown=true;
       console.log('[JARVIS] TELEFON SESSION CODE: '+p.code+' (5 dakika, tek kullanim)');
     }
+    await serviceMobileTts();
     if(Date.now()-lastStateSync>30000){
       await recoverTransactionJournals();
       await rehydrateCheckpoints();
