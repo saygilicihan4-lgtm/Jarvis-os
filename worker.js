@@ -27,7 +27,7 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.28.0';
+const WORKER_VERSION='2.29.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3'];
 
 
@@ -37,6 +37,10 @@ const TTS_RATE='-20%';
 const TTS_PITCH='-12Hz';
 const TTS_VOLUME='-3%';
 let speechQueue=Promise.resolve();
+const TTS_LOCK_FILE=path.join(__dirname,'jarvis-tts-active.lock');
+let lastQueuedSpeech='';
+let lastQueuedSpeechAt=0;
+let lastLocalWakeAt=0;
 let localWakeCounter=0;
 
 function runHidden(file,args,timeoutMs=60000){
@@ -52,11 +56,18 @@ function runHidden(file,args,timeoutMs=60000){
     p.on('exit',code=>code===0?finish():finish(new Error(file+' çıkış kodu '+code)));
   });
 }
+function setTtsLock(active){
+  try{
+    if(active)fs.writeFileSync(TTS_LOCK_FILE,String(Date.now()),'utf8');
+    else if(fs.existsSync(TTS_LOCK_FILE))fs.unlinkSync(TTS_LOCK_FILE);
+  }catch(e){}
+}
 async function speakJarvisNow(text){
   if(!TTS_ENABLED)return;
   const clean=String(text||'').replace(/\s+/g,' ').trim().slice(0,700);
   if(!clean)return;
   const mp3=path.join(os.tmpdir(),'jarvis-tts-'+process.pid+'-'+Date.now()+'-'+crypto.randomBytes(3).toString('hex')+'.mp3');
+  setTtsLock(true);
   try{
     await runHidden('py',['-m','edge_tts','--voice',TTS_VOICE,'--rate='+TTS_RATE,'--pitch='+TTS_PITCH,'--volume='+TTS_VOLUME,'--text',clean,'--write-media',mp3],45000);
     const safe=mp3.replace(/'/g,"''");
@@ -64,11 +75,22 @@ async function speakJarvisNow(text){
     await runHidden('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-Command',ps],45000);
   }finally{
     try{if(fs.existsSync(mp3))fs.unlinkSync(mp3)}catch(e){}
+    await new Promise(r=>setTimeout(r,900));
+    setTtsLock(false);
   }
 }
 function queueJarvisSpeech(text){
   if(!TTS_ENABLED)return;
-  speechQueue=speechQueue.then(()=>speakJarvisNow(text)).catch(e=>console.error('[JARVIS] TTS:',e.message));
+  const clean=String(text||'').replace(/\s+/g,' ').trim();
+  if(!clean)return;
+  const now=Date.now();
+  if(clean===lastQueuedSpeech && (now-lastQueuedSpeechAt)<15000){
+    console.log('[JARVIS] TTS DUPLICATE SUPPRESSED');
+    return;
+  }
+  lastQueuedSpeech=clean;
+  lastQueuedSpeechAt=now;
+  speechQueue=speechQueue.then(()=>speakJarvisNow(clean)).catch(e=>console.error('[JARVIS] TTS:',e.message));
 }
 
 
@@ -117,6 +139,12 @@ function startLocalTtsBridge(){
       return res.end(JSON.stringify({ok:true,voice:TTS_VOICE,version:WORKER_VERSION}));
     }
     if(req.method==='POST'&&req.url==='/wake'){
+      const now=Date.now();
+      if((now-lastLocalWakeAt)<12000){
+        res.writeHead(202,{'content-type':'application/json'});
+        return res.end(JSON.stringify({ok:true,suppressed:true,wake:localWakeCounter}));
+      }
+      lastLocalWakeAt=now;
       localWakeCounter++;
       showJarvisScreen();
       res.writeHead(202,{'content-type':'application/json'});
@@ -175,7 +203,7 @@ function startWindowsWakeHelper(){
 
 function startWindowsClapHelper(){
   if(process.platform!=='win32')return;
-  const helper=ensureWindowsHelper('jarvis-double-clap-v6.py');
+  const helper=ensureWindowsHelper('jarvis-double-clap-v7.py');
   if(!helper){console.error('[JARVIS] DOUBLE CLAP: helper hazirlanamadi');return}
   try{
     const p=childProcess.spawn('py',[helper],{windowsHide:true,stdio:['ignore','pipe','pipe']});
