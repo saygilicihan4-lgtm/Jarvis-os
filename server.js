@@ -510,6 +510,21 @@ const server=http.createServer((req,res)=>{
       }).catch(e=>{log('DB_PUSH_ERROR',String(e.message||e).slice(0,120));return json(res,503,{error:'durable storage unavailable'})});
     });
   }
+  if(pathname==='/api/push/background-test'&&req.method==='POST'){
+    if(!validPhoneSession(req))return json(res,401,{error:'trusted session required'});
+    if(!dbReady)return json(res,503,{error:'durable storage unavailable'});
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      const seconds=Math.max(30,Math.min(600,Number(d&&d.seconds)||60));
+      const r={id:crypto.randomUUID(),title:'Cihan Bey, JARVIS arka plan bildirimi çalışıyor.',when:new Date(Date.now()+seconds*1000).toISOString(),sent:false,createdAt:now(),sentAt:null,delivered:0};
+      persistReminder(r).then(()=>{
+        state.reminders.push(r);state.reminders=state.reminders.slice(-500);touchState();
+        log('BACKGROUND_PUSH_TEST',r.id+' scheduled '+seconds+'s durable');
+        return json(res,201,{ok:true,durable:true,id:r.id,when:r.when,seconds});
+      }).catch(e=>{log('DB_REMINDER_ERROR',String(e.message||e).slice(0,120));return json(res,503,{error:'durable storage unavailable'})});
+    });
+  }
+
   if(pathname==='/api/push/test'&&req.method==='POST'){
     if(!VAPID_PUBLIC||!VAPID_PRIVATE)return json(res,503,{error:'push not configured'});
     const ids=Object.keys(state.pushSubscriptions);
