@@ -371,6 +371,13 @@ async function dispatchDueReminders(){
   }
 }
 setInterval(()=>dispatchDueReminders().catch(e=>log('PUSH_LOOP_ERROR',String(e.message||e).slice(0,120))),30000);
+// Also sweep immediately after durable state restore/startup so a Render restart
+// cannot add an unnecessary 30-second delay to an already-due reminder.
+const startupPushSweep=setInterval(()=>{
+  if(!dbReady)return;
+  clearInterval(startupPushSweep);
+  dispatchDueReminders().catch(e=>log('PUSH_STARTUP_ERROR',String(e.message||e).slice(0,120)));
+},1000);
 
 const server=http.createServer((req,res)=>{
   const u=new URL(req.url,'http://localhost');
