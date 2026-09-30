@@ -288,6 +288,7 @@ if(SpeechRecognition){
 token.value='';
 const wakeSource=new URLSearchParams(location.search).get('wake');
 let clapWakeHandled=false;
+let localWakeSeen=0;
 if(wakeSource==='f8'){
   history.replaceState({},document.title,location.pathname);
   setTimeout(()=>{
@@ -362,6 +363,28 @@ async function enableClapWake(){
     clapState.textContent=' · DOUBLE CLAP: MIC DENIED';
   }
 }
+async function pollLocalWake(){
+  try{
+    const r=await fetch('http://127.0.0.1:8765/wake-state',{cache:'no-store'});
+    if(!r.ok)return;
+    const d=await r.json();
+    const n=Number(d.wake||0);
+    if(!localWakeSeen){localWakeSeen=n;return}
+    if(n>localWakeSeen){
+      localWakeSeen=n;
+      const greeting=await wakeJarvis();
+      const wait=Math.min(12000,2200+String(greeting||'').length*75);
+      setTimeout(()=>{
+        if(!privacyMode&&recognition&&!listening){
+          try{recognition.start()}catch(e){}
+        }
+      },wait);
+    }
+  }catch(e){}
+}
+setInterval(pollLocalWake,700);
+setTimeout(pollLocalWake,1200);
+
 async function wakeJarvis(){
   if(privacyMode){
     exitPrivacyMode('DOUBLE CLAP');
