@@ -7,6 +7,9 @@ using System.Runtime.InteropServices;
 public static class JarvisMic {
  [StructLayout(LayoutKind.Sequential)] public struct WAVEFORMATEX { public ushort wFormatTag,nChannels; public uint nSamplesPerSec,nAvgBytesPerSec; public ushort nBlockAlign,wBitsPerSample,cbSize; }
  [StructLayout(LayoutKind.Sequential)] public struct WAVEHDR { public IntPtr lpData; public uint dwBufferLength,dwBytesRecorded; public UIntPtr dwUser; public uint dwFlags,dwLoops; public IntPtr lpNext,reserved; }
+ [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Auto)] public struct WAVEINCAPS { public ushort wMid,wPid; public uint vDriverVersion; [MarshalAs(UnmanagedType.ByValTStr, SizeConst=32)] public string szPname; public uint dwFormats; public ushort wChannels; public ushort wReserved1; }
+ [DllImport("winmm.dll")] public static extern uint waveInGetNumDevs();
+ [DllImport("winmm.dll", CharSet=CharSet.Auto)] public static extern int waveInGetDevCaps(UIntPtr uDeviceID, out WAVEINCAPS caps, uint cbwic);
  [DllImport("winmm.dll")] public static extern int waveInOpen(out IntPtr h,uint id,ref WAVEFORMATEX f,IntPtr cb,IntPtr inst,uint flags);
  [DllImport("winmm.dll")] public static extern int waveInPrepareHeader(IntPtr h,ref WAVEHDR hdr,uint sz);
  [DllImport("winmm.dll")] public static extern int waveInAddBuffer(IntPtr h,ref WAVEHDR hdr,uint sz);
@@ -19,14 +22,31 @@ public static class JarvisMic {
 $fmt=New-Object JarvisMic+WAVEFORMATEX
 $fmt.wFormatTag=1;$fmt.nChannels=1;$fmt.nSamplesPerSec=16000;$fmt.wBitsPerSample=16;$fmt.nBlockAlign=2;$fmt.nAvgBytesPerSec=32000;$fmt.cbSize=0
 $h=[IntPtr]::Zero
-$rc=[JarvisMic]::waveInOpen([ref]$h,[uint32]::MaxValue,[ref]$fmt,[IntPtr]::Zero,[IntPtr]::Zero,0)
-if($rc -ne 0){Write-Host "[JARVIS] DOUBLE CLAP: MIC OPEN FAILED ($rc)";exit 3}
+$deviceId=[uint32]::MaxValue
+$deviceName='WAVE_MAPPER'
+try{
+ $count=[JarvisMic]::waveInGetNumDevs()
+ for($d=0;$d -lt $count;$d++){
+   $caps=New-Object JarvisMic+WAVEINCAPS
+   $capSize=[Runtime.InteropServices.Marshal]::SizeOf([type][JarvisMic+WAVEINCAPS])
+   if([JarvisMic]::waveInGetDevCaps([UIntPtr]$d,[ref]$caps,$capSize) -eq 0){
+     if($caps.szPname -match 'USB.*Microphone|Microphone.*USB'){
+       $deviceId=[uint32]$d
+       $deviceName=$caps.szPname
+       break
+     }
+   }
+ }
+}catch{}
+$rc=[JarvisMic]::waveInOpen([ref]$h,$deviceId,[ref]$fmt,[IntPtr]::Zero,[IntPtr]::Zero,0)
+if($rc -ne 0){Write-Host "[JARVIS] DOUBLE CLAP: MIC OPEN FAILED ($rc) device=$deviceName";exit 3}
+Write-Host ("[JARVIS] DOUBLE CLAP: INPUT "+$deviceName+" id="+$deviceId)
 $size=3200;$ptr=[Runtime.InteropServices.Marshal]::AllocHGlobal($size)
 $hdr=New-Object JarvisMic+WAVEHDR;$hdr.lpData=$ptr;$hdr.dwBufferLength=$size
 $hs=[Runtime.InteropServices.Marshal]::SizeOf([type][JarvisMic+WAVEHDR])
 [void][JarvisMic]::waveInPrepareHeader($h,[ref]$hdr,$hs)
 Write-Host '[JARVIS] DOUBLE CLAP: ARMED (LOCAL WINMM)'
-$last=0L;$cool=0L;$baseline=500.0
+$last=0L;$cool=0L;$baseline=300.0;$lastMeter=0L
 try{
  while($true){
   $hdr.dwBytesRecorded=0
@@ -35,8 +55,9 @@ try{
   $n=[int]($hdr.dwBytesRecorded/2);if($n -le 0){continue}
   $peak=0;$sum=0.0
   for($i=0;$i -lt $n;$i++){ $v=[Math]::Abs([Runtime.InteropServices.Marshal]::ReadInt16($ptr,$i*2));if($v -gt $peak){$peak=$v};$sum+=$v }
-  $avg=$sum/$n;$baseline=($baseline*.94)+($avg*.06);$threshold=[Math]::Max(2600,$baseline*4.0)
+  $avg=$sum/$n;$baseline=($baseline*.94)+($avg*.06);$threshold=[Math]::Max(1200,$baseline*2.8)
   $now=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+  if(($now-$lastMeter) -ge 1200){Write-Host ("[JARVIS] DOUBLE CLAP: LEVEL peak="+$peak+" threshold="+[int]$threshold);$lastMeter=$now}
   if($peak -gt $threshold -and $now -gt $cool){
    Write-Host ("[JARVIS] DOUBLE CLAP: HIT peak="+$peak+" threshold="+[int]$threshold)
    if($last -gt 0 -and ($now-$last) -ge 100 -and ($now-$last) -le 1000){
