@@ -619,6 +619,15 @@ function bytesToB64url(a){let s='';a.forEach(b=>s+=String.fromCharCode(b));retur
 async function enableDeviceLock(){
   if(!window.PublicKeyCredential){consoleStatus.textContent='DEVICE LOCK · BROWSER UNSUPPORTED';return}
   try{
+    if(PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable){
+      const platform=await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+      if(!platform){
+        localStorage.removeItem('jarvisDeviceLock');
+        deviceLockBtn.textContent='ENABLE DEVICE LOCK';
+        consoleStatus.textContent='DEVICE LOCK · FACE ID/PASSKEY UNAVAILABLE ON THIS WEB APP';
+        return;
+      }
+    }
     deviceLockBtn.disabled=true;consoleStatus.textContent='DEVICE LOCK · REGISTERING PASSKEY...';
     const r=await fetch('/api/webauthn/register/options',{method:'POST',credentials:'same-origin'});
     const o=await r.json();if(!r.ok)throw Error(o.error||'options failed');
