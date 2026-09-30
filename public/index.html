@@ -601,11 +601,29 @@ function browserSpeak(text,lang=activeLanguage){
   if(!('speechSynthesis' in window)||!text)return;
   speechSynthesis.cancel();
   const u=new SpeechSynthesisUtterance(text);
-  u.lang=lang||activeLanguage;u.rate=.95;u.pitch=.85;
+  u.lang=lang||activeLanguage;
+
   const voices=speechSynthesis.getVoices();
   const base=String(u.lang).split('-')[0].toLowerCase();
-  const matching=voices.find(v=>String(v.lang||'').toLowerCase().startsWith(base));
-  if(matching)u.voice=matching;
+  const sameLang=voices.filter(v=>String(v.lang||'').toLowerCase().startsWith(base));
+
+  // Prefer Turkish male voices on iPhone/Android. Names vary by OS version,
+  // so use a ranked list instead of taking the first Turkish voice (often female).
+  const maleHints=['cem','ahmet','tolga','mert','male','erkek'];
+  const preferred=sameLang.find(v=>{
+    const n=String(v.name||'').toLocaleLowerCase('tr-TR');
+    return maleHints.some(h=>n.includes(h));
+  }) || sameLang[0];
+
+  if(preferred)u.voice=preferred;
+
+  // Cinematic Jarvis profile for device TTS fallback.
+  // Mobile Web Speech cannot reproduce Edge AhmetNeural exactly, but this keeps
+  // the same slower/deeper character instead of the default female profile.
+  u.rate=isMobileJarvis()?.82:.95;
+  u.pitch=isMobileJarvis()?.62:.85;
+  u.volume=1;
+
   u.onstart=()=>document.body.classList.add('speaking');
   u.onend=()=>document.body.classList.remove('speaking');
   speechSynthesis.speak(u);
