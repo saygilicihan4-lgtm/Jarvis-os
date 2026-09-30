@@ -439,7 +439,9 @@ const server=http.createServer((req,res)=>{
   }
 
   if(pathname==='/api/webauthn/auth/options'&&req.method==='POST'){
-    if(!validPhoneSession(req))return json(res,401,{error:'trusted session required'});
+    // Passkey authentication is the recovery path when the trusted session cookie is absent.
+    // Do not require an existing session here; verification below still requires a registered credential and UV.
+
     if(!dbReady)return json(res,503,{error:'durable storage unavailable'});
     db.query('SELECT id,transports FROM jarvis_webauthn_credentials ORDER BY created_at').then(async q=>{
       if(!q.rows.length)return json(res,409,{error:'no passkey enrolled'});
@@ -451,7 +453,7 @@ const server=http.createServer((req,res)=>{
   }
 
   if(pathname==='/api/webauthn/auth/verify'&&req.method==='POST'){
-    if(!validPhoneSession(req))return json(res,401,{error:'trusted session required'});
+
     if(!dbReady)return json(res,503,{error:'durable storage unavailable'});
     const pending=state.webauthnChallenges.authentication.get(challengeKey());
     if(!pending||pending.expires<Date.now())return json(res,400,{error:'authentication challenge expired'});
@@ -465,7 +467,8 @@ const server=http.createServer((req,res)=>{
         await db.query('UPDATE jarvis_webauthn_credentials SET counter=$2,last_used_at=now() WHERE id=$1',[a.id,Number(v.authenticationInfo.newCounter)]);
         state.webauthnChallenges.authentication.delete(challengeKey());
         log('WEBAUTHN_AUTH','server-verified passkey assertion accepted');
-        return json(res,200,{ok:true,verified:true});
+        const exp=setJarvisSessionCookie(req,res);
+        return json(res,200,{ok:true,verified:true,session:true,expiresAt:new Date(exp).toISOString()});
       }).catch(e=>{log('WEBAUTHN_AUTH_FAIL',String(e.message||e).slice(0,120));return json(res,403,{error:'passkey verification failed'})});
     });
   }
@@ -488,7 +491,7 @@ const server=http.createServer((req,res)=>{
     return json(res,200,{ok:true,name:'JARVIS OS',version:'0.2.0',zeroCostFirst:true,auth:!!TOKEN,pcWorker:pcOnline(),devices:{approved:approved.length,online:online.length,signed:signed.length,latestVersion:latest&&latest.version||null,latestSeen:latest&&latest.lastSeen||null}});
   }
 
-  if(pathname.startsWith('/api/')&&!['/api/pairing/exchange','/api/session/exchange','/api/session/bootstrap'].includes(pathname)){
+  if(pathname.startsWith('/api/')&&!['/api/pairing/exchange','/api/session/exchange','/api/session/bootstrap','/api/webauthn/auth/options','/api/webauthn/auth/verify'].includes(pathname)){
     const ident=workerIdentity(req),workerRoute=pathname.startsWith('/api/worker/')||pathname==='/api/state/snapshot'||pathname==='/api/state/restore'||pathname==='/api/session/create';
     if(workerRoute&&ident){
       const signedWorker=deviceWorker(ident.deviceId);if(signedWorker)signedWorker.authMode='signed';
