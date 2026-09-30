@@ -389,6 +389,13 @@ const server=http.createServer((req,res)=>{
   const expectedOrigin='https://'+rpID;
   const challengeKey=()=>crypto.createHash('sha256').update(String(cookieMap(req).jarvis_session||clientIp(req))).digest('hex');
 
+  if(pathname==='/api/webauthn/diagnostics'&&req.method==='GET'){
+    if(!validPhoneSession(req))return json(res,401,{error:'trusted session required'});
+    if(!dbReady)return json(res,503,{error:'durable storage unavailable'});
+    db.query('SELECT count(*)::int AS count,max(last_used_at) AS last_used,max(created_at) AS last_created FROM jarvis_webauthn_credentials').then(q=>json(res,200,{ok:true,count:Number(q.rows[0].count),lastCreated:q.rows[0].last_created||null,lastUsed:q.rows[0].last_used||null,rpID,expectedOrigin})).catch(()=>json(res,503,{error:'durable storage unavailable'}));
+    return;
+  }
+
   if(pathname==='/api/webauthn/status'&&req.method==='GET'){
     if(!validPhoneSession(req))return json(res,401,{error:'trusted session required'});
     if(!dbReady)return json(res,503,{error:'durable storage unavailable'});
@@ -421,12 +428,12 @@ const server=http.createServer((req,res)=>{
       if(err)return json(res,400,{error:'bad json'});
       Promise.resolve(verifyRegistrationResponse({response:d,expectedChallenge:pending.challenge,expectedOrigin,expectedRPID:rpID,requireUserVerification:true}))
       .then(async v=>{
-        if(!v.verified||!v.registrationInfo)return json(res,403,{error:'passkey verification failed'});
+        if(!v.verified||!v.registrationInfo){log('WEBAUTHN_REGISTER_REJECT','verification returned unverified');return json(res,403,{error:'passkey verification failed'})}
         const a=v.registrationInfo.credential;
         await db.query('INSERT INTO jarvis_webauthn_credentials(id,public_key,counter,transports,device_type,backed_up,last_used_at) VALUES($1,$2,$3,$4,$5,$6,now()) ON CONFLICT(id) DO UPDATE SET public_key=EXCLUDED.public_key,counter=EXCLUDED.counter,transports=EXCLUDED.transports,device_type=EXCLUDED.device_type,backed_up=EXCLUDED.backed_up,last_used_at=now()',[a.id,Buffer.from(a.publicKey),Number(a.counter||0),JSON.stringify(a.transports||[]),String(v.registrationInfo.credentialDeviceType||''),!!v.registrationInfo.credentialBackedUp]);
         state.webauthnChallenges.registration.delete(challengeKey());
         log('WEBAUTHN_REGISTER','server-verified passkey enrolled');
-        return json(res,200,{ok:true,verified:true});
+        return json(res,200,{ok:true,verified:true,stored:true});
       }).catch(e=>{log('WEBAUTHN_REGISTER_FAIL',String(e.message||e).slice(0,120));return json(res,403,{error:'passkey verification failed'})});
     });
   }
