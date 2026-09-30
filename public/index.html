@@ -51,6 +51,7 @@
       <div class="metric"><span>REMOTE MODE</span><b id="remoteMode">PC REQUIRED</b></div>
       <div class="metric"><span>ASSISTANT</span><b id="assistantState">CALENDAR READY</b></div>
       <button id="notifyBtn" type="button">ENABLE PHONE ALERTS</button>
+      <button id="backgroundTestBtn" type="button">BACKGROUND TEST 60S</button>
       <button id="deviceLockBtn" type="button">ENABLE DEVICE LOCK</button>
       <div class="metric"><span>WORKER SETUP</span><b id="workerSetup">RUN LAUNCHER ON PC</b></div>
       <div class="metric"><span>MEMORY</span><b id="memoryState">VOLATILE</b></div>
@@ -193,6 +194,19 @@ async function resyncExistingPush(){
     return true;
   }catch(e){return false}
 }
+async function scheduleBackgroundTest(){
+  backgroundTestBtn.disabled=true;
+  consoleStatus.textContent='BACKGROUND TEST · SCHEDULING 60S';
+  try{
+    const r=await fetch('/api/push/background-test',{method:'POST',headers:{'content-type':'application/json'},credentials:'same-origin',body:JSON.stringify({seconds:60})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||j.durable!==true)throw new Error(j.error||'schedule failed');
+    consoleStatus.textContent='BACKGROUND TEST · ARMED · CLOSE JARVIS NOW';
+    backgroundTestBtn.textContent='BACKGROUND TEST ARMED';
+    setTimeout(()=>{backgroundTestBtn.disabled=false;backgroundTestBtn.textContent='BACKGROUND TEST 60S'},65000);
+  }catch(e){backgroundTestBtn.disabled=false;consoleStatus.textContent='BACKGROUND TEST · FAILED · '+String(e.message||e).slice(0,80)}
+}
+if(window.backgroundTestBtn)backgroundTestBtn.addEventListener('click',scheduleBackgroundTest);
 async function sendPhoneAlertTest(){
   consoleStatus.textContent='PHONE ALERT · TEST SENDING';
   try{const r=await fetch('/api/push/test',{method:'POST',credentials:'same-origin'});if(!r.ok)throw new Error('HTTP '+r.status);consoleStatus.textContent='PHONE ALERT · TEST QUEUED'}catch(e){consoleStatus.textContent='PHONE ALERT · TEST FAILED · '+String(e.message||e)}
