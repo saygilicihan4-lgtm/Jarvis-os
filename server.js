@@ -392,7 +392,7 @@ const server=http.createServer((req,res)=>{
   if(pathname==='/api/webauthn/status'&&req.method==='GET'){
     if(!validPhoneSession(req))return json(res,401,{error:'trusted session required'});
     if(!dbReady)return json(res,503,{error:'durable storage unavailable'});
-    db.query("SELECT count(*)::int AS count FROM jarvis_webauthn_credentials WHERE device_type='singleDevice' AND backed_up=false").then(q=>json(res,200,{ok:true,enrolled:Number(q.rows[0].count)>0,count:Number(q.rows[0].count),policy:'local-platform-only'})).catch(()=>json(res,503,{error:'durable storage unavailable'}));
+    db.query("SELECT count(*)::int AS count FROM jarvis_webauthn_credentials WHERE public_key IS NOT NULL").then(q=>json(res,200,{ok:true,enrolled:Number(q.rows[0].count)>0,count:Number(q.rows[0].count),policy:'local-platform-only'})).catch(()=>json(res,503,{error:'durable storage unavailable'}));
     return;
   }
 
