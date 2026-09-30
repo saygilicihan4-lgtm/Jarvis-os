@@ -18,6 +18,8 @@ def ensure_packages():
 sd, np = ensure_packages()
 devices = sd.query_devices()
 
+DEBUG_LEVELS = False
+
 device_index = None
 device_name = None
 
@@ -243,7 +245,7 @@ try:
                 noise_rms = (noise_rms * 0.99) + (rms * 0.01)
                 noise_diff = (noise_diff * 0.99) + (diff_rms * 0.01)
 
-            if now - last_meter >= 1.5:
+            if DEBUG_LEVELS and now - last_meter >= 1.5:
                 print(
                     f"[JARVIS] DOUBLE CLAP V3: LEVEL peak={peak:.4f} "
                     f"thr={peak_thr:.4f} diff={diff_rms:.4f} hf={hf_ratio:.2f}",
