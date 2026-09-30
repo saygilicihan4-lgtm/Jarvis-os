@@ -582,22 +582,27 @@ function listenSessionCode(){
   try{r.start()}catch(e){b.disabled=false;b.textContent='KODU SESLE GİR';authmsg.textContent='Mikrofon başlatılamadı.'}
 }
 
+function b64urlToBytes(s){s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';return Uint8Array.from(atob(s),x=>x.charCodeAt(0))}
+function publicKeyCreationOptions(o){return {...o,challenge:b64urlToBytes(o.challenge),user:{...o.user,id:b64urlToBytes(o.user.id)},excludeCredentials:(o.excludeCredentials||[]).map(x=>({...x,id:b64urlToBytes(x.id)}))}}
+function publicKeyRequestOptions(o){return {...o,challenge:b64urlToBytes(o.challenge),allowCredentials:(o.allowCredentials||[]).map(x=>({...x,id:b64urlToBytes(x.id)}))}}
+function credJSON(c){return {id:c.id,rawId:c.id,type:c.type,response:{clientDataJSON:bytesToB64url(new Uint8Array(c.response.clientDataJSON)),attestationObject:c.response.attestationObject?bytesToB64url(new Uint8Array(c.response.attestationObject)):undefined,authenticatorData:c.response.authenticatorData?bytesToB64url(new Uint8Array(c.response.authenticatorData)):undefined,signature:c.response.signature?bytesToB64url(new Uint8Array(c.response.signature)):undefined,userHandle:c.response.userHandle?bytesToB64url(new Uint8Array(c.response.userHandle)):null},clientExtensionResults:c.getClientExtensionResults?c.getClientExtensionResults():{}}}
+function bytesToB64url(a){let s='';a.forEach(b=>s+=String.fromCharCode(b));return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
+
 async function enableDeviceLock(){
   if(!window.PublicKeyCredential){consoleStatus.textContent='DEVICE LOCK · BROWSER UNSUPPORTED';return}
   try{
-    const challenge=crypto.getRandomValues(new Uint8Array(32));
-    const userId=crypto.getRandomValues(new Uint8Array(16));
-    const cred=await navigator.credentials.create({publicKey:{
-      challenge,rp:{name:'JARVIS OS'},user:{id:userId,name:'jarvis-owner',displayName:'JARVIS Owner'},
-      pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
-      authenticatorSelection:{authenticatorAttachment:'platform',residentKey:'preferred',userVerification:'required'},
-      timeout:60000,attestation:'none'
-    }});
-    if(!cred)throw new Error('cancelled');
-    localStorage.setItem('jarvisDeviceLock','enabled');
+    deviceLockBtn.disabled=true;consoleStatus.textContent='DEVICE LOCK · REGISTERING PASSKEY...';
+    const r=await fetch('/api/webauthn/register/options',{method:'POST',credentials:'same-origin'});
+    const o=await r.json();if(!r.ok)throw Error(o.error||'options failed');
+    const cred=await navigator.credentials.create({publicKey:publicKeyCreationOptions(o)});
+    if(!cred)throw Error('cancelled');
+    const v=await fetch('/api/webauthn/register/verify',{method:'POST',headers:{'content-type':'application/json'},credentials:'same-origin',body:JSON.stringify(credJSON(cred))});
+    const j=await v.json();if(!v.ok||!j.verified)throw Error(j.error||'verification failed');
+    localStorage.setItem('jarvisDeviceLock','server-verified');
     deviceLockBtn.textContent='DEVICE LOCK ON';
-    consoleStatus.textContent='DEVICE LOCK · FACE ID / DEVICE AUTH READY';
-  }catch(e){consoleStatus.textContent='DEVICE LOCK · NOT ENABLED'}
+    consoleStatus.textContent='DEVICE LOCK · SERVER-VERIFIED PASSKEY READY';
+  }catch(e){consoleStatus.textContent='DEVICE LOCK · NOT ENABLED · '+String(e.message||e).slice(0,80)}
+  finally{deviceLockBtn.disabled=false}
 }
 deviceLockBtn.onclick=enableDeviceLock;
 
@@ -740,12 +745,14 @@ else voiceState.textContent='VOICE MODULE: BROWSER UNSUPPORTED';
 // Cookie-first trusted session bootstrap: F8/reload should reuse the existing
 // HttpOnly JARVIS session without asking for another one-time code.
 async function requireLocalDeviceUnlock(){
-  if(localStorage.getItem('jarvisDeviceLock')!=='enabled')return true;
+  if(localStorage.getItem('jarvisDeviceLock')!=='server-verified')return true;
   if(!window.PublicKeyCredential)return false;
   try{
-    const challenge=crypto.getRandomValues(new Uint8Array(32));
-    await navigator.credentials.get({publicKey:{challenge,timeout:60000,userVerification:'required'}});
-    return true;
+    const r=await fetch('/api/webauthn/auth/options',{method:'POST',credentials:'same-origin'});
+    const o=await r.json();if(!r.ok)throw Error(o.error||'options failed');
+    const cred=await navigator.credentials.get({publicKey:publicKeyRequestOptions(o)});
+    const v=await fetch('/api/webauthn/auth/verify',{method:'POST',headers:{'content-type':'application/json'},credentials:'same-origin',body:JSON.stringify(credJSON(cred))});
+    const j=await v.json();return !!(v.ok&&j.verified);
   }catch(e){return false}
 }
 async function bootstrapSession(){
