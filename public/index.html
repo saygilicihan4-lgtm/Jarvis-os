@@ -642,13 +642,57 @@ function primeMobileSpeech(){
     mobileSpeechPrimed=true;
   }catch(e){}
 }
+async function playJarvisMobileRelay(text){
+  const create=await fetch('/api/mobile-tts',{
+    method:'POST',
+    headers:{'content-type':'application/json'},
+    credentials:'same-origin',
+    body:JSON.stringify({text:String(text||'').trim()})
+  });
+  const cj=await create.json().catch(()=>({}));
+  if(!create.ok||!cj.id)throw new Error(cj.error||'mobile tts unavailable');
+
+  const deadline=Date.now()+18000;
+  while(Date.now()<deadline){
+    await new Promise(r=>setTimeout(r,650));
+    const rr=await fetch('/api/mobile-tts/'+encodeURIComponent(cj.id),{credentials:'same-origin',cache:'no-store'});
+    const j=await rr.json().catch(()=>({}));
+    if(!rr.ok)throw new Error(j.error||'mobile tts status failed');
+    if(j.status==='failed')throw new Error(j.error||'mobile tts failed');
+    if(j.status==='ready'&&j.audio){
+      const bin=atob(j.audio);
+      const bytes=new Uint8Array(bin.length);
+      for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+      const url=URL.createObjectURL(new Blob([bytes],{type:j.mime||'audio/mpeg'}));
+      try{
+        const a=new Audio(url);
+        a.preload='auto';
+        a.playsInline=true;
+        document.body.classList.add('speaking');
+        await a.play();
+        await new Promise(resolve=>{
+          a.onended=resolve;
+          a.onerror=resolve;
+          setTimeout(resolve,30000);
+        });
+      }finally{
+        document.body.classList.remove('speaking');
+        URL.revokeObjectURL(url);
+      }
+      return true;
+    }
+  }
+  throw new Error('mobile tts timeout');
+}
 function speak(text,lang=activeLanguage){
   if(!text)return;
   const spoken=String(text).trim();
   if(!spoken)return;
   if(isMobileJarvis()){
-    try{speechSynthesis.resume()}catch(e){}
-    browserSpeak(spoken,lang||'tr-TR');
+    playJarvisMobileRelay(spoken).catch(()=>{
+      try{speechSynthesis.resume()}catch(e){}
+      browserSpeak(spoken,lang||'tr-TR');
+    });
     return;
   }
   const ctl=new AbortController();
