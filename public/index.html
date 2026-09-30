@@ -917,38 +917,69 @@ async function requireLocalDeviceUnlock(force=false){
   }catch(e){return false}
 }
 async function bootstrapSession(){
-  // 1) Reuse an existing trusted cookie when present.
-  try{
-    const s=await fetch('/api/session/bootstrap',{credentials:'same-origin'});
-    if(s.ok){
-      const enrolled=await refreshDeviceLockStatus();
-      if(enrolled&&!(await requireLocalDeviceUnlock())){setAuthenticated(false);authmsg.textContent='DEVICE UNLOCK REQUIRED';return}
-      await load();setAuthenticated(true);setAccessMode('trusted-session');resyncExistingPush().catch(()=>{});return;
-    }
-  }catch(_){}
-  // 2) Same-network fast path: require an approved signed PC Worker online
-  // through the same network egress. IP alone never authenticates the browser.
-  try{
-    const lan=await fetch('/api/session/lan-bootstrap',{method:'POST',credentials:'same-origin'});
-    if(lan.ok){
-      await load();setAuthenticated(true);setAccessMode('trusted-network');authmsg.textContent='';resyncExistingPush().catch(()=>{});
+  const isPhoneClient=/iPhone|iPod|Android.*Mobile/i.test(navigator.userAgent);
+
+  const tryTrustedNetwork=async()=>{
+    try{
+      const lan=await fetch('/api/session/lan-bootstrap',{method:'POST',credentials:'same-origin'});
+      if(!lan.ok)return false;
+      await load();
+      setAuthenticated(true);
+      setAccessMode('trusted-network');
+      authmsg.textContent='';
+      resyncExistingPush().catch(()=>{});
       consoleStatus.textContent='TRUSTED WI-FI · SIGNED PC WORKER VERIFIED';
-      return;
-    }
-  }catch(_){}
-  // 3) No trusted network session: try the enrolled passkey.
+      return true;
+    }catch(_){return false}
+  };
+
+  const tryTrustedSession=async()=>{
+    try{
+      const s=await fetch('/api/session/bootstrap',{credentials:'same-origin'});
+      if(!s.ok)return false;
+      const enrolled=await refreshDeviceLockStatus();
+      if(enrolled&&!(await requireLocalDeviceUnlock())){
+        setAuthenticated(false);
+        authmsg.textContent='DEVICE UNLOCK REQUIRED';
+        return false;
+      }
+      await load();
+      setAuthenticated(true);
+      setAccessMode('trusted-session');
+      resyncExistingPush().catch(()=>{});
+      return true;
+    }catch(_){return false}
+  };
+
+  // PHONE: trusted Wi-Fi first. This prevents an old browser session from
+  // silently becoming the primary path when the phone has left the home Wi-Fi.
+  if(isPhoneClient){
+    if(await tryTrustedNetwork())return;
+  }else{
+    if(await tryTrustedSession())return;
+    if(await tryTrustedNetwork())return;
+  }
+
+  // If the phone is outside the trusted Wi-Fi, use a real device credential.
   try{
     const unlocked=await requireLocalDeviceUnlock(true);
     if(unlocked){
-      await load();setAuthenticated(true);setAccessMode('passkey');authmsg.textContent='';resyncExistingPush().catch(()=>{});
+      await load();
+      setAuthenticated(true);
+      setAccessMode('passkey');
+      authmsg.textContent='';
+      resyncExistingPush().catch(()=>{});
       consoleStatus.textContent='DEVICE LOCK · PASSKEY SESSION RESTORED';
       return;
     }
   }catch(_){}
-  // 4) Recovery/new-device path only.
+
+  // Recovery/new-device path only.
   setAuthenticated(false);
   setAccessMode('recovery');
-  authmsg.textContent='GÜVENİLİR AĞ BULUNAMADI · PASSKEY YOKSA 8 HANELİ KURTARMA KODU';
+  authmsg.textContent=isPhoneClient
+    ?'TELEFON GÜVENİLİR WI-FI DIŞINDA · PASSKEY YOKSA 8 HANELİ KURTARMA KODU'
+    :'GÜVENİLİR AĞ BULUNAMADI · PASSKEY YOKSA 8 HANELİ KURTARMA KODU';
 }
 bootstrapSession();
 setInterval(()=>{if(!loginOverlay.classList.contains('hidden'))return;load().catch(()=>setAuthenticated(false))},2500);
