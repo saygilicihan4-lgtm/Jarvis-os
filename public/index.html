@@ -795,8 +795,8 @@ if(SpeechRecognition)voiceState.textContent='VOICE MODULE: READY';
 else voiceState.textContent='VOICE MODULE: BROWSER UNSUPPORTED';
 // Cookie-first trusted session bootstrap: F8/reload should reuse the existing
 // HttpOnly JARVIS session without asking for another one-time code.
-async function requireLocalDeviceUnlock(){
-  if(localStorage.getItem('jarvisDeviceLock')!=='server-verified')return true;
+async function requireLocalDeviceUnlock(force=false){
+  if(!force&&localStorage.getItem('jarvisDeviceLock')!=='server-verified')return true;
   if(!window.PublicKeyCredential)return false;
   try{
     const r=await fetch('/api/webauthn/auth/options',{method:'POST',credentials:'same-origin'});
@@ -807,30 +807,27 @@ async function requireLocalDeviceUnlock(){
   }catch(e){return false}
 }
 async function bootstrapSession(){
+  // 1) Reuse an existing trusted cookie when present.
   try{
-    await load();
-    // Verify server enrollment before invoking WebAuthn. This prevents stale
-    // localStorage from opening iOS's QR/security-key sheet when no usable
-    // on-device passkey exists.
-    const enrolled=await refreshDeviceLockStatus();
-    if(enrolled&&!(await requireLocalDeviceUnlock())){setAuthenticated(false);authmsg.textContent='DEVICE UNLOCK REQUIRED';return}
-    setAuthenticated(true);
-    resyncExistingPush().catch(()=>{});
-    if(wakeSource==='f8'){
-      coreSubtitle.textContent='F8 global wake · trusted session restored';
-      consoleStatus.textContent='F8 WAKE · SECURE CHANNEL ACTIVE';
+    const s=await fetch('/api/session/bootstrap',{credentials:'same-origin'});
+    if(s.ok){
+      const enrolled=await refreshDeviceLockStatus();
+      if(enrolled&&!(await requireLocalDeviceUnlock())){setAuthenticated(false);authmsg.textContent='DEVICE UNLOCK REQUIRED';return}
+      await load();setAuthenticated(true);resyncExistingPush().catch(()=>{});return;
     }
-  }catch(e){
-    try{
-      const r=await fetch('/api/session/bootstrap',{credentials:'same-origin'});
-      if(r.ok){await load();setAuthenticated(true);refreshDeviceLockStatus().catch(()=>{});resyncExistingPush().catch(()=>{});return}
-    }catch(_){}
-    setAuthenticated(false);
-    if(wakeSource==='f8'){
-      coreSubtitle.textContent='F8 global wake · one-time authorization required';
-      consoleStatus.textContent='F8 WAKE · ONE-TIME AUTHORIZATION REQUIRED';
+  }catch(_){}
+  // 2) No trusted cookie: try the enrolled passkey BEFORE showing the 8-digit recovery code.
+  try{
+    const unlocked=await requireLocalDeviceUnlock(true);
+    if(unlocked){
+      await load();setAuthenticated(true);authmsg.textContent='';resyncExistingPush().catch(()=>{});
+      consoleStatus.textContent='DEVICE LOCK · PASSKEY SESSION RESTORED';
+      return;
     }
-  }
+  }catch(_){}
+  // 3) Recovery/new-device path only.
+  setAuthenticated(false);
+  authmsg.textContent='FACE ID/PASSKEY KULLANILAMADI · 8 HANELI KURTARMA KODU';
 }
 bootstrapSession();
 setInterval(()=>{if(!loginOverlay.classList.contains('hidden'))return;load().catch(()=>setAuthenticated(false))},2500);
