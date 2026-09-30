@@ -591,14 +591,21 @@ function listenSessionCode(){
   const r=new SR();r.lang='tr-TR';r.interimResults=false;r.continuous=false;
   b.disabled=true;b.textContent='DİNLİYOR...';authmsg.textContent='8 haneli kodu söyleyin.';
   r.onresult=e=>{
-    let transcript=Array.from(e.results).map(x=>x[0].transcript).join(' ');
-    const digits=spokenDigits(transcript);
-    transcript='';
-    if(digits.length!==8){token.value='';authmsg.textContent='8 hane algılanamadı. Tekrar deneyin.';return}
+    const transcript=Array.from(e.results).map(x=>x[0].transcript).join(' ');
+    let digits=spokenDigits(transcript);
+    // iOS often transcribes an 8-digit code as grouped numbers with spaces,
+    // punctuation or Turkish number words. Fall back to every recognized digit.
+    if(digits.length!==8)digits=String(transcript).replace(/\D/g,'').slice(0,8);
+    if(digits.length!==8){
+      token.value=digits;
+      authmsg.textContent='ALGILANAN: '+(digits||'—')+' · 8 hane bekleniyor. Tekrar söyleyin.';
+      return;
+    }
     token.value=digits;
+    authmsg.textContent='KOD ALGILANDI · DOĞRULANIYOR';
     setTimeout(()=>connect(),120);
   };
-  r.onerror=()=>{token.value='';authmsg.textContent='Sesli kod algılanamadı.'};
+  r.onerror=e=>{authmsg.textContent='SES HATASI · '+String(e.error||'algılanamadı').toUpperCase()};
   r.onend=()=>{b.disabled=false;b.textContent='KODU SESLE GİR'};
   try{r.start()}catch(e){b.disabled=false;b.textContent='KODU SESLE GİR';authmsg.textContent='Mikrofon başlatılamadı.'}
 }
