@@ -559,7 +559,7 @@ function detectLanguage(text){
   if(/\b(olá|obrigado|abra|feche|computador)\b/.test(s))return 'pt-PT';
   return 'en-US';
 }
-function speak(text,lang=activeLanguage){
+function browserSpeak(text,lang=activeLanguage){
   if(!('speechSynthesis' in window)||!text)return;
   speechSynthesis.cancel();
   const u=new SpeechSynthesisUtterance(text);
@@ -571,6 +571,27 @@ function speak(text,lang=activeLanguage){
   u.onstart=()=>document.body.classList.add('speaking');
   u.onend=()=>document.body.classList.remove('speaking');
   speechSynthesis.speak(u);
+}
+function speak(text,lang=activeLanguage){
+  if(!text)return;
+  const spoken=String(text).trim();
+  if(!spoken)return;
+  const ctl=new AbortController();
+  const timer=setTimeout(()=>ctl.abort(),1200);
+  fetch('http://127.0.0.1:8765/speak',{
+    method:'POST',
+    headers:{'content-type':'application/json'},
+    body:JSON.stringify({text:spoken}),
+    signal:ctl.signal
+  }).then(r=>{
+    clearTimeout(timer);
+    if(!r.ok)throw new Error('LOCAL_TTS_'+r.status);
+    document.body.classList.add('speaking');
+    setTimeout(()=>document.body.classList.remove('speaking'),Math.min(30000,1200+spoken.length*70));
+  }).catch(()=>{
+    clearTimeout(timer);
+    browserSpeak(spoken,lang);
+  });
 }
 
 function spokenDigits(text){
