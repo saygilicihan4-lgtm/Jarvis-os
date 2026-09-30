@@ -27,7 +27,7 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.31.0';
+const WORKER_VERSION='2.32.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3'];
 
 
@@ -190,20 +190,14 @@ function ensureWindowsHelper(filename){
 }
 function cleanupOrphanedJarvisHelpers(){
   if(process.platform!=='win32')return;
-  const ps=[
-    "$me=$PID",
-    "Get-CimInstance Win32_Process | Where-Object {",
-    "  $_.ProcessId -ne $me -and $_.CommandLine -and (",
-    "    $_.CommandLine -match 'jarvis-double-clap-v\\d+\\.py' -or",
-    "    $_.CommandLine -match 'jarvis-tts-[^ ]+\\.mp3'",
-    "  )",
-    "} | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop } catch {} }"
-  ].join('; ');
+  // Keep this PowerShell as one syntactically complete pipeline. The previous
+  // version inserted semicolons inside Where-Object and caused ParserError.
+  const ps="Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine -match 'jarvis-double-clap-v\\d+\\.py' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }";
   try{
     childProcess.execFileSync('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-Command',ps],{windowsHide:true,timeout:8000,maxBuffer:128*1024});
-    console.log('[JARVIS] ORPHAN HELPER CLEANUP: OK');
+    console.log('[JARVIS] ORPHAN CLAP CLEANUP: OK');
   }catch(e){
-    console.error('[JARVIS] ORPHAN HELPER CLEANUP:',e.message);
+    console.error('[JARVIS] ORPHAN CLAP CLEANUP:',e.message);
   }
 }
 
@@ -222,7 +216,7 @@ function startWindowsWakeHelper(){
 
 function startWindowsClapHelper(){
   if(process.platform!=='win32')return;
-  const helper=ensureWindowsHelper('jarvis-double-clap-v8.py');
+  const helper=ensureWindowsHelper('jarvis-double-clap-v9.py');
   if(!helper){console.error('[JARVIS] DOUBLE CLAP: helper hazirlanamadi');return}
   try{
     const p=childProcess.spawn('py',[helper],{windowsHide:true,stdio:['ignore','pipe','pipe']});
