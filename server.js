@@ -389,6 +389,13 @@ const server=http.createServer((req,res)=>{
   const expectedOrigin='https://'+rpID;
   const challengeKey=()=>crypto.createHash('sha256').update(String(cookieMap(req).jarvis_session||clientIp(req))).digest('hex');
 
+  if(pathname==='/api/webauthn/status'&&req.method==='GET'){
+    if(!validPhoneSession(req))return json(res,401,{error:'trusted session required'});
+    if(!dbReady)return json(res,503,{error:'durable storage unavailable'});
+    db.query('SELECT count(*)::int AS count FROM jarvis_webauthn_credentials').then(q=>json(res,200,{ok:true,enrolled:Number(q.rows[0].count)>0,count:Number(q.rows[0].count)})).catch(()=>json(res,503,{error:'durable storage unavailable'}));
+    return;
+  }
+
   if(pathname==='/api/webauthn/register/options'&&req.method==='POST'){
     if(!validPhoneSession(req))return json(res,401,{error:'trusted session required'});
     if(!dbReady)return json(res,503,{error:'durable storage unavailable'});
