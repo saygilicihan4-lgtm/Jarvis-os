@@ -825,7 +825,10 @@ async function send(){
     await api('/api/tasks',{
       method:'POST',
       headers:{'content-type':'application/json'},
-      body:JSON.stringify({command:cmd.value.trim()||command,source:'phone-web'})
+      body:JSON.stringify({
+        command:cmd.value.trim()||command,
+        source:/iPhone|iPod|Android.*Mobile/i.test(navigator.userAgent)?'phone-web':'pc-web'
+      })
     });
     cmd.value='';
     await load();
