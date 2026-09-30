@@ -287,6 +287,7 @@ if(SpeechRecognition){
 }
 token.value='';
 const wakeSource=new URLSearchParams(location.search).get('wake');
+let clapWakeHandled=false;
 if(wakeSource==='f8'){
   history.replaceState({},document.title,location.pathname);
   setTimeout(()=>{
@@ -368,7 +369,7 @@ async function wakeJarvis(){
   }
   document.body.classList.add('speaking');
   coreSubtitle.textContent='Double-clap wake detected';
-  let greeting='Merhaba Cihan Bey. JARVIS hazır.';
+  let greeting='Merhabalar Cihan Bey. Tüm sistemler çevrimiçi. JARVIS hazır.';
   try{
     const d=await api('/api/state');
     const all=d.tasks||[];
@@ -385,6 +386,7 @@ async function wakeJarvis(){
     greeting+=' Güncel durum verisine şu anda erişemiyorum.';
   }
   speak(greeting);
+  return greeting;
 }
 function clearCapturedFrame(){
   captureGeneration++;
@@ -805,7 +807,24 @@ async function load(){
   tasks.innerHTML=(d.tasks||[]).slice().reverse().map(taskCard).join('')||'<div class="task"><small>No active missions.</small></div>';
   audit.innerHTML=(d.audit||[]).slice(-18).reverse().map(x=>'<div class="log"><small>'+esc(x.at)+' · '+esc(x.type)+'</small><br>'+esc(x.message)+'</div>').join('')||'<div class="log"><small>No system events.</small></div>';
   setAuthenticated(true);
+  if(/Windows/i.test(navigator.userAgent)){
+    clapState.textContent=' · DOUBLE CLAP: LOCAL WORKER';
+  }else{
     enableClapWake();
+  }
+  if(wakeSource==='clap'&&!clapWakeHandled){
+    clapWakeHandled=true;
+    history.replaceState({},document.title,location.pathname);
+    setTimeout(async()=>{
+      const greeting=await wakeJarvis();
+      const wait=Math.min(12000,2200+String(greeting||'').length*75);
+      setTimeout(()=>{
+        if(!privacyMode&&recognition&&!listening){
+          try{recognition.start()}catch(e){}
+        }
+      },wait);
+    },450);
+  }
 }
 
 cmd.addEventListener('keydown',e=>{
