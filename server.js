@@ -352,6 +352,32 @@ function publicState(){
   };
 }
 
+async function pushPhoneTaskResult(t){
+  if(!t||t.source!=='phone-web')return 0;
+  if(!['completed','failed'].includes(t.status))return 0;
+  if(!VAPID_PUBLIC||!VAPID_PRIVATE)return 0;
+  const ids=Object.keys(state.pushSubscriptions);
+  if(!ids.length)return 0;
+  const title=t.status==='completed'?'JARVIS · Görev tamamlandı':'JARVIS · Görev başarısız';
+  const body=String(t.message||t.command||'Görev sonucu hazır.').replace(/\s+/g,' ').trim().slice(0,180);
+  const payload=JSON.stringify({title,body,url:'/',tag:'jarvis-task-'+t.id});
+  let delivered=0;
+  for(const id of ids){
+    const sub=state.pushSubscriptions[id];
+    if(!sub)continue;
+    try{
+      await webpush.sendNotification({endpoint:sub.endpoint,keys:sub.keys},payload,{TTL:900});
+      sub.lastSuccessAt=now();
+      delivered++;
+    }catch(e){
+      if(e&&[404,410].includes(e.statusCode))delete state.pushSubscriptions[id];
+      log('TASK_PUSH_FAIL',id+' '+String(e&&e.statusCode||e&&e.message||'send failed').slice(0,120));
+    }
+  }
+  if(delivered)log('TASK_PUSH','#'+t.id+' delivered '+delivered);
+  return delivered;
+}
+
 async function dispatchDueReminders(){
   if(!VAPID_PUBLIC||!VAPID_PRIVATE)return;
   const due=state.reminders.filter(r=>!r.sent&&new Date(r.when).getTime()<=Date.now());
@@ -915,6 +941,9 @@ const server=http.createServer((req,res)=>{
         t.message=String(d.message||'PC Worker görevi başarısız oldu.');
         if(!retryable)t.completedAt=now();
         log(retryable?'RETRY':'FAILED','#'+t.id+' '+t.message);
+      }
+      if(['completed','failed'].includes(t.status)){
+        pushPhoneTaskResult(t).catch(e=>log('TASK_PUSH_ERROR','#'+t.id+' '+String(e.message||e).slice(0,120)));
       }
       return json(res,200,t);
     });
