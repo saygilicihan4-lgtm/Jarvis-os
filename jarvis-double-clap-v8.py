@@ -2,7 +2,7 @@
 # Goal: recognize two hand claps while rejecting music and continuous loud audio.
 # Strategy: two transient candidates + required quiet gap between them + ambient guard.
 
-import sys, time, subprocess, webbrowser, urllib.request, collections, os
+import sys, time, subprocess, webbrowser, urllib.request, collections, os, socket
 
 def ensure_packages():
     try:
@@ -17,6 +17,18 @@ def ensure_packages():
         return sd, np
 
 sd, np = ensure_packages()
+
+# Single-instance guard so repeated Worker restarts cannot leave multiple
+# microphone listeners running at the same time.
+_singleton = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+try:
+    _singleton.bind(("127.0.0.1", 8766))
+    _singleton.listen(1)
+    print("[JARVIS] DOUBLE CLAP V8: SINGLE INSTANCE LOCKED", flush=True)
+except OSError:
+    print("[JARVIS] DOUBLE CLAP V8: EXISTING INSTANCE DETECTED - EXIT", flush=True)
+    sys.exit(0)
+# JARVIS_CLAP_SINGLETON
 devices = sd.query_devices()
 
 device_index = None
