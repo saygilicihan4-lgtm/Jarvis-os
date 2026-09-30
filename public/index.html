@@ -626,6 +626,20 @@ async function enableDeviceLock(){
   finally{deviceLockBtn.disabled=false}
 }
 deviceLockBtn.onclick=enableDeviceLock;
+async function refreshDeviceLockStatus(){
+  try{
+    const r=await fetch('/api/webauthn/status',{credentials:'same-origin'});
+    const j=await r.json().catch(()=>({}));
+    if(r.ok&&j.enrolled===true){
+      localStorage.setItem('jarvisDeviceLock','server-verified');
+      deviceLockBtn.textContent='DEVICE LOCK ON';
+      return true;
+    }
+    localStorage.removeItem('jarvisDeviceLock');
+    deviceLockBtn.textContent='ENABLE DEVICE LOCK';
+    return false;
+  }catch(e){deviceLockBtn.textContent='ENABLE DEVICE LOCK';return false}
+}
 
 async function connect(){
   const code=token.value.trim();
@@ -781,6 +795,7 @@ async function bootstrapSession(){
     await load();
     if(!(await requireLocalDeviceUnlock())){setAuthenticated(false);authmsg.textContent='DEVICE UNLOCK REQUIRED';return}
     setAuthenticated(true);
+    refreshDeviceLockStatus().catch(()=>{});
     resyncExistingPush().catch(()=>{});
     if(wakeSource==='f8'){
       coreSubtitle.textContent='F8 global wake · trusted session restored';
@@ -789,7 +804,7 @@ async function bootstrapSession(){
   }catch(e){
     try{
       const r=await fetch('/api/session/bootstrap',{credentials:'same-origin'});
-      if(r.ok){await load();setAuthenticated(true);resyncExistingPush().catch(()=>{});return}
+      if(r.ok){await load();setAuthenticated(true);refreshDeviceLockStatus().catch(()=>{});resyncExistingPush().catch(()=>{});return}
     }catch(_){}
     setAuthenticated(false);
     if(wakeSource==='f8'){
