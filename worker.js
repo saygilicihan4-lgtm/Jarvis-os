@@ -26,8 +26,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.14.2';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1'];
+const WORKER_VERSION='2.15.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1'];
 
 if(!TOKEN&&!DEVICE_TOKEN&&!PAIR_CODE){console.error('JARVIS signed cihaz kimliği veya pairing code gerekli.');process.exit(1)}
 function startWindowsWakeHelper(){
@@ -419,6 +419,15 @@ async function execute(task){
     const raw=childProcess.execFileSync('powershell.exe',['-NoProfile','-Command',ps],{encoding:'utf8',windowsHide:true,timeout:6000,maxBuffer:256*1024}).trim();
     const data=raw?JSON.parse(raw):[]; const list=Array.isArray(data)?data:[data];
     return{ok:true,message:list.map(d=>d.DeviceID+' '+Math.round(Number(d.FreeSpace||0)/1073741824)+'GB boş / '+Math.round(Number(d.Size||0)/1073741824)+'GB').join(' · ')||'Yerel disk bulunamadı'};
+  }
+  if(/^(wake on lan durumu|wol durumu|uzaktan açma durumu|uzaktan acma durumu|wake on lan readiness)/i.test(c)){
+    if(process.platform!=='win32')return{ok:false,retryable:false,message:'Wake-on-LAN readiness şu anda Windows için etkin'};
+    const ps="$ad=Get-CimInstance Win32_NetworkAdapter -Filter \"PhysicalAdapter=True\" | Where-Object {$_.MACAddress -and $_.NetEnabled} | Select-Object -First 5 Name,MACAddress,NetConnectionID; $ad | ConvertTo-Json -Compress";
+    let raw='';
+    try{raw=childProcess.execFileSync('powershell.exe',['-NoProfile','-Command',ps],{encoding:'utf8',windowsHide:true,timeout:6000,maxBuffer:256*1024}).trim()}catch(e){}
+    const data=raw?JSON.parse(raw):[];const list=Array.isArray(data)?data:[data];
+    const adapters=list.filter(Boolean).map(x=>(x.NetConnectionID||x.Name||'Adapter')+' '+x.MACAddress);
+    return{ok:true,message:'WoL ön kontrol · aktif fiziksel ağ adaptörü: '+(adapters.join(' · ')||'bulunamadı')+' · BIOS/UEFI ve adaptör wake ayarı ayrıca doğrulanmalı · PC kapalıyken magic packet gönderecek sürekli açık LAN köprüsü henüz bağlı değil'};
   }
   if(/^(ağ durumu|ag durumu|network status|internet durumu)/i.test(c)){
     const nets=os.networkInterfaces(),active=[];
