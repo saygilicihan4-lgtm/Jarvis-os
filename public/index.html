@@ -335,6 +335,21 @@ function setVoiceMode(on){
   if(window.voiceState)voiceState.textContent=on?'VOICE: LISTENING':'VOICE: READY';
   if(window.voiceBtn)voiceBtn.textContent=on?'STOP':'VOICE';
 }
+function releaseMobileClapAudioSession(){
+  if(!isMobileJarvis())return;
+  try{
+    if(clapStream){
+      for(const t of clapStream.getTracks())try{t.stop()}catch(_){}
+    }
+  }catch(_){}
+  clapStream=null;
+  clapArmed=false;
+  if(clapRAF){try{cancelAnimationFrame(clapRAF)}catch(_){}clapRAF=null}
+  try{
+    if(clapCtx&&clapCtx.state!=='closed')clapCtx.close();
+  }catch(_){}
+  clapCtx=null;
+}
 async function enableClapWake(){
   if(clapArmed)return;
   try{
@@ -682,6 +697,10 @@ function primeMobileSpeech(){
   }catch(e){}
 }
 async function playJarvisMobileRelay(text){
+  // iOS lowers media playback when a live microphone/WebAudio capture session
+  // is active. Phone clap detection is unnecessary because double-clap wake
+  // already runs on the PC Worker, so release any legacy mobile clap stream.
+  releaseMobileClapAudioSession();
   const create=await fetch('/api/mobile-tts',{
     method:'POST',
     headers:{'content-type':'application/json'},
@@ -1047,6 +1066,9 @@ async function load(){
   setAuthenticated(true);
   if(/Windows/i.test(navigator.userAgent)){
     clapState.textContent=' · DOUBLE CLAP: LOCAL WORKER';
+  }else if(isMobileJarvis()){
+    releaseMobileClapAudioSession();
+    clapState.textContent=' · DOUBLE CLAP: PC WORKER';
   }else{
     enableClapWake();
   }
