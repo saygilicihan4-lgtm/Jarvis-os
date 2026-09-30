@@ -27,7 +27,7 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.24.0';
+const WORKER_VERSION='2.25.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3'];
 
 
@@ -72,6 +72,32 @@ function queueJarvisSpeech(text){
 }
 
 
+function showJarvisScreen(){
+  if(process.platform!=='win32')return;
+  const wakeUrl=BASE+'/?wake=clap&t='+Date.now();
+  const candidates=[
+    path.join(os.homedir(),'AppData','Local','Programs','Opera GX','launcher.exe'),
+    path.join(os.homedir(),'AppData','Local','Programs','Opera GX','opera.exe'),
+    'C:\\Program Files\\Opera GX\\launcher.exe',
+    'C:\\Program Files\\Opera GX\\opera.exe'
+  ];
+  for(const exe of candidates){
+    try{
+      if(fs.existsSync(exe)){
+        childProcess.spawn(exe,['--new-window',wakeUrl],{detached:true,windowsHide:false,stdio:'ignore'}).unref();
+        console.log('[JARVIS] SCREEN: OPERA GX OPEN');
+        return;
+      }
+    }catch(e){}
+  }
+  try{
+    childProcess.spawn('cmd.exe',['/c','start','','"'+wakeUrl+'"'],{detached:true,windowsHide:true,stdio:'ignore'}).unref();
+    console.log('[JARVIS] SCREEN: DEFAULT BROWSER OPEN');
+  }catch(e){
+    console.error('[JARVIS] SCREEN OPEN FAILED:',e.message);
+  }
+}
+
 function startLocalTtsBridge(){
   if(!TTS_ENABLED)return;
   const port=Number(process.env.JARVIS_TTS_PORT||8765);
@@ -92,6 +118,7 @@ function startLocalTtsBridge(){
     }
     if(req.method==='POST'&&req.url==='/wake'){
       localWakeCounter++;
+      showJarvisScreen();
       res.writeHead(202,{'content-type':'application/json'});
       return res.end(JSON.stringify({ok:true,wake:localWakeCounter}));
     }
