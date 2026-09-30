@@ -793,9 +793,12 @@ async function requireLocalDeviceUnlock(){
 async function bootstrapSession(){
   try{
     await load();
-    if(!(await requireLocalDeviceUnlock())){setAuthenticated(false);authmsg.textContent='DEVICE UNLOCK REQUIRED';return}
+    // Verify server enrollment before invoking WebAuthn. This prevents stale
+    // localStorage from opening iOS's QR/security-key sheet when no usable
+    // on-device passkey exists.
+    const enrolled=await refreshDeviceLockStatus();
+    if(enrolled&&!(await requireLocalDeviceUnlock())){setAuthenticated(false);authmsg.textContent='DEVICE UNLOCK REQUIRED';return}
     setAuthenticated(true);
-    refreshDeviceLockStatus().catch(()=>{});
     resyncExistingPush().catch(()=>{});
     if(wakeSource==='f8'){
       coreSubtitle.textContent='F8 global wake · trusted session restored';
