@@ -3,6 +3,7 @@ const path=require('path');
 const os=require('os');
 const crypto=require('crypto');
 const childProcess=require('child_process');
+const http=require('http');
 
 const BASE=(process.env.JARVIS_URL||'https://jarvis-os-1iuv.onrender.com').replace(/\/$/,'');
 const TOKEN=process.env.JARVIS_TOKEN||'';
@@ -26,8 +27,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.16.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1'];
+const WORKER_VERSION='2.17.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1'];
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -67,6 +68,46 @@ async function speakJarvisNow(text){
 function queueJarvisSpeech(text){
   if(!TTS_ENABLED)return;
   speechQueue=speechQueue.then(()=>speakJarvisNow(text)).catch(e=>console.error('[JARVIS] TTS:',e.message));
+}
+
+
+function startLocalTtsBridge(){
+  if(!TTS_ENABLED)return;
+  const port=Number(process.env.JARVIS_TTS_PORT||8765);
+  let allowedOrigin='';
+  try{allowedOrigin=new URL(BASE).origin}catch(e){}
+  const server=http.createServer((req,res)=>{
+    const origin=String(req.headers.origin||'');
+    const allowed=!origin||origin===allowedOrigin||/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+    if(!allowed){res.writeHead(403);return res.end('forbidden')}
+    res.setHeader('Access-Control-Allow-Origin',origin||allowedOrigin||'*');
+    res.setHeader('Vary','Origin');
+    res.setHeader('Access-Control-Allow-Headers','content-type');
+    res.setHeader('Access-Control-Allow-Methods','GET,POST,OPTIONS');
+    if(req.method==='OPTIONS'){res.writeHead(204);return res.end()}
+    if(req.method==='GET'&&req.url==='/health'){
+      res.writeHead(200,{'content-type':'application/json'});
+      return res.end(JSON.stringify({ok:true,voice:TTS_VOICE,version:WORKER_VERSION}));
+    }
+    if(req.method==='POST'&&req.url==='/speak'){
+      let body='',tooLarge=false;
+      req.on('data',chunk=>{body+=chunk;if(body.length>32768){tooLarge=true;req.destroy()}});
+      req.on('end',()=>{
+        if(tooLarge){res.writeHead(413);return res.end('too large')}
+        try{
+          const d=JSON.parse(body||'{}'),text=String(d.text||'').trim();
+          if(!text){res.writeHead(400);return res.end('text required')}
+          queueJarvisSpeech(text);
+          res.writeHead(202,{'content-type':'application/json'});
+          return res.end(JSON.stringify({ok:true,queued:true}));
+        }catch(e){res.writeHead(400);return res.end('bad request')}
+      });
+      return;
+    }
+    res.writeHead(404);res.end('not found');
+  });
+  server.on('error',e=>console.error('[JARVIS] LOCAL TTS BRIDGE:',e.message));
+  server.listen(port,'127.0.0.1',()=>console.log('[JARVIS] LOCAL TTS BRIDGE READY: http://127.0.0.1:'+port));
 }
 
 if(!TOKEN&&!DEVICE_TOKEN&&!PAIR_CODE){console.error('JARVIS signed cihaz kimliği veya pairing code gerekli.');process.exit(1)}
@@ -617,6 +658,7 @@ async function poll(){
 }
 console.log('JARVIS PC Worker '+WORKER_VERSION+' başladı');
 startWindowsWakeHelper();
+startLocalTtsBridge();
 console.log('Cloud:',BASE);
 console.log('Workspace:',WORKSPACE);
 poll();
