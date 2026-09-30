@@ -610,10 +610,29 @@ function browserSpeak(text,lang=activeLanguage){
   u.onend=()=>document.body.classList.remove('speaking');
   speechSynthesis.speak(u);
 }
+let mobileSpeechPrimed=false;
+function isMobileJarvis(){
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+function primeMobileSpeech(){
+  if(!isMobileJarvis()||mobileSpeechPrimed||!('speechSynthesis' in window))return;
+  try{
+    speechSynthesis.resume();
+    const u=new SpeechSynthesisUtterance(' ');
+    u.volume=0;u.lang='tr-TR';
+    speechSynthesis.speak(u);
+    mobileSpeechPrimed=true;
+  }catch(e){}
+}
 function speak(text,lang=activeLanguage){
   if(!text)return;
   const spoken=String(text).trim();
   if(!spoken)return;
+  if(isMobileJarvis()){
+    try{speechSynthesis.resume()}catch(e){}
+    browserSpeak(spoken,lang||'tr-TR');
+    return;
+  }
   const ctl=new AbortController();
   const timer=setTimeout(()=>ctl.abort(),1200);
   fetch('http://127.0.0.1:8765/speak',{
@@ -734,6 +753,9 @@ async function enableDeviceLock(){
   finally{deviceLockBtn.disabled=false}
 }
 deviceLockBtn.onclick=enableDeviceLock;
+if(localStorage.getItem('jarvisDeviceLock')==='server-verified'){
+  deviceLockBtn.textContent='DEVICE LOCK ON';
+}
 async function refreshDeviceLockStatus(){
   try{
     const r=await fetch('/api/webauthn/status',{credentials:'same-origin'});
@@ -743,10 +765,25 @@ async function refreshDeviceLockStatus(){
       deviceLockBtn.textContent='DEVICE LOCK ON';
       return true;
     }
-    localStorage.removeItem('jarvisDeviceLock');
+    if(r.ok&&j.enrolled===false){
+      localStorage.removeItem('jarvisDeviceLock');
+      deviceLockBtn.textContent='ENABLE DEVICE LOCK';
+      return false;
+    }
+    if(localStorage.getItem('jarvisDeviceLock')==='server-verified'){
+      deviceLockBtn.textContent='DEVICE LOCK ON';
+      return true;
+    }
     deviceLockBtn.textContent='ENABLE DEVICE LOCK';
     return false;
-  }catch(e){deviceLockBtn.textContent='ENABLE DEVICE LOCK';return false}
+  }catch(e){
+    if(localStorage.getItem('jarvisDeviceLock')==='server-verified'){
+      deviceLockBtn.textContent='DEVICE LOCK ON';
+      return true;
+    }
+    deviceLockBtn.textContent='ENABLE DEVICE LOCK';
+    return false;
+  }
 }
 
 async function connect(){
@@ -796,6 +833,7 @@ async function checkLocalAI(){
   try{await send()}catch(e){cmd.value=previous;consoleStatus.textContent='LOCAL AI CHECK FAILED'}
 }
 async function send(){
+  primeMobileSpeech();
   const command=cmd.value.trim();
   if(!command)return;
   if(localVisionCommand(command)){cmd.value='';return}
@@ -853,8 +891,30 @@ function taskCard(x){
   return '<div class="task"><div class="task-head"><b>'+esc(x.agent)+'</b><span class="status '+esc(x.status)+'">'+esc(x.status).toUpperCase()+'</span></div><p>'+esc(x.command)+'</p><small>ATTEMPT '+esc(x.attempts)+'/'+esc(x.maxRetries)+(x.message?' · '+esc(x.message):'')+'</small><div>'+actions+'</div></div>';
 }
 
+let phoneSpeechInitialized=false;
+let phoneLastTerminalTaskId=0;
+function speakPhoneTaskResults(taskList){
+  if(!isMobileJarvis())return;
+  const terminal=(taskList||[])
+    .filter(x=>x&&x.source==='phone-web'&&['completed','failed'].includes(x.status))
+    .sort((a,b)=>Number(a.id)-Number(b.id));
+  if(!phoneSpeechInitialized){
+    phoneLastTerminalTaskId=terminal.length?Number(terminal[terminal.length-1].id)||0:0;
+    phoneSpeechInitialized=true;
+    return;
+  }
+  for(const t of terminal){
+    const id=Number(t.id)||0;
+    if(id<=phoneLastTerminalTaskId)continue;
+    phoneLastTerminalTaskId=id;
+    const prefix=t.status==='completed'?'Görev tamamlandı. ':'Görev başarısız. ';
+    const msg=String(t.message||t.command||'Sonuç hazır.').replace(/\s+/g,' ').trim().slice(0,500);
+    speak(prefix+msg,'tr-TR');
+  }
+}
 async function load(){
   const d=await api('/api/state');
+  speakPhoneTaskResults(d.tasks||[]);
   const pc=d.workers&&d.workers.pc?d.workers.pc:{online:false};
   pcDot.className='dot '+(pc.online?'online':'offline');
   pcState.textContent=pc.online?'ONLINE':'OFFLINE';
@@ -930,6 +990,7 @@ async function bootstrapSession(){
       setAuthenticated(true);
       setAccessMode('trusted-network');
       authmsg.textContent='';
+      await refreshDeviceLockStatus().catch(()=>false);
       resyncExistingPush().catch(()=>{});
       consoleStatus.textContent='TRUSTED WI-FI · SIGNED PC WORKER VERIFIED';
       return true;
