@@ -78,10 +78,18 @@ const state={
   pushSubscriptions:{},
   reminders:[],
   webauthnChallenges:{registration:new Map(),authentication:new Map()},
+  mobileTtsRequests:new Map(),
   stateRevision:0,
   workers:{pc:{name:null,version:null,lastSeen:null,capabilities:[],memory:null},devices:{}}
 };
 
+function cleanupMobileTtsRequests(){
+  const cutoff=Date.now()-2*60*1000;
+  for(const [id,r] of state.mobileTtsRequests){
+    if(!r||Number(r.createdAtMs||0)<cutoff)state.mobileTtsRequests.delete(id);
+  }
+}
+setInterval(cleanupMobileTtsRequests,30000);
 function now(){return new Date().toISOString()}
 function touchState(){state.stateRevision++;}
 function log(type,message){
@@ -554,6 +562,27 @@ const server=http.createServer((req,res)=>{
     }else if(!authorized(req))return json(res,401,{error:'unauthorized'});
   }
 
+  if(pathname==='/api/mobile-tts'&&req.method==='POST'){
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      const text=String(d.text||'').replace(/\s+/g,' ').trim().slice(0,700);
+      if(!text)return json(res,400,{error:'text required'});
+      if(!pcOnline())return json(res,409,{error:'PC Worker offline'});
+      const id=crypto.randomUUID();
+      state.mobileTtsRequests.set(id,{id,text,status:'queued',createdAtMs:Date.now(),claimedBy:null,audio:null,error:null});
+      return json(res,202,{ok:true,id,status:'queued'});
+    });
+  }
+
+  const mobileTtsGet=pathname.match(/^\/api\/mobile-tts\/([0-9a-f-]+)$/i);
+  if(mobileTtsGet&&req.method==='GET'){
+    const r=state.mobileTtsRequests.get(mobileTtsGet[1]);
+    if(!r)return json(res,404,{error:'tts request not found'});
+    if(r.status==='ready')return json(res,200,{ok:true,status:'ready',mime:'audio/mpeg',audio:r.audio});
+    if(r.status==='failed')return json(res,200,{ok:false,status:'failed',error:r.error||'tts failed'});
+    return json(res,200,{ok:true,status:r.status});
+  }
+
   if(pathname==='/api/push/public-key'&&req.method==='GET'){
     const publicKey=String(process.env.JARVIS_VAPID_PUBLIC_KEY||'').trim();
     return json(res,publicKey?200:503,{ok:!!publicKey,publicKey:publicKey||null});
@@ -807,6 +836,29 @@ const server=http.createServer((req,res)=>{
     t.completedAt=now();
     log('CANCEL','#'+t.id+' iptal edildi');
     return json(res,200,t);
+  }
+
+  if(pathname==='/api/worker/mobile-tts-next'&&req.method==='GET'){
+    const deviceId=String(req.headers['x-jarvis-device-id']||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80)||'pc';
+    const next=[...state.mobileTtsRequests.values()].find(r=>r.status==='queued');
+    if(!next)return json(res,200,{ok:true,request:null});
+    next.status='claimed';next.claimedBy=deviceId;next.claimedAtMs=Date.now();
+    return json(res,200,{ok:true,request:{id:next.id,text:next.text}});
+  }
+
+  if(pathname==='/api/worker/mobile-tts-result'&&req.method==='POST'){
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      const id=String(d.id||''),r=state.mobileTtsRequests.get(id);
+      if(!r)return json(res,404,{error:'tts request not found'});
+      if(d.ok&&typeof d.audio==='string'&&d.audio.length){
+        if(d.audio.length>900000)return json(res,413,{error:'audio too large'});
+        r.status='ready';r.audio=d.audio;r.error=null;r.readyAtMs=Date.now();
+      }else{
+        r.status='failed';r.error=String(d.error||'tts generation failed').slice(0,240);r.readyAtMs=Date.now();
+      }
+      return json(res,200,{ok:true,status:r.status});
+    });
   }
 
   if(pathname==='/api/worker/heartbeat'&&req.method==='POST'){
