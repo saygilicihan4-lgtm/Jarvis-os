@@ -1077,10 +1077,13 @@ async function bootstrapSession(){
     }catch(_){return false}
   };
 
-  // PHONE: trusted Wi-Fi first. This prevents an old browser session from
-  // silently becoming the primary path when the phone has left the home Wi-Fi.
-  if(isPhoneClient){
+  // PHONE and local PC wake launches (F8 / double clap): trusted Wi-Fi first.
+  // This prevents WebAuthn/passkey popups during hands-free/local wake while
+  // still requiring the approved signed PC Worker to be online on the same network.
+  const localWakeLaunch=(wakeSource==='f8'||wakeSource==='clap');
+  if(isPhoneClient||localWakeLaunch){
     if(await tryTrustedNetwork())return;
+    if(!isPhoneClient&&await tryTrustedSession())return;
   }else{
     if(await tryTrustedSession())return;
     if(await tryTrustedNetwork())return;
