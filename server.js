@@ -827,7 +827,32 @@ const server=http.createServer((req,res)=>{
       const deviceId=d.deviceId?String(d.deviceId).replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80):null;
       if(deviceId){
         const previous=state.workers.devices[deviceId];
-        state.workers.devices[deviceId]={...snapshot,approved:previous?!!previous.approved:false,roles:previous&&previous.roles||[],allowedCapabilities:previous&&previous.allowedCapabilities||[],authMode:previous&&previous.authMode||'signed',credentialIssuedAt:previous&&previous.credentialIssuedAt||now()};
+        const readOnlyCaps=new Set([
+          'system_status','local_memory','process_list_v1','disk_status_v1',
+          'network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1'
+        ]);
+        const priorAllowed=previous&&Array.isArray(previous.allowedCapabilities)?previous.allowedCapabilities:[];
+        const safeNew=snapshot.capabilities.filter(x=>readOnlyCaps.has(x));
+        const allowedCapabilities=[...new Set([...priorAllowed,...safeNew])].filter(x=>snapshot.capabilities.includes(x));
+        state.workers.devices[deviceId]={
+          ...snapshot,
+          approved:previous?!!previous.approved:false,
+          roles:previous&&previous.roles||[],
+          allowedCapabilities,
+          authMode:previous&&previous.authMode||'signed',
+          credentialIssuedAt:previous&&previous.credentialIssuedAt||now()
+        };
+        for(const t of state.tasks){
+          if(t.status!=='needs_tool')continue;
+          if(!/Worker bu yeteneği desteklemiyor|Worker güncellemesi gerekli/i.test(String(t.message||'')))continue;
+          const support=workerSupports(t.command,t.targetDeviceId||null,t.agent);
+          if(support.ok){
+            t.status='queued';
+            t.message='Worker yeteneği güncellendi; görev yeniden yönlendiriliyor.';
+            prepareTask(t,false);
+            log('CAPABILITY_RECOVER','#'+t.id+' '+(support.need||'capability')+' yeniden etkin');
+          }
+        }
       }else state.workers.pc=snapshot;
       return json(res,200,{ok:true,at:snapshot.lastSeen,deviceId,approved:deviceId?!!state.workers.devices[deviceId].approved:true});
     });
