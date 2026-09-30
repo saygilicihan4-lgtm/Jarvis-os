@@ -45,6 +45,7 @@
       <div class="panel-title">CORE TELEMETRY</div>
       <div class="metric"><span>SYSTEM</span><b id="systemState">ONLINE</b></div>
       <div class="metric"><span>AUTH</span><b id="authState">LOCKED</b></div>
+      <div class="metric"><span>ACCESS MODE</span><b id="accessMode">RECOVERY</b></div>
       <div class="metric"><span>CLOUD NODE</span><b>RENDER / FRA</b></div>
       <div class="metric"><span>PC BRIDGE</span><b id="pcState">OFFLINE</b></div>
       <div class="metric"><span>REMOTE QUEUE</span><b id="remoteQueue">0 WAITING</b></div>
@@ -314,6 +315,18 @@ function setAuthenticated(ok){
   consoleStatus.textContent=ok?'SECURE CHANNEL ACTIVE':'SECURE CHANNEL LOCKED';
   coreSubtitle.textContent=ok?'Secure command channel established':'Awaiting secure authorization';
   loginOverlay.classList.toggle('hidden',ok);
+}
+function setAccessMode(mode){
+  if(!window.accessMode)return;
+  const m=String(mode||'recovery');
+  const labels={
+    'trusted-session':'TRUSTED SESSION',
+    'trusted-network':'TRUSTED WI-FI',
+    'passkey':'PASSKEY',
+    'recovery':'RECOVERY CODE'
+  };
+  accessMode.textContent=labels[m]||m.toUpperCase();
+  accessMode.style.color=(m==='trusted-network'||m==='trusted-session')?'#65ffbf':(m==='passkey'?'#65e6ff':'#ffca66');
 }
 
 function setVoiceMode(on){
@@ -746,6 +759,7 @@ async function connect(){
     await load();
     authmsg.textContent='';
     setAuthenticated(true);
+    setAccessMode('recovery');
     if(!privacyMode)speak('Merhaba efendim, sizin için ne yapabilirim?');
   }catch(e){
     setAuthenticated(false);
@@ -909,7 +923,7 @@ async function bootstrapSession(){
     if(s.ok){
       const enrolled=await refreshDeviceLockStatus();
       if(enrolled&&!(await requireLocalDeviceUnlock())){setAuthenticated(false);authmsg.textContent='DEVICE UNLOCK REQUIRED';return}
-      await load();setAuthenticated(true);resyncExistingPush().catch(()=>{});return;
+      await load();setAuthenticated(true);setAccessMode('trusted-session');resyncExistingPush().catch(()=>{});return;
     }
   }catch(_){}
   // 2) Same-network fast path: require an approved signed PC Worker online
@@ -917,8 +931,8 @@ async function bootstrapSession(){
   try{
     const lan=await fetch('/api/session/lan-bootstrap',{method:'POST',credentials:'same-origin'});
     if(lan.ok){
-      await load();setAuthenticated(true);authmsg.textContent='';resyncExistingPush().catch(()=>{});
-      consoleStatus.textContent='TRUSTED NETWORK · SIGNED PC WORKER VERIFIED';
+      await load();setAuthenticated(true);setAccessMode('trusted-network');authmsg.textContent='';resyncExistingPush().catch(()=>{});
+      consoleStatus.textContent='TRUSTED WI-FI · SIGNED PC WORKER VERIFIED';
       return;
     }
   }catch(_){}
@@ -926,14 +940,15 @@ async function bootstrapSession(){
   try{
     const unlocked=await requireLocalDeviceUnlock(true);
     if(unlocked){
-      await load();setAuthenticated(true);authmsg.textContent='';resyncExistingPush().catch(()=>{});
+      await load();setAuthenticated(true);setAccessMode('passkey');authmsg.textContent='';resyncExistingPush().catch(()=>{});
       consoleStatus.textContent='DEVICE LOCK · PASSKEY SESSION RESTORED';
       return;
     }
   }catch(_){}
   // 4) Recovery/new-device path only.
   setAuthenticated(false);
-  authmsg.textContent='OTOMATIK GİRİŞ YOK · 8 HANELİ KURTARMA KODU';
+  setAccessMode('recovery');
+  authmsg.textContent='GÜVENİLİR AĞ BULUNAMADI · PASSKEY YOKSA 8 HANELİ KURTARMA KODU';
 }
 bootstrapSession();
 setInterval(()=>{if(!loginOverlay.classList.contains('hidden'))return;load().catch(()=>setAuthenticated(false))},2500);
