@@ -63,11 +63,11 @@ cooldown_until = 0.0
 last_meter = 0.0
 
 # Tuned for a relatively quiet/low-gain microphone.
-MIN_THRESHOLD = 0.045
+MIN_THRESHOLD = 0.030
 NOISE_MULTIPLIER = 4.0
 MIN_GAP = 0.10
-MAX_GAP = 1.00
-RESET_GAP = 1.10
+MAX_GAP = 1.60
+RESET_GAP = 1.80
 COOLDOWN = 2.20
 
 def wake():
@@ -127,6 +127,7 @@ try:
                     wake()
                 else:
                     last_clap = now
+                    print("[JARVIS] DOUBLE CLAP: WAITING SECOND CLAP", flush=True)
 
             if last_clap and (now - last_clap) > RESET_GAP:
                 last_clap = 0.0
