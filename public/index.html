@@ -629,16 +629,55 @@ function browserSpeak(text,lang=activeLanguage){
   speechSynthesis.speak(u);
 }
 let mobileSpeechPrimed=false;
+let mobileJarvisPlayer=null;
+let mobileJarvisAudioUnlocked=false;
 function isMobileJarvis(){
   return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 }
+function ensureMobileJarvisPlayer(){
+  if(!mobileJarvisPlayer){
+    mobileJarvisPlayer=new Audio();
+    mobileJarvisPlayer.preload='auto';
+    mobileJarvisPlayer.playsInline=true;
+    mobileJarvisPlayer.setAttribute('playsinline','');
+    mobileJarvisPlayer.setAttribute('webkit-playsinline','');
+  }
+  return mobileJarvisPlayer;
+}
+function tinySilentWavUrl(){
+  // 80 ms mono PCM silence, generated locally. Used only to unlock the same
+  // HTMLAudioElement during the user's tap/voice-command gesture on iOS.
+  const rate=8000,samples=640;
+  const buf=new ArrayBuffer(44+samples*2),v=new DataView(buf);
+  const put=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};
+  put(0,'RIFF');v.setUint32(4,36+samples*2,true);put(8,'WAVE');put(12,'fmt ');
+  v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+  v.setUint32(24,rate,true);v.setUint32(28,rate*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);
+  put(36,'data');v.setUint32(40,samples*2,true);
+  return URL.createObjectURL(new Blob([buf],{type:'audio/wav'}));
+}
 function primeMobileSpeech(){
-  if(!isMobileJarvis()||mobileSpeechPrimed||!('speechSynthesis' in window))return;
+  if(!isMobileJarvis())return;
   try{
     speechSynthesis.resume();
     const u=new SpeechSynthesisUtterance(' ');
     u.volume=0;u.lang='tr-TR';
     speechSynthesis.speak(u);
+  }catch(e){}
+  if(mobileJarvisAudioUnlocked)return;
+  try{
+    const p=ensureMobileJarvisPlayer();
+    const silent=tinySilentWavUrl();
+    p.src=silent;p.volume=0;
+    const started=p.play();
+    Promise.resolve(started).then(()=>{
+      p.pause();p.currentTime=0;p.volume=1;
+      mobileJarvisAudioUnlocked=true;
+      URL.revokeObjectURL(silent);
+      if(window.voiceState)voiceState.textContent='VOICE: JARVIS RELAY ARMED';
+    }).catch(()=>{
+      URL.revokeObjectURL(silent);
+    });
     mobileSpeechPrimed=true;
   }catch(e){}
 }
@@ -665,15 +704,19 @@ async function playJarvisMobileRelay(text){
       for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
       const url=URL.createObjectURL(new Blob([bytes],{type:j.mime||'audio/mpeg'}));
       try{
-        const a=new Audio(url);
-        a.preload='auto';
-        a.playsInline=true;
+        const a=ensureMobileJarvisPlayer();
+        a.pause();
+        a.src=url;
+        a.currentTime=0;
+        a.volume=1;
         document.body.classList.add('speaking');
         await a.play();
+        if(window.voiceState)voiceState.textContent='VOICE: AHMETNEURAL RELAY';
         await new Promise(resolve=>{
-          a.onended=resolve;
-          a.onerror=resolve;
-          setTimeout(resolve,30000);
+          const done=()=>{a.onended=null;a.onerror=null;resolve()};
+          a.onended=done;
+          a.onerror=done;
+          setTimeout(done,30000);
         });
       }finally{
         document.body.classList.remove('speaking');
@@ -689,9 +732,9 @@ function speak(text,lang=activeLanguage){
   const spoken=String(text).trim();
   if(!spoken)return;
   if(isMobileJarvis()){
-    playJarvisMobileRelay(spoken).catch(()=>{
-      try{speechSynthesis.resume()}catch(e){}
-      browserSpeak(spoken,lang||'tr-TR');
+    playJarvisMobileRelay(spoken).catch(err=>{
+      if(window.voiceState)voiceState.textContent='VOICE: JARVIS RELAY FAILED';
+      consoleStatus.textContent='MOBILE JARVIS VOICE ERROR · '+String(err&&err.message||err).slice(0,80);
     });
     return;
   }
