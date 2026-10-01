@@ -1284,6 +1284,52 @@ async function tryDirectLocalPcControl(command){
     return false;
   }
 }
+async function askJarvisBrain(message){
+  try{
+    const r=await fetch('/api/brain',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      credentials:'same-origin',
+      body:JSON.stringify({message:String(message||'').trim()})
+    });
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||j.enabled===false)return {handled:false};
+
+    if(j.type==='command'&&j.command){
+      const normalized=canonicalJarvisCommand(String(j.command));
+      consoleStatus.textContent='JARVIS BRAIN · '+String(message)+' → '+normalized;
+
+      if(await tryDirectLocalPcControl(normalized)){
+        if(j.reply)coreSubtitle.textContent=String(j.reply).slice(0,180);
+        return {handled:true};
+      }
+
+      await api('/api/tasks',{
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body:JSON.stringify({
+          command:normalized,
+          source:/iPhone|iPod|Android.*Mobile/i.test(navigator.userAgent)?'phone-web':'pc-web'
+        })
+      });
+      cmd.value='';
+      await load();
+      return {handled:true};
+    }
+
+    if(j.type==='chat'&&j.reply){
+      const reply=String(j.reply).trim();
+      consoleStatus.textContent='JARVIS BRAIN · CONVERSATION';
+      coreSubtitle.textContent=reply.slice(0,220);
+      cmd.value='';
+      speak(reply,'tr-TR');
+      return {handled:true};
+    }
+  }catch(e){
+    consoleStatus.textContent='JARVIS BRAIN FALLBACK · '+String(e.message||e).slice(0,80);
+  }
+  return {handled:false};
+}
 async function send(){
   primeMobileSpeech();
   const command=cmd.value.trim();
@@ -1311,6 +1357,11 @@ async function send(){
       return
     }
   }
+  // Known direct PC commands already ran above. Everything else gets one
+  // semantic pass through the optional conversational brain before the legacy queue.
+  const brain=await askJarvisBrain(command);
+  if(brain.handled)return;
+
   if(!/^pc\s*:/i.test(command)&&/^(sistem durumu|system status|pc durumu|disk durumu|disk status|depolama durumu|ağ durumu|ag durumu|network status|internet durumu|işlemleri listele|islemleri listele|process list|çalışan işlemler|calisan islemler|yerel ai durumu|local ai status|ai readiness)/i.test(command))cmd.value='PC: '+command;
   try{
     await api('/api/tasks',{
@@ -1369,6 +1420,14 @@ async function load(){
   const d=await api('/api/state');
   speakPhoneTaskResults(d.tasks||[]);
   const pc=d.workers&&d.workers.pc?d.workers.pc:{online:false};
+  const brain=d.brain||{};
+  const coreRow=[...document.querySelectorAll('.agent-row span')].find(x=>x.textContent==='CORE');
+  if(coreRow){
+    const b=coreRow.parentElement.querySelector('b');
+    const detail=coreRow.parentElement.parentElement.querySelector('.agent-state');
+    if(b){b.textContent=brain.enabled?'BRAIN READY':'READY';b.style.color='#65ffbf'}
+    if(detail)detail.textContent=brain.enabled?('JARVIS BRAIN READY · '+String(brain.model||'OPENAI')):'Task routing / safety';
+  }
   pcDot.className='dot '+(pc.online?'online':'offline');
   pcState.textContent=pc.online?'ONLINE':'OFFLINE';
   if(window.remoteQueue){const rc=d.remoteControl||{};remoteQueue.textContent=String(rc.queued||0)+' WAITING · '+String(rc.running||0)+' RUNNING';}
