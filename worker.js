@@ -27,9 +27,9 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.60.0';
+const WORKER_VERSION='2.61.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
-CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1');
+CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1','adaptive_model_router_v1','deep_model_fallback_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -50,6 +50,8 @@ const CREATOR_TTS_VOLUME='+14%';
 // Default model is intentionally small enough for older Windows laptops.
 const LOCAL_BRAIN_URL=String(process.env.JARVIS_LOCAL_BRAIN_URL||'http://127.0.0.1:11434').replace(/\/$/,'');
 let LOCAL_BRAIN_MODEL=String(process.env.JARVIS_LOCAL_BRAIN_MODEL||'qwen3.5:2b').trim();
+const LOCAL_BRAIN_DEEP_MODEL_REQUESTED=String(process.env.JARVIS_LOCAL_BRAIN_DEEP_MODEL||'').trim();
+let LOCAL_BRAIN_DEEP_MODEL=LOCAL_BRAIN_DEEP_MODEL_REQUESTED||LOCAL_BRAIN_MODEL;
 const LOCAL_BRAIN_KEEP_ALIVE=String(process.env.JARVIS_LOCAL_BRAIN_KEEP_ALIVE||'30m').trim();
 const LOCAL_BRAIN_CTX=Math.max(4096,Math.min(16384,Number(process.env.JARVIS_LOCAL_BRAIN_CTX)||(
   os.totalmem()>=14*1073741824?12288:os.totalmem()>=7*1073741824?8192:4096
@@ -1002,6 +1004,23 @@ function appendLocalBrainHistory(role,content){
     if(role==='assistant')queueBrainEpisodeSummary();
   }catch(_){}
 }
+function localModelBillions(name){
+  const s=String(name||'').toLowerCase();
+  const m=s.match(/:(\d+(?:\.\d+)?)b(?:\b|[-_])/i);
+  if(m)return Number(m[1]);
+  const m2=s.match(/(\d+(?:\.\d+)?)b(?:\b|[-_])/i);
+  return m2?Number(m2[1]):0;
+}
+function chooseInstalledDeepModel(models,ramGb,fastModel){
+  const list=(Array.isArray(models)?models:[]).map(x=>String(x||'')).filter(Boolean);
+  const maxB=ramGb>=30?14:ramGb>=22?8:ramGb>=14?4:ramGb>=7?2:1;
+  const candidates=list
+    .filter(x=>/^qwen3\.5(?::|$)/i.test(x))
+    .map(name=>({name,b:localModelBillions(name)}))
+    .filter(x=>x.b>0&&x.b<=maxB)
+    .sort((a,b)=>b.b-a.b);
+  return candidates.length?candidates[0].name:fastModel;
+}
 async function localBrainStatus(){
   const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),1800);
   try{
@@ -1022,12 +1041,26 @@ async function localBrainStatus(){
     }
 
     const installed=has(LOCAL_BRAIN_MODEL);
+    const ramGb=os.totalmem()/1073741824;
+    if(LOCAL_BRAIN_DEEP_MODEL_REQUESTED){
+      LOCAL_BRAIN_DEEP_MODEL=has(LOCAL_BRAIN_DEEP_MODEL_REQUESTED)
+        ?LOCAL_BRAIN_DEEP_MODEL_REQUESTED
+        :LOCAL_BRAIN_MODEL;
+    }else{
+      LOCAL_BRAIN_DEEP_MODEL=chooseInstalledDeepModel(models,ramGb,LOCAL_BRAIN_MODEL);
+    }
+    const deepInstalled=has(LOCAL_BRAIN_DEEP_MODEL);
     return{
       ready:true,
       installed,
       model:LOCAL_BRAIN_MODEL,
+      fastModel:LOCAL_BRAIN_MODEL,
+      deepModel:LOCAL_BRAIN_DEEP_MODEL,
+      deepInstalled,
+      deepRequestedModel:LOCAL_BRAIN_DEEP_MODEL_REQUESTED||null,
+      adaptiveModelRouter:true,
       models:models.slice(0,12),
-      ramGb:Number((os.totalmem()/1073741824).toFixed(1)),
+      ramGb:Number(ramGb.toFixed(1)),
       vision:/^qwen3\.5(?::|$)/i.test(LOCAL_BRAIN_MODEL)
     };
   }catch(e){
@@ -1127,6 +1160,7 @@ async function callLocalBrain(message){
   const persona=adjustedPersona||brainPersona();
   const turnStyle=inferBrainTurnStyle(text,persona);
   const deepRequested=shouldDeepReflect(text);
+  const deepModel=(deepRequested&&status.deepInstalled&&status.deepModel)?status.deepModel:LOCAL_BRAIN_MODEL;
   const repairContext=conversationRepairContext(text,recent);
   const memoryText=memory.length
     ? memory.map(x=>'- '+(x.role==='memory'?'Hatırlanan tercih':x.role==='episode'?'Eski sohbet özeti':'Önceki konuşma')+': '+x.text).join('\n')
@@ -1267,7 +1301,7 @@ async function callLocalBrain(message){
           method:'POST',
           headers:{'content-type':'application/json'},
           body:JSON.stringify({
-            model:LOCAL_BRAIN_MODEL,
+            model:deepModel,
             stream:false,
             think:true,
             format:deepSchema,
@@ -1294,7 +1328,7 @@ async function callLocalBrain(message){
           if(refined&&refined.reply){
             reply=normalizeBrainReply(refined.reply);
             if(allowedTones.has(String(refined.tone||'')))tone=String(refined.tone);
-            remember({kind:'deep_reflection',model:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-deepStarted,workspaceSources:workspaceCtx.sources,thinking:true,context:LOCAL_BRAIN_CTX});
+            remember({kind:'deep_reflection',model:deepModel,fastModel:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-deepStarted,workspaceSources:workspaceCtx.sources,thinking:true,context:LOCAL_BRAIN_CTX});
           }
         }
       }catch(e){
@@ -1314,7 +1348,7 @@ async function callLocalBrain(message){
     return{
       ok:true,type,reply,command,commands,model:LOCAL_BRAIN_MODEL,
       memoryHits:memory.length,personaVersion:persona.version,tone,
-      workspaceSources:workspaceCtx.sources,deepReflected:deepRequested&&type==='chat',repairMode:!!repairContext
+      workspaceSources:workspaceCtx.sources,deepReflected:deepRequested&&type==='chat',deepModel:deepRequested?deepModel:null,repairMode:!!repairContext
     };
   }catch(e){
     return{ok:false,error:String(e.message||e),model:LOCAL_BRAIN_MODEL};
@@ -1635,6 +1669,7 @@ async function runNativeAgent(message,{maxRounds=4}={}){
   maybeRememberExplicitPreference(text);
   const turnStyle=inferBrainTurnStyle(text,persona);
   const deepRequested=shouldDeepReflect(text);
+  const agentModel=(deepRequested&&status.deepInstalled&&status.deepModel)?status.deepModel:LOCAL_BRAIN_MODEL;
   const recent=recentBrainHistory(10);
   const repairContext=conversationRepairContext(text,recent);
   const memory=relevantBrainMemory(text,5);
@@ -1677,7 +1712,7 @@ async function runNativeAgent(message,{maxRounds=4}={}){
         method:'POST',
         headers:{'content-type':'application/json'},
         body:JSON.stringify({
-          model:LOCAL_BRAIN_MODEL,
+          model:agentModel,
           stream:false,
           think:deepRequested,
           keep_alive:LOCAL_BRAIN_KEEP_ALIVE,
@@ -1707,7 +1742,7 @@ async function runNativeAgent(message,{maxRounds=4}={}){
           ok:true,type:'chat',
           reply:String(final&&final.reply||summaries.join('. ')),
           tone:String(final&&final.tone||(actions.some(x=>!x.ok)?'warm':'focused')),
-          model:LOCAL_BRAIN_MODEL,actions,rounds:round+1,nativeTools:true,reasoning:deepRequested?'deep':'fast',repairMode:!!repairContext,recovered:true,
+          model:agentModel,fastModel:LOCAL_BRAIN_MODEL,actions,rounds:round+1,nativeTools:true,reasoning:deepRequested?'deep':'fast',repairMode:!!repairContext,recovered:true,
           latencyMs:Date.now()-started
         };
       }
@@ -1720,9 +1755,9 @@ async function runNativeAgent(message,{maxRounds=4}={}){
       const reply=normalizeBrainReply(msg.content);
       appendLocalBrainHistory('user',text);
       appendLocalBrainHistory('assistant',reply);
-      remember({kind:'native_agent_final',rounds:round+1,actions:actions.length,model:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-started});
+      remember({kind:'native_agent_final',rounds:round+1,actions:actions.length,model:agentModel,fastModel:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-started});
       return{
-        ok:true,type:'chat',reply,tone:turnStyle.mode,model:LOCAL_BRAIN_MODEL,
+        ok:true,type:'chat',reply,tone:turnStyle.mode,model:agentModel,fastModel:LOCAL_BRAIN_MODEL,
         actions,rounds:round+1,nativeTools:true,reasoning:deepRequested?'deep':'fast',repairMode:!!repairContext,latencyMs:Date.now()-started
       };
     }
@@ -2090,7 +2125,7 @@ function startLocalTtsBridge(){
         localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2',vision:isLocalVisionModel()},
         localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper',adaptiveLexicon:true,adaptiveDecode:true,dynamicEndpointing:true,lexiconCount:Object.keys(readSpeechLexicon().aliases||{}).length},
         adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',interruptible:true,offlineFallback:'windows-sapi',chunkedPipeline:true,prefetch:true,safeCache:true,backchannelPrewarm:true,backchannelState:ttsBackchannelPrewarmState,profiles:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']},
-        brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,toolReflection:true,multimodal:isLocalVisionModel(),screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,streamingChat:true,sentenceStreamTts:true,conversationRepair:true},
+        brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,toolReflection:true,multimodal:isLocalVisionModel(),screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,streamingChat:true,sentenceStreamTts:true,conversationRepair:true,adaptiveModelRouter:true,fastModel:LOCAL_BRAIN_MODEL,deepModel:LOCAL_BRAIN_DEEP_MODEL},
         mobileRelay:{brain:true,tts:true,pollMs:650}
       }));
     }
@@ -2129,7 +2164,7 @@ function startLocalTtsBridge(){
     if(req.method==='GET'&&req.url==='/brain-status'){
       localBrainStatus().then(status=>{
         res.writeHead(200,{'content-type':'application/json'});
-        res.end(JSON.stringify({ok:true,...status,warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,conversationRepair:true,persona:brainPersona(),memoryFacts:readBrainFacts().length,memoryEpisodes:readBrainEpisodes().length}));
+        res.end(JSON.stringify({ok:true,...status,warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,conversationRepair:true,adaptiveModelRouter:true,fastModel:LOCAL_BRAIN_MODEL,deepModel:LOCAL_BRAIN_DEEP_MODEL,persona:brainPersona(),memoryFacts:readBrainFacts().length,memoryEpisodes:readBrainEpisodes().length}));
       }).catch(e=>{
         res.writeHead(503,{'content-type':'application/json'});
         res.end(JSON.stringify({ok:false,error:String(e.message||e)}));

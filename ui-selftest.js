@@ -54,3 +54,7 @@ if(!html.includes("intent.reason==='correction'&&await maybeLearnVoiceCorrection
 if(!html.includes("cmd.value=canonicalJarvisCommand(replacement)"))throw new Error('Replacement command dispatch missing');
 if(!html.includes("DUR / BEKLE / JARVIS ..."))throw new Error('Natural interrupt UI state missing');
 if(!html.includes("bare-stop")||!html.includes("wake-command"))throw new Error('Natural barge-in intent classes missing');
+
+if(!html.includes('bs.adaptiveModelRouter'))throw new Error('Adaptive local model router is not surfaced in UI');
+if(!html.includes("'FAST '+String(bs.fastModel"))throw new Error('Fast model tier is not shown in UI');
+if(!html.includes("' · DEEP '+String(bs.deepModel"))throw new Error('Deep model tier is not shown in UI');
