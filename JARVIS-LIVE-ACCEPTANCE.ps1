@@ -55,8 +55,8 @@ try {
   Add-Result "Local brain ready" $ok (($b.model)+" · RAM "+($b.ramGb)+"GB")
   Add-Result "Qwen3.5 multimodal engine" ([string]$b.model -match "^qwen3\.5:") ([string]$b.model)
   Add-Result "Local multimodal capability" ($b.vision -eq $true) ("vision="+$b.vision)
-  $nativeToolsOk=($b.ok -eq $true -and $null -ne $b.keepAlive)
-  Add-Result "Native tool runtime" $nativeToolsOk ("model="+$b.model+" keepAlive="+$b.keepAlive)
+  $nativeToolsOk=($b.ok -eq $true -and $b.nativeTools -eq $true -and [int]$b.maxToolRounds -ge 2)
+  Add-Result "Native tool runtime" $nativeToolsOk ("model="+$b.model+" maxRounds="+$b.maxToolRounds)
   Add-Result "Episodic memory engine" ($null -ne $b.memoryEpisodes) ("episodes="+$b.memoryEpisodes+" facts="+$b.memoryFacts)
 
   $warmSw=[Diagnostics.Stopwatch]::StartNew()
