@@ -283,7 +283,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(fj.type==='chat','follow-up chat');
     const finalReq=seen[seen.length-1]||{};
     const msgText=(finalReq.messages||[]).map(x=>x.content).join('\n');
-    assert(/Bugün biraz sohbet edelim/i.test(msgText),'recent conversation context missing');
+    assert(/Bilgisayarı formatla|YouTube'u aç ve sesi yükselt/i.test(msgText),'recent conversation context missing');
 
     const facts=path.join(workspace,'.jarvis-memory','brain-facts.jsonl');
     assert(fs.existsSync(facts),'explicit preference memory file missing');
