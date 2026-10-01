@@ -144,7 +144,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.61.0','worker version');
+    assert(hj.version==='2.62.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localStt&&hj.localStt.adaptiveDecode===true,'adaptive STT decode health');
     assert(hj.localStt&&hj.localStt.dynamicEndpointing===true,'dynamic STT endpointing health');
@@ -170,10 +170,25 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.adaptiveTts.chunkedPipeline===true,'chunked TTS pipeline health');
     assert(hj.adaptiveTts.prefetch===true,'TTS prefetch health');
     assert(hj.adaptiveTts.safeCache===true,'safe TTS cache health');
+    assert(hj.adaptiveTts.dynamicChunkProsody===true,'dynamic chunk prosody health');
+    assert(hj.adaptiveTts.naturalPauseTiming===true,'natural pause timing health');
+    assert(hj.capabilities.includes('dynamic_chunk_prosody_v1'),'dynamic prosody capability');
+    assert(hj.capabilities.includes('natural_pause_timing_v1'),'natural pause timing capability');
     assert(hj.adaptiveTts.backchannelPrewarm===true,'thinking backchannel prewarm health');
     assert(hj.adaptiveTts.backchannelState&&Number(hj.adaptiveTts.backchannelState.total)>=4,'backchannel prewarm state metadata');
     assert(hj.adaptiveTts.offlineFallback==='windows-sapi','offline TTS fallback health');
     assert(hj.brainRuntime&&hj.brainRuntime.keepAlive,'brain runtime health');
+
+    const prosody=await post('http://127.0.0.1:'+BRIDGE_PORT+'/prosody-preview',{
+      text:'Tamam. Gerçekten mi? Dikkat, hata var.',
+      tone:'balanced'
+    });
+    assert(prosody.status===200,'prosody preview status');
+    const pp=JSON.parse(prosody.body);
+    assert(pp.ok===true&&Array.isArray(pp.chunks)&&pp.chunks.length===3,'Turkish sentence prosody chunking');
+    assert(pp.chunks[0].pauseMs>0&&pp.chunks[1].pauseMs>0&&pp.chunks[2].pauseMs===0,'natural inter-sentence pause timing');
+    assert(pp.chunks[1].profile.pitch!==pp.chunks[0].profile.pitch,'question prosody did not move pitch');
+    assert(pp.chunks[2].profile.rate!==pp.chunks[0].profile.rate,'caution prosody did not move rate');
 
     const streamSeen=seen.length;
     const streamed=await post('http://127.0.0.1:'+BRIDGE_PORT+'/chat-stream',{message:'Naber Jarvis, bugün nasıl gidiyor?'});
