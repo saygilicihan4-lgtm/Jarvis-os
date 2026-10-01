@@ -124,7 +124,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.52.0','worker version');
+    assert(hj.version==='2.53.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localBrain.vision===true,'local multimodal health');
     assert(hj.brainRuntime&&hj.brainRuntime.nativeTools===true,'native tools health');
@@ -199,6 +199,43 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(cmd.status===200,'command status');
     const cm=JSON.parse(cmd.body);
     assert(cm.type==='command'&&cm.command==='youtube aç','safe command normalization');
+
+    const learned=await post('http://127.0.0.1:'+BRIDGE_PORT+'/speech-lexicon',{
+      heard:'yutup ac',
+      intended:'youtube aç',
+      source:'selftest'
+    });
+    assert(learned.status===200,'speech lexicon learn status');
+    const learnedj=JSON.parse(learned.body);
+    assert(learnedj.ok===true&&learnedj.count>=1,'speech lexicon learn result');
+
+    const lex=await get('http://127.0.0.1:'+BRIDGE_PORT+'/speech-lexicon');
+    assert(lex.status===200,'speech lexicon get status');
+    const lexj=JSON.parse(lex.body);
+    assert(lexj.ok===true&&lexj.aliases['yutup ac']==='youtube aç','speech lexicon persisted alias');
+
+    const learnedCmd=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'yutup ac'});
+    assert(learnedCmd.status===200,'learned command brain status');
+    const lcj=JSON.parse(learnedCmd.body);
+    assert(lcj.type==='command'&&lcj.command==='youtube aç','learned speech alias did not normalize before brain');
+
+    const nativeLearned=await post('http://127.0.0.1:'+BRIDGE_PORT+'/agent',{message:'yutup ac',maxRounds:2});
+    assert(nativeLearned.status===200,'learned alias native-agent status');
+    const naj=JSON.parse(nativeLearned.body);
+    assert(naj.ok===true,'learned alias native-agent failed');
+
+    const directive=await post('http://127.0.0.1:'+BRIDGE_PORT+'/agent',{message:'gugil dersem google aç anla',maxRounds:2});
+    assert(directive.status===200,'speech lexicon directive status');
+    const dj=JSON.parse(directive.body);
+    assert(dj.ok===true&&dj.model==='local-speech-lexicon','speech lexicon directive routing');
+
+    const forgot=await post('http://127.0.0.1:'+BRIDGE_PORT+'/speech-lexicon',{
+      action:'forget',
+      heard:'yutup ac'
+    });
+    assert(forgot.status===200,'speech lexicon forget status');
+    const fjx=JSON.parse(forgot.body);
+    assert(fjx.ok===true,'speech lexicon forget result');
 
     const plan=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:"YouTube'u aç ve sesi yükselt."});
     assert(plan.status===200,'multi-action plan status');
