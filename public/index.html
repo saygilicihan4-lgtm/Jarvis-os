@@ -1293,15 +1293,14 @@ async function bootstrapSession(){
     try{
       const s=await fetch('/api/session/bootstrap',{credentials:'same-origin'});
       if(!s.ok)return false;
-      const enrolled=await refreshDeviceLockStatus();
-      if(enrolled&&!(await requireLocalDeviceUnlock())){
-        setAuthenticated(false);
-        authmsg.textContent='DEVICE UNLOCK REQUIRED';
-        return false;
-      }
+      // A valid HttpOnly JARVIS session is already authenticated. Do not
+      // automatically invoke WebAuthn during a normal desktop refresh; that
+      // caused the OS passkey chooser to appear every time the trusted-network
+      // heartbeat was a little late. Passkey remains available as recovery.
       await load();
       setAuthenticated(true);
       setAccessMode('trusted-session');
+      refreshDeviceLockStatus().catch(()=>false);
       resyncExistingPush().catch(()=>{});
       return true;
     }catch(_){return false}
@@ -1317,19 +1316,22 @@ async function bootstrapSession(){
   // available. Phone keeps passkey as its off-network recovery path.
   if(!isPhoneClient&&await tryTrustedSession())return;
 
-  // If the phone is outside the trusted Wi-Fi, use a real device credential.
-  try{
-    const unlocked=await requireLocalDeviceUnlock(true);
-    if(unlocked){
-      await load();
-      setAuthenticated(true);
-      setAccessMode('passkey');
-      authmsg.textContent='';
-      resyncExistingPush().catch(()=>{});
-      consoleStatus.textContent='DEVICE LOCK · PASSKEY SESSION RESTORED';
-      return;
-    }
-  }catch(_){}
+  // Phone outside trusted Wi-Fi may use passkey automatically.
+  // Desktop never invokes the OS passkey chooser on refresh/F8/clap.
+  if(isPhoneClient){
+    try{
+      const unlocked=await requireLocalDeviceUnlock(true);
+      if(unlocked){
+        await load();
+        setAuthenticated(true);
+        setAccessMode('passkey');
+        authmsg.textContent='';
+        resyncExistingPush().catch(()=>{});
+        consoleStatus.textContent='DEVICE LOCK · PASSKEY SESSION RESTORED';
+        return;
+      }
+    }catch(_){}
+  }
 
   // Recovery/new-device path only.
   setAuthenticated(false);
