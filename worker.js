@@ -27,9 +27,9 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.67.0';
+const WORKER_VERSION='2.68.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
-CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1','adaptive_model_router_v1','deep_model_fallback_v1','dynamic_chunk_prosody_v1','natural_pause_timing_v1','adaptive_turn_pacing_v1','latency_learning_v1','full_duplex_interrupt_v1','cancellable_agent_v1','adaptive_voice_profile_v1','spoken_voice_preference_v1','speaker_echo_rejection_v1','social_dialogue_v1','response_variation_v1','contextual_followup_v1');
+CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1','adaptive_model_router_v1','deep_model_fallback_v1','dynamic_chunk_prosody_v1','natural_pause_timing_v1','adaptive_turn_pacing_v1','latency_learning_v1','full_duplex_interrupt_v1','cancellable_agent_v1','adaptive_voice_profile_v1','spoken_voice_preference_v1','speaker_echo_rejection_v1','social_dialogue_v1','response_variation_v1','contextual_followup_v1','dialogue_feedback_learning_v1','social_preference_adaptation_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -62,6 +62,7 @@ const LOCAL_BRAIN_EPISODES_FILE=path.join(MEMORY_DIR,'brain-episodes.jsonl');
 const LOCAL_BRAIN_PERSONA_FILE=path.join(MEMORY_DIR,'brain-persona.json');
 const SPEECH_LEXICON_FILE=path.join(MEMORY_DIR,'speech-lexicon.json');
 const VOICE_PREFS_FILE=path.join(MEMORY_DIR,'voice-preferences.json');
+const DIALOGUE_FEEDBACK_FILE=path.join(MEMORY_DIR,'dialogue-feedback.json');
 const TEST_MODE=process.env.JARVIS_TEST_MODE==='1';
 const FORCE_LOCAL_BRIDGE=process.env.JARVIS_LOCAL_BRIDGE_FORCE==='1';
 const LOCAL_STT_PORT=Number(process.env.JARVIS_STT_PORT||8768);
@@ -1045,6 +1046,116 @@ function inferBrainTurnStyle(text,persona){
   if(mode==='balanced')temperature=Math.max(0.48,Math.min(0.82,0.56+humor*0.18));
   return{mode,temperature,instruction};
 }
+function dialogueFeedbackDefaults(){
+  return{
+    version:1,
+    followupBias:0,
+    banterBias:0,
+    variationBias:0,
+    positiveCount:0,
+    negativeCount:0,
+    updatedAt:null,
+    last:null
+  };
+}
+function clampBias(x){
+  return Math.max(-1,Math.min(1,Number(x)||0));
+}
+function readDialogueFeedback(){
+  const d=dialogueFeedbackDefaults();
+  try{
+    if(!fs.existsSync(DIALOGUE_FEEDBACK_FILE))return d;
+    const x=JSON.parse(fs.readFileSync(DIALOGUE_FEEDBACK_FILE,'utf8'));
+    return{
+      ...d,
+      ...x,
+      followupBias:clampBias(x.followupBias),
+      banterBias:clampBias(x.banterBias),
+      variationBias:clampBias(x.variationBias),
+      positiveCount:Math.max(0,Number(x.positiveCount)||0),
+      negativeCount:Math.max(0,Number(x.negativeCount)||0)
+    };
+  }catch(_){return d}
+}
+function writeDialogueFeedback(next){
+  const x={
+    ...dialogueFeedbackDefaults(),
+    ...next,
+    followupBias:clampBias(next&&next.followupBias),
+    banterBias:clampBias(next&&next.banterBias),
+    variationBias:clampBias(next&&next.variationBias),
+    updatedAt:new Date().toISOString()
+  };
+  try{
+    fs.mkdirSync(MEMORY_DIR,{recursive:true});
+    fs.writeFileSync(DIALOGUE_FEEDBACK_FILE,JSON.stringify(x,null,2),'utf8');
+  }catch(_){}
+  return x;
+}
+function dialogueFeedbackIntent(text){
+  const raw=String(text||'').replace(/\s+/g,' ').trim();
+  if(!raw||raw.length>180)return null;
+  const s=raw.toLocaleLowerCase('tr-TR').replace(/[!?.,;:]+/g,' ').replace(/\s+/g,' ').trim();
+
+  if(/\b(?:çok soru soruyorsun|cok soru soruyorsun|bu kadar soru sorma|her seferinde soru sorma|soru sorma|takip sorusu sorma)\b/.test(s)){
+    return{kind:'followup-less',followup:-0.30,negative:true,reply:'Tamam. Takip sorularını azaltıyorum; gerektiğinde doğrudan cevabı bırakacağım.'};
+  }
+  if(/\b(?:bana daha çok soru sor|bana daha cok soru sor|biraz daha soru sor|sohbeti soru sorarak devam ettir|takip sorusu sorabilirsin)\b/.test(s)){
+    return{kind:'followup-more',followup:0.22,positive:true,reply:'Tamam. Sohbet uygunsa arada tek kısa takip sorusuyla devam ettireceğim.'};
+  }
+  if(/\b(?:gırgırı artır|girgiri artir|şakayı artır|sakayi artir|daha komik ol|biraz daha gırgır|biraz daha girgir)\b/.test(s)){
+    return{kind:'banter-more',banter:0.22,positive:true,reply:'Tamam, gırgırı bir tık yükseltiyorum; her cümleyi de stand-up gösterisine çevirmiyorum.'};
+  }
+  if(/\b(?:gırgırı azalt|girgiri azalt|şakayı azalt|sakayi azalt|çok şaka yapıyorsun|cok saka yapiyorsun|daha ciddi konuş|daha ciddi konus)\b/.test(s)){
+    return{kind:'banter-less',banter:-0.28,negative:true,reply:'Tamam. Şakayı geri çekiyorum; doğal ama daha ciddi kalacağım.'};
+  }
+  if(/\b(?:aynı giriş|ayni giris|aynı şeyleri söylüyorsun|ayni seyleri soyluyorsun|kendini tekrar etme|hep aynı konuşuyorsun|hep ayni konusuyorsun|robot gibi konuşuyorsun|robot gibi konusuyorsun)\b/.test(s)){
+    return{kind:'variation-more',variation:0.30,negative:true,reply:'Aldım. Aynı girişleri ve kalıp cümleleri tekrarlamayı daha agresif biçimde keseceğim.'};
+  }
+  if(/^(?:işte bu|iste bu|aynen böyle|aynen boyle|tam istediğim gibi|tam istedigim gibi|böyle iyi|boyle iyi|şimdi oldu|simdi oldu|bu cevap iyi)$/i.test(s)){
+    return{kind:'positive-generic',positive:true,reply:'Aynen. Bu çizgiyi koruyorum.'};
+  }
+  return null;
+}
+function applyDialogueFeedback(text){
+  const intent=dialogueFeedbackIntent(text);
+  if(!intent)return{handled:false,preferences:readDialogueFeedback()};
+  const x=readDialogueFeedback();
+  if(intent.followup)x.followupBias=clampBias(x.followupBias+intent.followup);
+  if(intent.banter)x.banterBias=clampBias(x.banterBias+intent.banter);
+  if(intent.variation)x.variationBias=clampBias(x.variationBias+intent.variation);
+  if(intent.positive)x.positiveCount=(Number(x.positiveCount)||0)+1;
+  if(intent.negative)x.negativeCount=(Number(x.negativeCount)||0)+1;
+  x.last={at:new Date().toISOString(),kind:intent.kind,text:String(text||'').slice(0,180)};
+  const saved=writeDialogueFeedback(x);
+  remember({
+    kind:'dialogue_feedback',
+    feedback:intent.kind,
+    followupBias:saved.followupBias,
+    banterBias:saved.banterBias,
+    variationBias:saved.variationBias
+  });
+  return{
+    handled:true,
+    type:'chat',
+    reply:intent.reply,
+    command:null,
+    commands:[],
+    tone:intent.negative?'focused':'warm',
+    model:'local-dialogue-feedback',
+    preferences:saved
+  };
+}
+function dialogueFeedbackPrompt(feedback){
+  const f=feedback||dialogueFeedbackDefaults();
+  return[
+    'ÖĞRENİLMİŞ SOHBET TERCİHLERİ:',
+    'takip sorusu eğilimi '+Number(f.followupBias||0).toFixed(2)+',',
+    'gırgır eğilimi '+Number(f.banterBias||0).toFixed(2)+',',
+    'çeşitlilik hassasiyeti '+Number(f.variationBias||0).toFixed(2)+'.',
+    'Bu değerleri doğal biçimde uygula; kullanıcıdan açık geri bildirim gelmedikçe daha fazla çıkarım yapma.'
+  ].join(' ');
+}
 function assistantOpeningSignature(text){
   return String(text||'')
     .toLocaleLowerCase('tr-TR')
@@ -1078,7 +1189,8 @@ function inferConversationSocialPolicy(text,recent=[],persona=brainPersona()){
   const vent=/\b(?:sinir oldum|canımı sıktı|canimi sikti|saçma|sacma|yoruldum|bıktım|biktim|delireceğim|delirecegim)\b/.test(s);
   const opinion=/\b(?:sence|ne dersin|fikrin ne|ne düşünüyorsun|ne dusunuyorsun|sen olsan|nasıl sence|nasil sence)\b/.test(s);
   const greeting=/^(?:selam|merhaba|naber|ne haber|nasılsın|nasilsin|napıyorsun|napion)\b/.test(s);
-  const openers=recentAssistantOpeners(recent,5);
+  const learnedFeedback=readDialogueFeedback();
+  const openers=recentAssistantOpeners(recent,Math.abs(learnedFeedback.variationBias)>=0.25?7:5);
 
   let mode='natural';
   let instruction='Doğal karşılık ver; gereksiz rol yapma.';
@@ -1109,7 +1221,14 @@ function inferConversationSocialPolicy(text,recent=[],persona=brainPersona()){
   }
 
   const directQuestion=/[?？]\s*$/.test(raw)||/^(?:ne|neden|niye|nasıl|nasil|kaç|kac|kim|hangi|nerede|ne zaman)\b/i.test(s);
-  const followupAllowed=!repair&&!work&&(story||playful||greeting||opinion||(!directQuestion&&raw.length>24));
+  let followupAllowed=!repair&&!work&&(story||playful||greeting||opinion||(!directQuestion&&raw.length>24));
+  if(learnedFeedback.followupBias<=-0.20)followupAllowed=false;
+  if(learnedFeedback.followupBias>=0.25&&!repair&&!work&&!directQuestion)followupAllowed=true;
+  const learnedBanter=learnedFeedback.banterBias>=0.30&&!repair&&!work&&(greeting||story||(!directQuestion&&raw.length<150));
+  if(learnedBanter&&mode==='natural'){
+    mode='banter';
+    instruction='Kullanıcının öğrendiğin sohbet tercihine göre hafif gırgır ekle; zorlama şaka yapma.';
+  }
   const maxFollowups=followupAllowed?1:0;
   const callbackAllowed=!work&&!repair&&Number(persona&&persona.warmth||0.8)>=0.6;
 
@@ -1119,7 +1238,8 @@ function inferConversationSocialPolicy(text,recent=[],persona=brainPersona()){
     followupAllowed,
     maxFollowups,
     callbackAllowed,
-    avoidOpeners:openers
+    avoidOpeners:openers,
+    learnedFeedback
   };
 }
 function socialPolicyPrompt(policy){
@@ -1138,6 +1258,7 @@ function socialPolicyPrompt(policy){
     parts.push('Son JARVIS açılışlarını tekrar etme: '+p.avoidOpeners.join(' | ')+'.');
   }
   parts.push('Aynı ünlem, aynı giriş cümlesi ve aynı kapanışı art arda kullanma. İnsan gibi ritim değiştir.');
+  parts.push(dialogueFeedbackPrompt(p.learnedFeedback));
   return parts.join(' ');
 }
 function shouldDeepReflect(text){
@@ -1415,6 +1536,13 @@ async function callLocalBrain(message){
   }
 
   const text=applySpeechLexicon(originalText);
+
+  const dialogueFeedbackDirective=applyDialogueFeedback(text);
+  if(dialogueFeedbackDirective.handled){
+    appendLocalBrainHistory('user',text);
+    appendLocalBrainHistory('assistant',dialogueFeedbackDirective.reply);
+    return{ok:true,...dialogueFeedbackDirective,memoryHits:0,personaVersion:brainPersona().version};
+  }
 
   const voicePreferenceDirective=handleVoicePreferenceDirective(text);
   if(voicePreferenceDirective.handled){
@@ -1953,6 +2081,13 @@ async function runNativeAgent(message,{maxRounds=4,signal=null}={}){
 
   const text=applySpeechLexicon(originalText);
 
+  const dialogueFeedbackDirective=applyDialogueFeedback(text);
+  if(dialogueFeedbackDirective.handled){
+    appendLocalBrainHistory('user',text);
+    appendLocalBrainHistory('assistant',dialogueFeedbackDirective.reply);
+    return{ok:true,type:'chat',reply:dialogueFeedbackDirective.reply,tone:dialogueFeedbackDirective.tone||'warm',actions:[],model:'local-dialogue-feedback',dialoguePreferences:dialogueFeedbackDirective.preferences};
+  }
+
   const voicePreferenceDirective=handleVoicePreferenceDirective(text);
   if(voicePreferenceDirective.handled){
     appendLocalBrainHistory('user',text);
@@ -2222,6 +2357,7 @@ function isStreamableConversation(message){
   if(!s||s.length>700)return false;
   if(shouldDeepReflect(s)||isContextRecallQuery(s))return false;
   if(looksLikeVoicePreferenceDirective(s))return false;
+  if(dialogueFeedbackIntent(s))return false;
   if(isLocalSafeControlCommand(s))return false;
   const k=s.toLocaleLowerCase('tr-TR');
   if(/\b(?:hatırla|hatirla|unut|dediğimde|dedigimde|dersem|düzeltmesini|duzeltmesini)\b/.test(k))return false;
@@ -2402,6 +2538,10 @@ function startLocalTtsBridge(){
     res.setHeader('Access-Control-Allow-Headers','content-type');
     res.setHeader('Access-Control-Allow-Methods','GET,POST,OPTIONS');
     if(req.method==='OPTIONS'){res.writeHead(204);return res.end()}
+    if(req.method==='GET'&&req.url==='/dialogue-feedback'){
+      res.writeHead(200,{'content-type':'application/json'});
+      return res.end(JSON.stringify({ok:true,...readDialogueFeedback()}));
+    }
     if(req.method==='GET'&&req.url==='/voice-preferences'){
       res.writeHead(200,{'content-type':'application/json'});
       return res.end(JSON.stringify({ok:true,...readVoicePreferences()}));
@@ -2480,7 +2620,7 @@ function startLocalTtsBridge(){
         localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2',vision:isLocalVisionModel()},
         localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper',adaptiveLexicon:true,adaptiveDecode:true,dynamicEndpointing:true,lexiconCount:Object.keys(readSpeechLexicon().aliases||{}).length},
         adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',interruptible:true,offlineFallback:'windows-sapi',chunkedPipeline:true,prefetch:true,safeCache:true,backchannelPrewarm:true,backchannelState:ttsBackchannelPrewarmState,dynamicChunkProsody:true,naturalPauseTiming:true,adaptiveVoicePreferences:true,voicePreferences:readVoicePreferences(),speakerEchoRejection:true,profiles:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']},
-        brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,toolReflection:true,multimodal:isLocalVisionModel(),screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,streamingChat:true,sentenceStreamTts:true,conversationRepair:true,adaptiveModelRouter:true,fastModel:LOCAL_BRAIN_MODEL,deepModel:LOCAL_BRAIN_DEEP_MODEL,adaptiveTurnPacing:true,fullDuplexInterrupt:true,cancellableAgent:true,socialDialogue:true,responseVariation:true,contextualFollowup:true},
+        brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,toolReflection:true,multimodal:isLocalVisionModel(),screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,streamingChat:true,sentenceStreamTts:true,conversationRepair:true,adaptiveModelRouter:true,fastModel:LOCAL_BRAIN_MODEL,deepModel:LOCAL_BRAIN_DEEP_MODEL,adaptiveTurnPacing:true,fullDuplexInterrupt:true,cancellableAgent:true,socialDialogue:true,responseVariation:true,contextualFollowup:true,dialogueFeedbackLearning:true,socialPreferenceAdaptation:true},
         mobileRelay:{brain:true,tts:true,pollMs:650}
       }));
     }
@@ -2519,7 +2659,7 @@ function startLocalTtsBridge(){
     if(req.method==='GET'&&req.url==='/brain-status'){
       localBrainStatus().then(status=>{
         res.writeHead(200,{'content-type':'application/json'});
-        res.end(JSON.stringify({ok:true,...status,warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,conversationRepair:true,adaptiveModelRouter:true,fastModel:LOCAL_BRAIN_MODEL,deepModel:LOCAL_BRAIN_DEEP_MODEL,adaptiveTurnPacing:true,fullDuplexInterrupt:true,cancellableAgent:true,socialDialogue:true,responseVariation:true,contextualFollowup:true,persona:brainPersona(),memoryFacts:readBrainFacts().length,memoryEpisodes:readBrainEpisodes().length}));
+        res.end(JSON.stringify({ok:true,...status,warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,conversationRepair:true,adaptiveModelRouter:true,fastModel:LOCAL_BRAIN_MODEL,deepModel:LOCAL_BRAIN_DEEP_MODEL,adaptiveTurnPacing:true,fullDuplexInterrupt:true,cancellableAgent:true,socialDialogue:true,responseVariation:true,contextualFollowup:true,dialogueFeedbackLearning:true,socialPreferenceAdaptation:true,dialogueFeedback:readDialogueFeedback(),persona:brainPersona(),memoryFacts:readBrainFacts().length,memoryEpisodes:readBrainEpisodes().length}));
       }).catch(e=>{
         res.writeHead(503,{'content-type':'application/json'});
         res.end(JSON.stringify({ok:false,error:String(e.message||e)}));
