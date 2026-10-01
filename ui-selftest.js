@@ -8,6 +8,11 @@ for(const [i,s] of scripts.entries()){
 }
 const required=[
   'canonicalJarvisCommand',
+  'applyLearnedSpeechAlias',
+  'loadLocalSpeechLexicon',
+  'normalizeWithWorkerSpeechLexicon',
+  'teachLocalSpeechAlias',
+  'maybeLearnVoiceCorrection',
   'listenWithLocalStt',
   'scheduleVoiceConversationFollowup',
   'askJarvisBrain',
