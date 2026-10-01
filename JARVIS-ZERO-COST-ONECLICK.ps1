@@ -48,12 +48,15 @@ $ramGb = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemor
 if ($ramGb -ge 14) { $BrainModel = "qwen3:4b" }
 elseif ($ramGb -ge 7) { $BrainModel = "qwen3:1.7b" }
 else { $BrainModel = "qwen3:0.6b" }
-$SttModel = "base"
+$cpuCores = [Environment]::ProcessorCount
+if ($ramGb -ge 12 -and $cpuCores -ge 4) { $SttModel = "small" }
+elseif ($ramGb -ge 6) { $SttModel = "base" }
+else { $SttModel = "tiny" }
 [Environment]::SetEnvironmentVariable("JARVIS_LOCAL_BRAIN_MODEL",$BrainModel,"User")
 [Environment]::SetEnvironmentVariable("JARVIS_STT_MODEL",$SttModel,"User")
 $env:JARVIS_LOCAL_BRAIN_MODEL = $BrainModel
 $env:JARVIS_STT_MODEL = $SttModel
-Write-Host ("[JARVIS] RAM: {0} GB -> Local Brain: {1} (Qwen3 / think=false / zero-cost)" -f $ramGb,$BrainModel)
+Write-Host ("[JARVIS] RAM: {0} GB / CPU: {1} logical -> Brain: {2} / STT: {3}" -f $ramGb,$cpuCores,$BrainModel,$SttModel)
 
 Write-Host "[3/8] Ollama kontrol ediliyor..." -ForegroundColor Yellow
 $ollama = Get-Command ollama -ErrorAction SilentlyContinue

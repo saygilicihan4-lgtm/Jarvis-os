@@ -27,8 +27,17 @@ const mock=http.createServer(async(req,res)=>{
     seen.push(body);
     const last=(body.messages||[]).filter(x=>x.role==='user').slice(-1)[0];
     const text=String(last&&last.content||'');
+    const system=(body.messages||[]).filter(x=>x.role==='system').map(x=>String(x.content||'')).join('\n');
     let out;
-    if(/youtube/i.test(text))out={type:'command',reply:'YouTube açılıyor.',command:'youtube aç'};
+    if(/gelecekte bağlamı korumak/i.test(system)){
+      out={
+        summary:'Eski sohbette Mavi roket projesi ve doğal JARVIS konuşma tarzı ele alındı.',
+        topics:['Mavi roket projesi','JARVIS konuşma tarzı'],
+        decisions:['Sohbet doğal ve kısa kalacak'],
+        preferences:['Gırgır ve samimi ton'],
+        unresolved:['Mavi roket projesinin sonraki adımı']
+      };
+    } else if(/youtube/i.test(text))out={type:'command',reply:'YouTube açılıyor.',command:'youtube aç'};
     else if(/format/i.test(text))out={type:'command',reply:'Tamam, formatlıyorum.',command:'bilgisayarı formatla'};
     else if(/az önce/i.test(text))out={type:'chat',reply:'Az önce sohbeti biraz daha eğlenceli hale getirmek istediğinizi söylediniz.',command:null};
     else out={type:'chat',reply:'Olur. Biraz gırgır, biraz fikir; sıkıcı asistan moduna girmeden devam edelim.',command:null};
@@ -89,7 +98,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.41.0','worker version');
+    assert(hj.version==='2.42.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
 
     const chat=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Bugün biraz sohbet edelim; böyle konuşmanı istiyorum, biraz da gırgır olsun.'});
@@ -147,6 +156,41 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(ttsState.status===200,'tts-state status');
     const ts=JSON.parse(ttsState.body);
     assert(ts.ok===true&&typeof ts.active==='boolean','tts-state payload');
+
+    // Force a long local conversation and verify automatic episode compaction.
+    const histDir=path.join(workspace,'.jarvis-memory');
+    fs.mkdirSync(histDir,{recursive:true});
+    const histFile=path.join(histDir,'brain-history.jsonl');
+    const longRows=[];
+    for(let i=0;i<72;i++){
+      longRows.push({
+        at:new Date(Date.now()-72000+i*1000).toISOString(),
+        role:i%2===0?'user':'assistant',
+        content:i<28
+          ?('Mavi roket projesi eski konuşma satırı '+i+' doğal sohbet gırgır')
+          :('Yakın konuşma satırı '+i)
+      });
+    }
+    fs.writeFileSync(histFile,longRows.map(x=>JSON.stringify(x)).join('\n')+'\n','utf8');
+
+    const trigger=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Sohbete devam edelim.'});
+    assert(trigger.status===200,'episode trigger chat');
+
+    let bs=null;
+    for(let i=0;i<30;i++){
+      const br=await get('http://127.0.0.1:'+BRIDGE_PORT+'/brain-status');
+      bs=JSON.parse(br.body);
+      if(Number(bs.memoryEpisodes||0)>0)break;
+      await new Promise(r=>setTimeout(r,100));
+    }
+    assert(Number(bs&&bs.memoryEpisodes||0)>0,'episodic memory summary not created');
+
+    const beforeSeen=seen.length;
+    const oldTopic=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Mavi roket projesinden ne hatırlıyorsun?'});
+    assert(oldTopic.status===200,'episodic retrieval request');
+    const reqs=seen.slice(beforeSeen);
+    const episodicPrompt=reqs.map(x=>(x.messages||[]).map(m=>String(m.content||'')).join('\n')).join('\n');
+    assert(/Eski sohbet özeti:.*Mavi roket/is.test(episodicPrompt),'episodic summary was not retrieved into prompt');
 
     console.log('WORKER BRAIN SELFTEST PASS');
     process.exitCode=0;
