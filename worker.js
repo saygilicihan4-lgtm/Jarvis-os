@@ -27,9 +27,9 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.58.0';
+const WORKER_VERSION='2.59.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
-CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1');
+CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','full_duplex_interrupt_v1','cancellable_agent_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -1083,7 +1083,9 @@ async function callLocalBrain(message){
   maybeRememberExplicitPreference(text);
   const adjustedPersona=updateBrainPersonaFromUserText(text);
 
+  if(signal&&signal.aborted)return cancelledResult([],0);
   const status=await localBrainStatus();
+  if(signal&&signal.aborted)return cancelledResult([],0);
   if(!status.ready)return{ok:false,error:'OLLAMA_OFFLINE',model:LOCAL_BRAIN_MODEL};
   if(!status.installed)return{ok:false,error:'MODEL_NOT_INSTALLED',model:LOCAL_BRAIN_MODEL};
 
@@ -1580,7 +1582,12 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
   const result=await execute({command});
   return result||{ok:false,message:'Araç sonucu alınamadı.'};
 }
-async function runNativeAgent(message,{maxRounds=4}={}){
+async function runNativeAgent(message,{maxRounds=4,signal=null}={}){
+  const cancelledResult=(actions=[],rounds=0)=>({
+    ok:false,error:'CANCELLED',cancelled:true,model:LOCAL_BRAIN_MODEL,
+    actions:Array.isArray(actions)?actions:[],rounds,nativeTools:true
+  });
+  if(signal&&signal.aborted)return cancelledResult([],0);
   const originalText=String(message||'').replace(/\s+/g,' ').trim().slice(0,1800);
   if(!originalText)return{ok:true,type:'chat',reply:'Sizi dinliyorum Cihan Bey.',tone:'balanced',actions:[]};
 
@@ -1634,7 +1641,10 @@ async function runNativeAgent(message,{maxRounds=4}={}){
   const started=Date.now();
 
   for(let round=0;round<Math.max(1,Math.min(6,Number(maxRounds)||4));round++){
+    if(signal&&signal.aborted)return cancelledResult(actions,round);
     const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),45000);
+    const externalAbort=()=>{try{ctl.abort()}catch(_){}};
+    if(signal)signal.addEventListener('abort',externalAbort,{once:true});
     let j;
     try{
       const r=await fetch(LOCAL_BRAIN_URL+'/api/chat',{
@@ -1658,10 +1668,16 @@ async function runNativeAgent(message,{maxRounds=4}={}){
         signal:ctl.signal
       });
       clearTimeout(timer);
+      if(signal)signal.removeEventListener('abort',externalAbort);
       j=await r.json().catch(()=>({}));
       if(!r.ok)throw new Error(j.error||('OLLAMA '+r.status));
     }catch(e){
       clearTimeout(timer);
+      if(signal)signal.removeEventListener('abort',externalAbort);
+      if((signal&&signal.aborted)||e.name==='AbortError'){
+        remember({kind:'native_agent_cancelled',actions:actions.length,round:round+1});
+        return cancelledResult(actions,round+1);
+      }
       if(actions.length){
         const summaries=actions.map(x=>(x.ok?'OK ':'FAIL ')+x.tool+': '+x.result).slice(-6);
         appendLocalBrainHistory('user',text);
@@ -1698,6 +1714,10 @@ async function runNativeAgent(message,{maxRounds=4}={}){
     });
 
     for(const tc of toolCalls.slice(0,3)){
+      if(signal&&signal.aborted){
+        remember({kind:'native_agent_cancelled_before_tool',actions:actions.length,round:round+1});
+        return cancelledResult(actions,round+1);
+      }
       const fn=tc&&tc.function||{};
       const name=String(fn.name||'');
       let args=fn.arguments&&typeof fn.arguments==='object'?fn.arguments:{};
@@ -1711,6 +1731,11 @@ async function runNativeAgent(message,{maxRounds=4}={}){
       }else{
         seenCalls.add(signature);
         result=await executeNativeAgentTool(name,args,{userText:text});
+      }
+      if(signal&&signal.aborted){
+        actions.push({tool:name,args,ok:!!(result&&result.ok),result:String(result&&result.message||'Araç sonucu yok.').slice(0,900)});
+        remember({kind:'native_agent_cancelled_after_tool',actions:actions.length,round:round+1});
+        return cancelledResult(actions,round+1);
       }
       const content=String(result&&result.message||'Araç sonucu yok.').slice(0,7000);
       actions.push({tool:name,args,ok:!!(result&&result.ok),result:content.slice(0,900)});
@@ -2049,7 +2074,7 @@ function startLocalTtsBridge(){
         localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2',vision:isLocalVisionModel()},
         localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper',adaptiveLexicon:true,adaptiveDecode:true,dynamicEndpointing:true,lexiconCount:Object.keys(readSpeechLexicon().aliases||{}).length},
         adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',interruptible:true,offlineFallback:'windows-sapi',chunkedPipeline:true,prefetch:true,safeCache:true,backchannelPrewarm:true,backchannelState:ttsBackchannelPrewarmState,profiles:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']},
-        brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,toolReflection:true,multimodal:isLocalVisionModel(),screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,streamingChat:true,sentenceStreamTts:true},
+        brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,toolReflection:true,multimodal:isLocalVisionModel(),screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,streamingChat:true,sentenceStreamTts:true,fullDuplexInterrupt:true,cancellableAgent:true},
         mobileRelay:{brain:true,tts:true,pollMs:650}
       }));
     }
@@ -2156,8 +2181,14 @@ function startLocalTtsBridge(){
         if(tooLarge){res.writeHead(413,{'content-type':'application/json'});return res.end(JSON.stringify({ok:false,error:'too large'}))}
         try{
           const d=JSON.parse(body||'{}');
-          const result=await runNativeAgent(d.message,{maxRounds:d.maxRounds||4});
-          res.writeHead(result.ok?200:503,{'content-type':'application/json'});
+          const requestCtl=new AbortController();
+          const onClose=()=>{if(!res.writableEnded)try{requestCtl.abort()}catch(_){}};
+          res.on('close',onClose);
+          const result=await runNativeAgent(d.message,{maxRounds:d.maxRounds||4,signal:requestCtl.signal});
+          res.removeListener('close',onClose);
+          if(res.destroyed||res.writableEnded)return;
+          const code=result.cancelled?499:(result.ok?200:503);
+          res.writeHead(code,{'content-type':'application/json'});
           return res.end(JSON.stringify(result));
         }catch(e){
           res.writeHead(500,{'content-type':'application/json'});
