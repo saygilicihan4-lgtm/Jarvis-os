@@ -104,3 +104,5 @@ const wakeEnd=html.indexOf('const SpeechRecognition=',wakeStart);
 const wakeBlock=html.slice(wakeStart,wakeEnd);
 if(wakeBlock.includes('},3000);'))throw new Error('Fixed 3-second wake delay still present');
 if(!wakeBlock.includes('generation!==wakeAckGeneration'))throw new Error('Stale wake acknowledgement guard missing');
+
+if(!html.includes('QUALITY ↑'))throw new Error('Automatic quality escalation diagnostic missing');
