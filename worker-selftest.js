@@ -103,7 +103,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.50.0','worker version');
+    assert(hj.version==='2.51.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.adaptiveTts&&hj.adaptiveTts.interruptible===true,'interruptible TTS health');
     assert(hj.adaptiveTts.offlineFallback==='windows-sapi','offline TTS fallback health');
@@ -140,6 +140,23 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(/safir anka 4821/i.test(ragPrompt),'workspace RAG snippet missing from prompt');
     assert(!/SHOULD_NOT_ENTER_RAG/i.test(ragPrompt),'sensitive RAG content leaked');
     assert(/müşteri dönüşümü|VAROVA için/i.test(ragj.reply),'deep refinement reply missing');
+
+    const feedback=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Bu çok robotik oldu, böyle konuşma.'});
+    assert(feedback.status===200,'dialogue feedback status');
+    const fj=JSON.parse(feedback.body);
+    assert(fj.ok===true&&fj.dialogueFeedback==='negative_robotic','dialogue feedback classification');
+
+    const feedbackFile=path.join(workspace,'.jarvis-memory','brain-dialogue-feedback.jsonl');
+    assert(fs.existsSync(feedbackFile),'dialogue feedback file missing');
+    const feedbackRows=fs.readFileSync(feedbackFile,'utf8');
+    assert(/negative_robotic/.test(feedbackRows),'negative feedback not persisted');
+
+    const afterFeedbackSeen=seen.length;
+    const afterFeedback=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Tamam, şimdi normal konuşalım.'});
+    assert(afterFeedback.status===200,'post-feedback chat status');
+    const feedbackReqs=seen.slice(afterFeedbackSeen);
+    const feedbackPrompt=feedbackReqs.map(x=>(x.messages||[]).map(m=>String(m.content||'')).join('\n')).join('\n');
+    assert(/KAÇINILACAK STİL/.test(feedbackPrompt),'dialogue feedback was not injected into prompt');
 
     const cmd=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:"YouTube'u açar mısın?"});
     assert(cmd.status===200,'command status');
