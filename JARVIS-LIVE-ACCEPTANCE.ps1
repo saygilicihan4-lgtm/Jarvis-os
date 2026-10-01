@@ -60,6 +60,8 @@ try {
   Add-Result "Speaker echo rejection" $echoRejectOk ("capability="+(@($h.capabilities) -contains "speaker_echo_rejection_v1")+" runtime="+$h.adaptiveTts.speakerEchoRejection)
   $backchannelOk=($h.adaptiveTts.backchannelPrewarm -eq $true -and $null -ne $h.adaptiveTts.backchannelState)
   Add-Result "Thinking backchannel runtime" $backchannelOk ("prewarm="+$h.adaptiveTts.backchannelPrewarm+" state="+$h.adaptiveTts.backchannelState.status+" cached="+$h.adaptiveTts.backchannelState.count+"/"+$h.adaptiveTts.backchannelState.total)
+  $wakeAckOk=(@($h.capabilities) -contains "dynamic_wake_ack_v1" -and @($h.capabilities) -contains "wake_ack_turn_timing_v1" -and $h.adaptiveTts.wakeAckPrewarm -eq $true -and [int]$h.adaptiveTts.wakeAckVariants -ge 4)
+  Add-Result "Natural wake acknowledgement" $wakeAckOk ("prewarm="+$h.adaptiveTts.wakeAckPrewarm+" variants="+$h.adaptiveTts.wakeAckVariants)
   Add-Result "Offline voice fallback" ([string]$h.adaptiveTts.offlineFallback -eq "windows-sapi") ([string]$h.adaptiveTts.offlineFallback)
   $mobileRelayOk=($null -ne $h.mobileRelay -and $h.mobileRelay.brain -eq $true -and $h.mobileRelay.tts -eq $true)
   Add-Result "Phone local brain relay" $mobileRelayOk ("brain="+$h.mobileRelay.brain+" tts="+$h.mobileRelay.tts+" poll="+$h.mobileRelay.pollMs+"ms")
@@ -415,6 +417,7 @@ $criticalFailed=($results | Where-Object {
     "Voice preference state endpoint",
     "Dynamic sentence prosody behavior",
     "Thinking backchannel runtime",
+    "Natural wake acknowledgement",
     "Ahmet neural voice render",
     "Offline voice fallback",
     "Phone local brain relay",
