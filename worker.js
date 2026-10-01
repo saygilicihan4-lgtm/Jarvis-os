@@ -2096,6 +2096,26 @@ function startLocalTtsBridge(){
         mobileRelay:{brain:true,tts:true,pollMs:650}
       }));
     }
+    if(req.method==='POST'&&req.url==='/tts-profile'){
+      let body='',tooLarge=false;
+      req.on('data',chunk=>{body+=chunk;if(body.length>16384){tooLarge=true;req.destroy()}});
+      req.on('end',()=>{
+        if(tooLarge){res.writeHead(413,{'content-type':'application/json'});return res.end(JSON.stringify({ok:false,error:'too large'}))}
+        try{
+          const d=JSON.parse(body||'{}');
+          const text=String(d.text||'').replace(/\s+/g,' ').trim().slice(0,500);
+          const tone=String(d.tone||'balanced');
+          if(!text){res.writeHead(400,{'content-type':'application/json'});return res.end(JSON.stringify({ok:false,error:'text required'}))}
+          const profile=ttsProfileForSentence(tone,text,Number(d.index)||0,Math.max(1,Number(d.total)||1));
+          res.writeHead(200,{'content-type':'application/json'});
+          return res.end(JSON.stringify({ok:true,tone,text,profile,sentenceProsody:true}));
+        }catch(e){
+          res.writeHead(500,{'content-type':'application/json'});
+          return res.end(JSON.stringify({ok:false,error:String(e.message||e)}));
+        }
+      });
+      return;
+    }
     if(req.method==='GET'&&req.url==='/tts-state'){
       res.writeHead(200,{'content-type':'application/json'});
       return res.end(JSON.stringify({
