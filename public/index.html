@@ -447,7 +447,11 @@ async function maybeLearnVoiceCorrection(text){
     lastVoiceTranscript=correctionSourceText(text);
     if(ok){
       if(window.consoleStatus)consoleStatus.textContent='JARVIS · SES DÜZELTMESİ ÖĞRENİLDİ: '+source+' → '+intended;
-      speak('Tamam. Bundan sonra onu '+intended+' olarak anlayacağım.','tr-TR','warm');
+      const confirmation='Tamam. Bundan sonra onu '+intended+' olarak anlayacağım.';
+      voiceConversationActive=true;
+      voiceConversationUntil=Date.now()+120000;
+      speak(confirmation,'tr-TR','warm');
+      scheduleVoiceConversationFollowup(confirmation);
       return true;
     }
   }
@@ -636,6 +640,11 @@ async function handleBargeInTranscript(text){
     await new Promise(r=>setTimeout(r,120));
     voiceConversationActive=true;
     voiceConversationUntil=Date.now()+120000;
+
+    // A correction such as "hayır, YouTube dedim" teaches the local
+    // lexicon immediately instead of being treated as an unrelated new turn.
+    if(intent.reason==='correction'&&await maybeLearnVoiceCorrection(replacement))return true;
+
     cmd.value=canonicalJarvisCommand(replacement);
     await send();
   }
