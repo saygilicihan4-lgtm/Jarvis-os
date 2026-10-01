@@ -127,7 +127,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.55.0','worker version');
+    assert(hj.version==='2.55.1','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localBrain.vision===true,'local multimodal health');
     assert(hj.brainRuntime&&hj.brainRuntime.nativeTools===true,'native tools health');
@@ -225,6 +225,26 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const cm=JSON.parse(cmd.body);
     assert(cm.type==='command'&&cm.command==='youtube aç','safe command normalization');
 
+    const lexLearn=await post('http://127.0.0.1:'+BRIDGE_PORT+'/speech-lexicon',{
+      heard:'yutup',
+      intended:'youtube',
+      source:'hotfix-selftest'
+    });
+    assert(lexLearn.status===200,'adaptive lexicon learn status');
+    const lexLearnJ=JSON.parse(lexLearn.body);
+    assert(lexLearnJ.ok===true,'adaptive lexicon learn failed');
+
+    const partialAlias=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'yutup aç'});
+    assert(partialAlias.status===200,'partial alias brain status');
+    const partialAliasJ=JSON.parse(partialAlias.body);
+    assert(partialAliasJ.type==='command'&&partialAliasJ.command==='youtube aç','partial learned alias replacement failed');
+
+    const lexForget=await post('http://127.0.0.1:'+BRIDGE_PORT+'/speech-lexicon',{
+      action:'forget',
+      heard:'yutup'
+    });
+    assert(lexForget.status===200,'adaptive lexicon forget status');
+
     const plan=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:"YouTube'u aç ve sesi yükselt."});
     assert(plan.status===200,'multi-action plan status');
     const pm=JSON.parse(plan.body);
@@ -257,12 +277,13 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const bj=JSON.parse(blocked.body);
     assert(bj.type==='chat'&&bj.command===null,'unsafe command must be blocked');
 
+    const followSeen=seen.length;
     const follow=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Az önce ne söyledim?'});
     assert(follow.status===200,'follow-up status');
     const fj=JSON.parse(follow.body);
     assert(fj.type==='chat','follow-up chat');
-    const finalReq=seen[seen.length-1]||{};
-    const msgText=(finalReq.messages||[]).map(x=>x.content).join('\n');
+    const followReqs=seen.slice(followSeen);
+    const msgText=followReqs.map(r=>(r.messages||[]).map(x=>String(x.content||'')).join('\n')).join('\n');
     assert(/Bugün biraz sohbet edelim/i.test(msgText),'recent conversation context missing');
 
     const facts=path.join(workspace,'.jarvis-memory','brain-facts.jsonl');
