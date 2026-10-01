@@ -282,10 +282,19 @@ function parseJarvisWake(text){
   let s=normalizeJarvisSpeech(text);
   if(!s)return {wake:false,command:''};
   s=s.replace(/^hey\s+/,'').trim();
-  const parts=s.split(' ');
-  if(!jarvisAlias(parts[0]))return {wake:false,command:''};
+  let parts=s.split(' ');
+  let rest='';
 
-  const rest=parts.slice(1).join(' ').trim();
+  if(jarvisAlias(parts[0])){
+    rest=parts.slice(1).join(' ').trim();
+  }else{
+    // Some Chromium recognizers glue adjacent result chunks, e.g.
+    // "jarvissistem durumu". Split only a known Jarvis alias prefix.
+    const aliases=['jarvis','carvis','jervis','jarves','jarviz'];
+    const glued=aliases.find(a=>s.startsWith(a)&&s.length>a.length);
+    if(!glued)return {wake:false,command:''};
+    rest=s.slice(glued.length).trim();
+  }
   if(!rest)return {wake:true,command:''};
 
   // These remain pure wake phrases. Anything else after "Jarvis" is treated
@@ -364,9 +373,15 @@ if(SpeechRecognition){
     if(desktopWakeWordEnabled)scheduleDesktopWakeWord(1200);
   };
   recognition.onresult=e=>{
-    let text='';
-    for(let i=e.resultIndex;i<e.results.length;i++)text+=e.results[i][0].transcript;
-    const captured=text.trim();
+    // Chromium/Opera can split one spoken sentence into multiple result chunks.
+    // Joining without spaces turned "Jarvis sistem durumu" into
+    // "Jarvissistem durumu", so the wake-word parser missed the command.
+    const text=[];
+    for(let i=0;i<e.results.length;i++){
+      const chunk=String(e.results[i][0]&&e.results[i][0].transcript||'').trim();
+      if(chunk)text.push(chunk);
+    }
+    const captured=text.join(' ').replace(/\s+/g,' ').trim();
     if(e.results[e.results.length-1].isFinal){
       if(/jarvis.*(bu konuşmayı|bu konusmayi).*dinleme|dinlemeyi (durdur|kapat)|gizlilik modu/i.test(captured)){
         enterPrivacyMode();return;
@@ -387,7 +402,7 @@ if(SpeechRecognition){
         wakeWordConversationUntil=0;
         wakeWordMutedUntil=Date.now()+12000;
         voiceState.textContent='VOICE: JARVIS · COMMAND CAPTURED';
-        consoleStatus.textContent='JARVIS · TEK NEFESTE KOMUT ALGILANDI';
+        consoleStatus.textContent='JARVIS · TEK NEFESTE KOMUT: '+wake.command;
         setTimeout(()=>send(),120);
         return;
       }
