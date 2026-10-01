@@ -21,7 +21,7 @@ function readJson(req){
   });
 }
 const mock=http.createServer(async(req,res)=>{
-  if(req.url==='/api/tags')return json(res,200,{models:[{name:'qwen2.5:1.5b'}]});
+  if(req.url==='/api/tags')return json(res,200,{models:[{name:'qwen3:1.7b'}]});
   if(req.url==='/api/chat'&&req.method==='POST'){
     const body=await readJson(req);
     seen.push(body);
@@ -78,7 +78,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
         JARVIS_LOCAL_BRIDGE_FORCE:'1',
         JARVIS_TTS_PORT:String(BRIDGE_PORT),
         JARVIS_LOCAL_BRAIN_URL:'http://127.0.0.1:'+OLLAMA_PORT,
-        JARVIS_LOCAL_BRAIN_MODEL:'qwen2.5:1.5b',
+        JARVIS_LOCAL_BRAIN_MODEL:'qwen3:1.7b',
         JARVIS_TOKEN:'test-token',
         JARVIS_WORKSPACE:workspace
       },
@@ -89,7 +89,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.40.0','worker version');
+    assert(hj.version==='2.41.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
 
     const chat=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Bugün biraz sohbet edelim; böyle konuşmanı istiyorum, biraz da gırgır olsun.'});
@@ -97,6 +97,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const cj=JSON.parse(chat.body);
     assert(cj.ok===true&&cj.type==='chat','chat routing');
     assert(/gırgır|fikir|devam/i.test(cj.reply),'humanlike chat reply');
+    assert(['playful','casual','balanced'].includes(cj.tone),'chat tone missing');
 
     const personaPath=path.join(workspace,'.jarvis-memory','brain-persona.json');
     assert(fs.existsSync(personaPath),'persona file missing');
@@ -140,6 +141,12 @@ function assert(x,msg){if(!x)throw new Error(msg)}
 
     const modelReq=seen.find(x=>(x.messages||[]).some(m=>m.role==='system'&&/Bu tur konuşma modu/i.test(String(m.content||''))));
     assert(!!modelReq,'dynamic conversation mode prompt missing');
+    assert(modelReq.think===false,'Qwen3 think=false missing for low-latency conversation');
+
+    const ttsState=await get('http://127.0.0.1:'+BRIDGE_PORT+'/tts-state');
+    assert(ttsState.status===200,'tts-state status');
+    const ts=JSON.parse(ttsState.body);
+    assert(ts.ok===true&&typeof ts.active==='boolean','tts-state payload');
 
     console.log('WORKER BRAIN SELFTEST PASS');
     process.exitCode=0;
