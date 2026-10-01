@@ -571,6 +571,18 @@ function inferBrainTurnStyle(text,persona){
   if(mode==='balanced')temperature=Math.max(0.48,Math.min(0.82,0.56+humor*0.18));
   return{mode,temperature,instruction};
 }
+function selectBrainModelForTurn(text,turnStyle={},deepRequested=false){
+  const requested=String(LOCAL_BRAIN_MODEL||'qwen3:1.7b');
+  const s=String(text||'').toLocaleLowerCase('tr-TR');
+  const benchmark=Number(process.env.JARVIS_LOCAL_BRAIN_BENCHMARK_MS||0);
+  const complex=deepRequested||/\b(?:kod|debug|hata|mimari|strateji|karşılaştır|karsilastir|araştır|arastir|neden|planla|tasarla|analiz)\b/.test(s);
+  const casual=/^(?:naber|nasılsın|nasilsin|selam|merhaba|iyi misin|ne var ne yok|devam et)[?.! ]*$/i.test(s.trim());
+  let model=requested,reason='configured';
+  if(requested==='qwen3:4b'&&benchmark>9000&&!complex){model='qwen3:1.7b';reason='latency'}
+  if(requested==='qwen3:1.7b'&&benchmark>13000&&!complex){model='qwen3:0.6b';reason='latency'}
+  if(casual&&benchmark>7000&&requested!=='qwen3:0.6b'){model='qwen3:0.6b';reason='casual-fast-path'}
+  return{model,reason,complex,benchmark};
+}
 function shouldDeepReflect(text){
   const s=String(text||'').toLocaleLowerCase('tr-TR');
   return /\b(?:kapsamlı|kapsamli|derin düşün|derin dusun|detaylı düşün|detayli dusun|analiz et|karşılaştır|karsilastir|artıları ve eksileri|artilari ve eksileri|strateji|nedenlerini incele|mantığını incele|mantigini incele)\b/.test(s);
@@ -818,8 +830,8 @@ async function callLocalBrain(message){
   const adjustedPersona=updateBrainPersonaFromUserText(text);
 
   const status=await localBrainStatus();
-  if(!status.ready)return{ok:false,error:'OLLAMA_OFFLINE',model:LOCAL_BRAIN_MODEL};
-  if(!status.installed)return{ok:false,error:'MODEL_NOT_INSTALLED',model:LOCAL_BRAIN_MODEL};
+  if(!status.ready)return{ok:false,error:'OLLAMA_OFFLINE',model:turnBrainModel};
+  if(!status.installed)return{ok:false,error:'MODEL_NOT_INSTALLED',model:turnBrainModel};
 
   // Keep enough short-term dialogue turns for natural references such as
   // "az önce", "onu", "ikincisi" even after several tool/command turns.
@@ -829,6 +841,8 @@ async function callLocalBrain(message){
   const persona=adjustedPersona||brainPersona();
   const turnStyle=inferBrainTurnStyle(text,persona);
   const deepRequested=shouldDeepReflect(text);
+  const modelRoute=selectBrainModelForTurn(text,turnStyle,deepRequested);
+  const turnBrainModel=modelRoute.model;
   const memoryText=memory.length
     ? memory.map(x=>'- '+(x.role==='memory'?'Hatırlanan tercih':x.role==='episode'?'Eski sohbet özeti':'Önceki konuşma')+': '+x.text).join('\n')
     : '- İlgili eski kayıt yok.';
@@ -878,7 +892,7 @@ async function callLocalBrain(message){
   };
 
   const makeBody=(repairNote='')=>({
-    model:LOCAL_BRAIN_MODEL,
+    model:turnBrainModel,
     stream:false,
     think:false,
     format:schema,
@@ -966,7 +980,7 @@ async function callLocalBrain(message){
           method:'POST',
           headers:{'content-type':'application/json'},
           body:JSON.stringify({
-            model:LOCAL_BRAIN_MODEL,
+            model:turnBrainModel,
             stream:false,
             think:false,
             format:deepSchema,
@@ -993,7 +1007,7 @@ async function callLocalBrain(message){
           if(refined&&refined.reply){
             reply=normalizeBrainReply(refined.reply);
             if(allowedTones.has(String(refined.tone||'')))tone=String(refined.tone);
-            remember({kind:'deep_reflection',model:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-deepStarted,workspaceSources:workspaceCtx.sources});
+            remember({kind:'deep_reflection',model:turnBrainModel,latencyMs:Date.now()-deepStarted,workspaceSources:workspaceCtx.sources});
           }
         }
       }catch(e){
@@ -1005,18 +1019,18 @@ async function callLocalBrain(message){
     appendLocalBrainHistory('user',text);
     if(type==='chat')appendLocalBrainHistory('assistant',reply);
     remember({
-      kind:'local_brain_v2',
-      type,command:command||null,commands,model:LOCAL_BRAIN_MODEL,
+      kind:'local_brain_v2',modelRoute,
+      type,command:command||null,commands,model:turnBrainModel,
       memoryHits:memory.length,mode:turnStyle.mode,contextRecall:isContextRecallQuery(text),
       workspaceSources:workspaceCtx.sources,deepReflected:deepRequested&&type==='chat'
     });
     return{
-      ok:true,type,reply,command,commands,model:LOCAL_BRAIN_MODEL,
+      ok:true,type,reply,command,commands,model:turnBrainModel,
       memoryHits:memory.length,personaVersion:persona.version,tone,
       workspaceSources:workspaceCtx.sources,deepReflected:deepRequested&&type==='chat'
     };
   }catch(e){
-    return{ok:false,error:String(e.message||e),model:LOCAL_BRAIN_MODEL};
+    return{ok:false,error:String(e.message||e),model:turnBrainModel};
   }
 }
 
@@ -1035,8 +1049,8 @@ async function analyzeLocalImage(imageBase64,question='Bu görüntüde ne görü
   const q=String(question||'Bu görüntüde ne görüyorsun?').replace(/\s+/g,' ').trim().slice(0,900);
   if(!image)return{ok:false,error:'INVALID_IMAGE'};
   const status=await localBrainStatus();
-  if(!status.ready)return{ok:false,error:'OLLAMA_OFFLINE',model:LOCAL_BRAIN_MODEL};
-  if(!status.installed)return{ok:false,error:'MODEL_NOT_INSTALLED',model:LOCAL_BRAIN_MODEL};
+  if(!status.ready)return{ok:false,error:'OLLAMA_OFFLINE',model:turnBrainModel};
+  if(!status.installed)return{ok:false,error:'MODEL_NOT_INSTALLED',model:turnBrainModel};
   if(!isLocalVisionModel(status.model))return{ok:false,error:'VISION_MODEL_REQUIRED',model:status.model};
 
   const allowedTones=['balanced','casual','playful','warm','focused','work','serious','excited','gentle'];
@@ -1067,7 +1081,7 @@ async function analyzeLocalImage(imageBase64,question='Bu görüntüde ne görü
       method:'POST',
       headers:{'content-type':'application/json'},
       body:JSON.stringify({
-        model:LOCAL_BRAIN_MODEL,
+        model:turnBrainModel,
         stream:false,
         think:false,
         format:schema,
@@ -1092,12 +1106,12 @@ async function analyzeLocalImage(imageBase64,question='Bu görüntüde ne görü
       : [];
     appendLocalBrainHistory('user','[Yerel görüntü sorusu] '+q);
     appendLocalBrainHistory('assistant',reply);
-    remember({kind:'local_vision',model:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-started,observations:observations.length});
-    return{ok:true,reply,tone,observations,model:LOCAL_BRAIN_MODEL,localOnly:true,latencyMs:Date.now()-started};
+    remember({kind:'local_vision',model:turnBrainModel,latencyMs:Date.now()-started,observations:observations.length});
+    return{ok:true,reply,tone,observations,model:turnBrainModel,localOnly:true,latencyMs:Date.now()-started};
   }catch(e){
     clearTimeout(timer);
-    remember({kind:'local_vision_error',model:LOCAL_BRAIN_MODEL,error:String(e.message||e).slice(0,220)});
-    return{ok:false,error:String(e.message||e),model:LOCAL_BRAIN_MODEL};
+    remember({kind:'local_vision_error',model:turnBrainModel,error:String(e.message||e).slice(0,220)});
+    return{ok:false,error:String(e.message||e),model:turnBrainModel};
   }
 }
 function shouldReflectToolResult(command,message,resultCount=1){
