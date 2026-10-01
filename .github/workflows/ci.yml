@@ -1,0 +1,33 @@
+name: Jarvis CI
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main, jarvis-local-brain-v2 ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Syntax check
+        run: |
+          node --check server.js
+          node --check worker.js
+          python -m py_compile jarvis-local-stt-v1.py
+      - name: UI selftest
+        run: node ui-selftest.js
+      - name: PowerShell installer syntax
+        shell: pwsh
+        run: |
+          [scriptblock]::Create((Get-Content ./JARVIS-ZERO-COST-ONECLICK.ps1 -Raw)) | Out-Null
+      - name: Server selftest
+        run: node selftest.js
+      - name: Local Brain integration selftest
+        run: node worker-selftest.js
