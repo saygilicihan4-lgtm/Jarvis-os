@@ -143,8 +143,8 @@ function assert(x,msg){if(!x)throw new Error(msg)}
 
     const feedback=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Bu çok robotik oldu, böyle konuşma.'});
     assert(feedback.status===200,'dialogue feedback status');
-    const fj=JSON.parse(feedback.body);
-    assert(fj.ok===true&&fj.dialogueFeedback==='negative_robotic','dialogue feedback classification');
+    const feedbackJson=JSON.parse(feedback.body);
+    assert(feedbackJson.ok===true&&feedbackJson.dialogueFeedback==='negative_robotic','dialogue feedback classification');
 
     const feedbackFile=path.join(workspace,'.jarvis-memory','brain-dialogue-feedback.jsonl');
     assert(fs.existsSync(feedbackFile),'dialogue feedback file missing');
