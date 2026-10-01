@@ -1,0 +1,28 @@
+name: Windows Startup
+on:
+  push:
+    branches: [main, fix/jarvis-startup]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  windows-startup:
+    runs-on: windows-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Construct and render WPF; validate installers
+        shell: powershell
+        run: ./startup-selftest.ps1
+      - name: Hidden host, duplicate prevention, readiness and network timeout
+        shell: powershell
+        run: ./startup-windows-test.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jarvis-windows-boot-preview
+          path: ${{ runner.temp }}/jarvis-boot-windows.png

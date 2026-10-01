@@ -11,7 +11,7 @@
 <title>JARVIS OS</title>
 <link rel="stylesheet" href="/style.css">
 </head>
-<body>
+<body class="welcome-mode">
 <div id="loginOverlay" class="login-overlay">
   <div class="login-card">
     <div class="login-symbol"><span style="color:#65e6ff;letter-spacing:.2em;font-weight:900">J</span></div>
@@ -30,20 +30,21 @@
       <span class="brand-mark"></span>
       <div>
         <h1>JARVIS</h1>
-        <small>PERSONAL AUTONOMOUS SYSTEM</small>
+        <small>KİŞİSEL ASİSTANINIZ</small>
       </div>
     </div>
     <div class="top-status">
-      <span><i id="cloudDot" class="dot online"></i>CLOUD</span>
-      <span><i id="authDot" class="dot"></i>AUTH</span>
-      <span><i id="pcDot" class="dot offline"></i>PC LINK</span>
+      <span><i id="cloudDot" class="dot"></i>BULUT</span>
+      <span><i id="authDot" class="dot"></i>OTURUM</span>
+      <span><i id="pcDot" class="dot"></i>BİLGİSAYAR</span>
+      <button id="detailsToggle" type="button" class="details-toggle" aria-expanded="false" onclick="toggleJarvisDetails()">Ayrıntılar</button>
     </div>
   </header>
 
   <section class="main-grid">
     <aside class="side-panel">
       <div class="panel-title">CORE TELEMETRY</div>
-      <div class="metric"><span>SYSTEM</span><b id="systemState">ONLINE</b></div>
+      <div class="metric"><span>SYSTEM</span><b id="systemState">KONTROL EDİLİYOR</b></div>
       <div class="metric"><span>AUTH</span><b id="authState">LOCKED</b></div>
       <div class="metric"><span>ACCESS MODE</span><b id="accessMode">RECOVERY</b></div>
       <div class="metric"><span>CLOUD NODE</span><b>RENDER / FRA</b></div>
@@ -61,9 +62,10 @@
 
     <div class="core-stage">
       <div class="core-label">
-        <div class="eyebrow">AUTONOMOUS COMMAND CORE</div>
-        <h2>JARVIS ONLINE</h2>
-        <p id="coreSubtitle">Awaiting secure authorization</p>
+        <div class="eyebrow">MERHABA CİHAN BEY</div>
+        <h2 id="coreTitle">Bağlantı kontrol ediliyor</h2>
+        <p id="connectionSummary" role="status" aria-live="polite">Bilgisayar ve bulut bağlantısı ayrı ayrı kontrol ediliyor.</p>
+        <p id="coreSubtitle">Oturum kontrol ediliyor.</p>
       </div>
 
       <div class="ticks"></div>
@@ -82,9 +84,9 @@
       </div>
 
       <div class="core-readout">
-        <div class="readout"><b id="taskCount">00</b><span>TASKS</span></div>
-        <div class="readout"><b id="workerReadout">OFF</b><span>PC LINK</span></div>
-        <div class="readout"><b>SAFE</b><span>GUARDRAIL</span></div>
+        <div class="readout"><b id="taskCount">00</b><span>GÖREV</span></div>
+        <div class="readout"><b id="workerReadout">OFF</b><span>BİLGİSAYAR</span></div>
+        <div class="readout"><b>JARVIS</b><span>KİŞİSEL ASİSTAN</span></div>
       </div>
     </div>
 
@@ -112,14 +114,14 @@
 
 <div class="console">
   <div class="console-row">
-    <textarea id="cmd" class="command" placeholder="COMMAND JARVIS..."></textarea>
+    <textarea id="cmd" class="command" placeholder="Jarvis’e yazın…" aria-label="Jarvis’e komut yazın"></textarea>
     <button id="voiceBtn" class="send" onclick="toggleVoice()" aria-label="Voice command">VOICE</button>
     <button id="cameraBtn" class="send" onclick="toggleCamera()" aria-label="Camera">CAMERA</button>
     <button id="captureBtn" class="send" onclick="captureFrame()" aria-label="Capture local camera frame" disabled>CAPTURE</button>
     <button id="analyzeBtn" class="send" onclick="analyzeFrameLocal()" aria-label="Analyze local camera frame" disabled>ANALYZE</button>
     <button id="scanTextBtn" class="send" onclick="scanTextLocal()" aria-label="Read visible text locally" disabled>READ TEXT</button>
     <button id="aiCheckBtn" class="send" onclick="checkLocalAI()" aria-label="Check local AI readiness">LOCAL AI</button>
-    <button class="send" onclick="send()">EXECUTE</button>
+    <button class="send" onclick="send()">GÖNDER</button>
   </div>
   <div class="console-meta">
     <span id="consoleStatus">SECURE CHANNEL LOCKED</span>
@@ -137,6 +139,34 @@
 
 <script>
 let KEY='';
+const connectionState={cloud:null,local:null,remote:false,authenticated:false};
+let localHealthInFlight=false;
+function toggleJarvisDetails(){
+  const expanded=document.body.classList.toggle('show-details');
+  document.getElementById('detailsToggle').setAttribute('aria-expanded',String(expanded));
+  document.getElementById('detailsToggle').textContent=expanded?'Sade görünüm':'Ayrıntılar';
+}
+function renderConnectionStatus(){
+  const c=connectionState;
+  const connected=c.local===true||c.remote===true;
+  const checking=c.local===null&&c.cloud===null;
+  document.getElementById('coreTitle').textContent=connected?'Bilgisayar bağlı':checking?'Bağlantı kontrol ediliyor':'Bilgisayar bağlantısı yok';
+  document.getElementById('connectionSummary').textContent=c.local===true
+    ?(c.cloud===true?'Yerel bağlantı ve bulut bağlantısı açık.':'Yerel bağlantı açık. Bulut bağlantısı henüz doğrulanmadı.')
+    :c.remote===true?'Bulut üzerinden bilgisayara bağlı.':checking?'Bağlantılar kontrol ediliyor.':'Bilgisayarda JARVIS başlatıcısını kontrol edin. Bağlantı otomatik yeniden denenecek.';
+  pcDot.className='dot '+(connected?'online':checking?'':'offline');
+  pcState.textContent=connected?(c.local===true?'YEREL BAĞLI':'UZAK BAĞLI'):'BAĞLI DEĞİL';
+  workerReadout.textContent=connected?'BAĞLI':'BEKLENİYOR';
+  cloudDot.className='dot '+(c.cloud===null?'':c.cloud?'online':'offline');
+  systemState.textContent=connected?'BİLGİSAYAR BAĞLI':c.cloud?'BULUT AÇIK':'BAĞLANTI BEKLENİYOR';
+}
+function handleCloudFailure(error){
+  connectionState.cloud=false;
+  connectionState.remote=false;
+  if(error&&error.message==='ACCESS DENIED')setAuthenticated(false);
+  renderConnectionStatus();
+}
+
 localStorage.removeItem('jarvis_token');
 let recognition=null;
 let listening=false;
@@ -1058,10 +1088,13 @@ async function api(url,options={}){
 }
 
 function setAuthenticated(ok){
+  const changed=connectionState.authenticated!==ok;
+  connectionState.authenticated=ok;
   authDot.className='dot '+(ok?'online':'');
   authState.textContent=ok?'AUTHORIZED':'LOCKED';
   consoleStatus.textContent=ok?'SECURE CHANNEL ACTIVE':'SECURE CHANNEL LOCKED';
-  coreSubtitle.textContent=ok?'Secure command channel established':'Awaiting secure authorization';
+  if(changed)coreSubtitle.textContent=ok?'Oturum açıldı.':'Oturum açılması gerekiyor.';
+  renderConnectionStatus();
   loginOverlay.classList.toggle('hidden',ok);
 }
 function setAccessMode(mode){
@@ -1171,6 +1204,7 @@ async function wakeJarvis(){
   let greeting='Merhabalar Cihan Bey. Tüm sistemler çevrimiçi. JARVIS hazır.';
   try{
     const d=await api('/api/state');
+  connectionState.cloud=true;
     const all=d.tasks||[];
     const completed=all.filter(x=>x.status==='completed').length;
     const waiting=all.filter(x=>['waiting_worker','waiting_approval','needs_tool','queued','claimed','retrying'].includes(x.status)).length;
@@ -1800,16 +1834,19 @@ function isDirectLocalPcCommand(command){
     || /^.+?\s+(?:aç|ac)$/i.test(c);
 }
 async function refreshLocalWorkerHealth(){
-  if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis())return null;
+  if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis()||localHealthInFlight)return null;
+  localHealthInFlight=true;
   const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),1800);
   try{
     const r=await fetch('http://127.0.0.1:8765/health',{signal:ctl.signal,cache:'no-store'});
     clearTimeout(timer);
     const j=await r.json().catch(()=>({}));
-    if(!r.ok)return null;
+    if(!r.ok||j.ok!==true||!j.version||!Array.isArray(j.capabilities))throw Error('Worker yanıtı doğrulanamadı');
+    connectionState.local=true;
+    renderConnectionStatus();
     loadLocalSpeechLexicon().catch(()=>{});
     const ver=String(j.version||'');
-    if(window.workerSetup)workerSetup.textContent='LOCAL v'+ver+' · CLOUD '+workerSetup.textContent;
+    if(window.workerSetup)workerSetup.textContent='LOCAL v'+ver;
     if(j.localBrain){
       fetch('http://127.0.0.1:8765/brain-status',{cache:'no-store'})
         .then(r=>r.json()).then(bs=>{
@@ -1854,7 +1891,8 @@ async function refreshLocalWorkerHealth(){
       }
     }
     return ver;
-  }catch(_){clearTimeout(timer);return null}
+  }catch(_){connectionState.local=false;renderConnectionStatus();return null}
+  finally{clearTimeout(timer);localHealthInFlight=false}
 }
 async function executeDirectLocalPcControl(command,{speakResult=true}={}){
   if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis()||!isDirectLocalPcCommand(command))return null;
@@ -2529,13 +2567,13 @@ async function load(){
       ?('JARVIS BRAIN READY · '+String(brain.model||'OPENAI'))
       :(brain.zeroCostOnly?'ZERO-COST MODE · paid AI blocked · local brain next':'Task routing / safety');
   }
-  pcDot.className='dot '+(pc.online?'online':'offline');
-  pcState.textContent=pc.online?'ONLINE':'OFFLINE';
+  connectionState.remote=pc.online===true;
+  renderConnectionStatus();
   if(window.remoteQueue){const rc=d.remoteControl||{};remoteQueue.textContent=String(rc.queued||0)+' WAITING · '+String(rc.running||0)+' RUNNING';}
   if(window.remoteMode){const rc=d.remoteControl||{};remoteMode.textContent=rc.pcOnline?'READY':'PC OFFLINE';remoteMode.style.color=rc.pcOnline?'#65ffbf':'#ffca66';}
   const workerCurrent=pc.online&&/^2\.(?:1[3-9]|[2-9]\d)\./.test(String(pc.version||''));
   workerSetup.textContent=!pc.online?'RUN LAUNCHER ON PC':workerCurrent?('CONNECTED v'+pc.version):'UPDATE REQUIRED';
-  workerReadout.textContent=pc.online?'ON':'OFF';
+  renderConnectionStatus();
   devAgent.textContent=!pc.online?'STANDBY':workerCurrent?('READY v'+pc.version):'UPDATE REQUIRED';
   devAgent.style.color=workerCurrent?'#65ffbf':pc.online?'#ffca66':'';
   taskCount.textContent=String((d.tasks||[]).length).padStart(2,'0');
@@ -2554,7 +2592,7 @@ async function load(){
   audit.innerHTML=(d.audit||[]).slice(-18).reverse().map(x=>'<div class="log"><small>'+esc(x.at)+' · '+esc(x.type)+'</small><br>'+esc(x.message)+'</div>').join('')||'<div class="log"><small>No system events.</small></div>';
   setAuthenticated(true);
   if(desktopWakeWordEnabled)scheduleDesktopWakeWord(900);
-  refreshLocalWorkerHealth().catch(()=>{});
+
   if(/Windows/i.test(navigator.userAgent)){
     clapState.textContent=' · DOUBLE CLAP: LOCAL WORKER';
   }else if(isMobileJarvis()){
@@ -2667,7 +2705,9 @@ async function bootstrapSession(){
     :'GÜVENİLİR AĞ BULUNAMADI · PASSKEY YOKSA 8 HANELİ KURTARMA KODU';
 }
 bootstrapSession();
-setInterval(()=>{if(!loginOverlay.classList.contains('hidden'))return;load().catch(()=>setAuthenticated(false))},2500);
+refreshLocalWorkerHealth().catch(()=>{});
+setInterval(()=>refreshLocalWorkerHealth().catch(()=>{}),4000);
+setInterval(()=>{if(!loginOverlay.classList.contains('hidden'))return;load().catch(handleCloudFailure)},2500);
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
 </script>
 </body>

@@ -1,85 +1,17 @@
 @echo off
 setlocal EnableExtensions
-title JARVIS PC WORKER
-set "LAUNCHER_VERSION=4.0"
-set "AUTOSTART=0"
-set "SILENT=0"
-set "INSTALL_AUTOSTART=0"
-
-for %%A in (%*) do (
-  if /I "%%~A"=="--autostart" set "AUTOSTART=1"
-  if /I "%%~A"=="--silent" set "SILENT=1"
-  if /I "%%~A"=="--install-autostart" set "INSTALL_AUTOSTART=1"
-)
-
+set "LAUNCHER_VERSION=5.0"
 cd /d "%~dp0"
-if "%JARVIS_WORKSPACE%"=="" set "JARVIS_WORKSPACE=%USERPROFILE%\JARVIS-Workspace"
-if "%JARVIS_URL%"=="" set "JARVIS_URL=https://jarvis-os-1iuv.onrender.com"
-set "JARVIS_LOG_DIR=%JARVIS_WORKSPACE%\.jarvis-memory"
-set "JARVIS_WORKER_LOG=%JARVIS_LOG_DIR%\worker.log"
-if not exist "%JARVIS_LOG_DIR%" mkdir "%JARVIS_LOG_DIR%" >nul 2>nul
-
-if "%INSTALL_AUTOSTART%"=="1" (
-  echo [JARVIS] Cinematic silent startup kuruluyor...
-  if not exist "%~dp0install-jarvis-startup.ps1" (
-    echo [JARVIS] install-jarvis-startup.ps1 bulunamadi.
-    exit /b 1
-  )
-  powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0install-jarvis-startup.ps1"
-  exit /b %ERRORLEVEL%
+for %%A in (%*) do (
+  if /I "%%~A"=="--install-autostart" goto install
+  if /I "%%~A"=="--silent" goto worker
 )
-
-if "%SILENT%"=="0" (
-  echo [JARVIS] LAUNCHER %LAUNCHER_VERSION%
-)
-
-where node >nul 2>nul
-if errorlevel 1 (
-  if "%SILENT%"=="1" (
-    echo [%date% %time%] [JARVIS] Node.js 18+ bulunamadi.>>"%JARVIS_WORKER_LOG%"
-    exit /b 1
-  )
-  echo [JARVIS] Node.js 18+ bulunamadi.
-  echo https://nodejs.org adresinden LTS surumunu kurup tekrar calistir.
-  pause
-  exit /b 1
-)
-
-if "%JARVIS_PAIR_CODE%"=="" if not exist "%USERPROFILE%\.jarvis-device-token" (
-  if "%SILENT%"=="1" (
-    echo [%date% %time%] [JARVIS] Pair token yok; hidden startup iptal edildi.>>"%JARVIS_WORKER_LOG%"
-    exit /b 1
-  )
-  set /p "JARVIS_PAIR_CODE=JARVIS PAIR CODE: "
-)
-
-if "%JARVIS_PAIR_CODE%"=="" if not exist "%USERPROFILE%\.jarvis-device-token" (
-  echo [JARVIS] PAIR CODE gerekli.
-  if "%SILENT%"=="0" pause
-  exit /b 1
-)
-
-if "%SILENT%"=="0" (
-  echo.
-  echo [JARVIS] Cloud: %JARVIS_URL%
-  echo [JARVIS] Workspace: %JARVIS_WORKSPACE%
-  echo [JARVIS] Guncelleme kontrol ediliyor...
-)
-
-if "%SILENT%"=="1" (
-  echo.>>"%JARVIS_WORKER_LOG%"
-  echo [%date% %time%] [JARVIS] LAUNCHER %LAUNCHER_VERSION% hidden startup>>"%JARVIS_WORKER_LOG%"
-  powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command "$u='https://raw.githubusercontent.com/saygilicihan4-lgtm/Jarvis-os/main/worker.js?cb=' + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); try { $n=Join-Path $env:TEMP 'jarvis-worker.new.js'; Invoke-WebRequest -UseBasicParsing -Headers @{'Cache-Control'='no-cache';'Pragma'='no-cache'} -Uri $u -OutFile $n -TimeoutSec 20; node --check $n ^| Out-Null; $txt=Get-Content $n -Raw; $signed=($txt -match 'const WORKER_VERSION='); if($LASTEXITCODE -eq 0 -and $signed){ $ver=([regex]::Match($txt,\"const WORKER_VERSION='([^']+)'\")).Groups[1].Value; if(-not (Test-Path 'worker.js') -or ((Get-FileHash $n).Hash -ne (Get-FileHash 'worker.js').Hash)){ Copy-Item $n 'worker.js' -Force; Write-Output ('[JARVIS] Worker updated: v'+$ver) } else { Write-Output ('[JARVIS] Worker current: v'+$ver) } } else { Write-Output '[JARVIS] Update validation failed; current Worker preserved.' }; Remove-Item $n -Force -ErrorAction SilentlyContinue } catch { Write-Output ('[JARVIS] Update skipped: '+$_.Exception.Message); Write-Output '[JARVIS] Current Worker will be used.' }" >>"%JARVIS_WORKER_LOG%" 2>&1
-) else (
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "$u='https://raw.githubusercontent.com/saygilicihan4-lgtm/Jarvis-os/main/worker.js?cb=' + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); try { $n=Join-Path $env:TEMP 'jarvis-worker.new.js'; Invoke-WebRequest -UseBasicParsing -Headers @{'Cache-Control'='no-cache';'Pragma'='no-cache'} -Uri $u -OutFile $n -TimeoutSec 20; node --check $n ^| Out-Null; $txt=Get-Content $n -Raw; $signed=($txt -match 'const WORKER_VERSION='); if($LASTEXITCODE -eq 0 -and $signed){ $ver=([regex]::Match($txt,\"const WORKER_VERSION='([^']+)'\")).Groups[1].Value; if(-not (Test-Path 'worker.js') -or ((Get-FileHash $n).Hash -ne (Get-FileHash 'worker.js').Hash)){ Copy-Item $n 'worker.js' -Force; Write-Host ('[JARVIS] Worker guncellendi ve dogrulandi: v'+$ver) } else { Write-Host ('[JARVIS] Worker guncel: v'+$ver) } } else { Write-Host '[JARVIS] Guncelleme dogrulanamadi; mevcut Worker korundu.' }; Remove-Item $n -Force -ErrorAction SilentlyContinue } catch { Write-Host ('[JARVIS] Guncelleme kontrolu atlandi: '+$_.Exception.Message); Write-Host '[JARVIS] Mevcut Worker kullaniliyor.' }"
-)
-
-if "%SILENT%"=="0" (
-  echo [JARVIS] F8 helper yerel dosyadan baslatilacak.
-  echo [JARVIS] Worker baslatiliyor...
-  node worker.js
-  pause
-) else (
-  echo [%date% %time%] [JARVIS] Worker starting...>>"%JARVIS_WORKER_LOG%"
-  node worker.js >>"%JARVIS_WORKER_LOG%" 2>&1
-)
+rem Interactive launch uses the same welcome screen as Windows logon.
+wscript.exe "%~dp0JARVIS-STARTUP-HIDDEN.vbs" --open
+exit /b %ERRORLEVEL%
+:worker
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0start-worker-windows.ps1"
+exit /b %ERRORLEVEL%
+:install
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0install-jarvis-startup.ps1"
+exit /b %ERRORLEVEL%

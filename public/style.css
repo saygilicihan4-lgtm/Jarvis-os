@@ -176,3 +176,58 @@ body::after{
   .console{bottom:8px}.send{min-width:74px}
   .console-meta{font-size:7px}
 }
+
+/* Calm default workspace; diagnostics stay available with one explicit toggle. */
+.details-toggle{font:inherit;color:#d8f4ff;background:#0b2331;border:1px solid #345365;border-radius:6px;padding:9px 12px;cursor:pointer;letter-spacing:0}
+body.welcome-mode:not(.show-details) .side-panel,
+body.welcome-mode:not(.show-details) .activity,
+body.welcome-mode:not(.show-details) #captureBtn,
+body.welcome-mode:not(.show-details) #analyzeBtn,
+body.welcome-mode:not(.show-details) #scanTextBtn,
+body.welcome-mode:not(.show-details) #aiCheckBtn,
+body.welcome-mode:not(.show-details) #cameraBtn{display:none}
+.welcome-mode:not(.show-details) .main-grid{grid-template-columns:minmax(0,1fr);min-height:0}
+.welcome-mode:not(.show-details) .core-stage{min-height:540px;height:calc(100dvh - 185px);max-height:780px}
+.welcome-mode .core-label{top:18px;width:100%;padding:0 16px;z-index:2}
+.welcome-mode .core-label .eyebrow{font-size:12px;letter-spacing:.16em;color:#a0bbc8}
+.welcome-mode .core-label h2{font-family:'Segoe UI',sans-serif;font-size:clamp(22px,3vw,34px);letter-spacing:0;font-weight:600}
+.welcome-mode .core-label p{font-family:'Segoe UI',sans-serif;letter-spacing:0;font-size:14px;line-height:1.5;max-width:650px;margin:10px auto 0;color:#a6bfcc;overflow-wrap:anywhere}
+.welcome-mode #coreSubtitle{max-height:3em;overflow:auto}
+.welcome-mode .core-readout{bottom:8px}
+.welcome-mode .readout span{font-size:10px}
+.welcome-mode .readout b{font-size:14px}
+.welcome-mode:not(.show-details) .console{width:min(820px,calc(100% - 32px));border-radius:10px}
+.welcome-mode:not(.show-details) .console-row{display:flex;overflow:visible}
+.welcome-mode:not(.show-details) .command{min-width:0;flex:1;border-radius:5px;font:16px 'Segoe UI',sans-serif}
+.welcome-mode:not(.show-details) .send{min-width:80px;font-size:12px;border-radius:5px}
+.welcome-mode .console-meta{flex-wrap:wrap;line-height:1.4;font-size:10px;letter-spacing:0}
+.welcome-mode:not(.show-details) #clapState,
+.welcome-mode:not(.show-details) #cameraState,
+.welcome-mode:not(.show-details) #visionState{display:none}
+.welcome-mode.show-details .main-grid{padding-top:22px}
+.welcome-mode.show-details .core-label h2{font-size:24px}
+.welcome-mode.show-details .activity{margin-top:12px}
+@media(min-width:861px) and (max-height:820px){
+  .welcome-mode:not(.show-details) .core-stage{min-height:430px}
+  .welcome-mode:not(.show-details) .hud-ring,
+  .welcome-mode:not(.show-details) .arc,
+  .welcome-mode:not(.show-details) .ticks{scale:.67;translate:0 25px}
+  .welcome-mode:not(.show-details) .core{scale:.82;translate:0 25px}
+}
+@media(max-width:860px){
+  .welcome-mode:not(.show-details) .core-stage{min-height:450px;height:calc(100dvh - 200px)}
+  .welcome-mode .core-label{top:12px}
+  .welcome-mode .core-label p{font-size:13px}
+  .welcome-mode:not(.show-details) .hud-ring,
+  .welcome-mode:not(.show-details) .arc,
+  .welcome-mode:not(.show-details) .ticks,
+  .welcome-mode:not(.show-details) .core{translate:0 30px;scale:.8}
+  .welcome-mode .top-status{flex-wrap:wrap;justify-content:flex-end;gap:8px}
+  .welcome-mode .top-status span:nth-child(2){display:inline}
+  .welcome-mode:not(.show-details) .console-row{flex-wrap:wrap}
+  .welcome-mode:not(.show-details) .command{flex-basis:100%}
+  .welcome-mode:not(.show-details) .send{flex:1}
+}
+@media(prefers-reduced-motion:reduce){
+  .hud-ring,.arc,.ticks,.core,.brand-mark,.login-symbol{animation:none!important}
+}

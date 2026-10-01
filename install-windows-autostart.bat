@@ -1,24 +1,10 @@
 @echo off
 setlocal
-set "STARTUP=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
-set "TARGET=%STARTUP%\JARVIS-PC-Worker.cmd"
-set "SOURCE=%~dp0start-worker-windows.bat"
-
-if not exist "%SOURCE%" (
-  echo JARVIS launcher bulunamadi: %SOURCE%
+cd /d "%~dp0"
+powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "%~dp0install-jarvis-startup.ps1" -StartNow
+if errorlevel 1 (
+  echo [JARVIS] Kurulum tamamlanamadi. Yukaridaki hata korunuyor.
   pause
   exit /b 1
 )
-
-> "%TARGET%" echo @echo off
->>"%TARGET%" echo cd /d "%~dp0"
->>"%TARGET%" echo call "%SOURCE%"
-
-if exist "%TARGET%" (
-  echo JARVIS PC Worker Windows baslangicina eklendi.
-  echo %TARGET%
-) else (
-  echo Baslangic kaydi olusturulamadi.
-  exit /b 1
-)
-pause
+exit /b 0

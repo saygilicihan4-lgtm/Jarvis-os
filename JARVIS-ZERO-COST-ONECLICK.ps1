@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
 Write-Host ""
@@ -34,6 +34,8 @@ $files = @(
   "jarvis-double-clap-v9.py",
   "jarvis-local-stt-v4.py",
   "jarvis-startup.ps1",
+  "jarvis-boot.xaml",
+  "start-worker-windows.ps1",
   "JARVIS-STARTUP-HIDDEN.vbs",
   "install-jarvis-startup.ps1",
   "JARVIS-LIVE-ACCEPTANCE.ps1"
@@ -227,7 +229,7 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "[9/9] Sessiz cinematic acilis kuruluyor..." -ForegroundColor Yellow
 $startupInstaller=Join-Path $JarvisDir "install-jarvis-startup.ps1"
-& powershell -NoProfile -ExecutionPolicy Bypass -File $startupInstaller
+& powershell -NoProfile -STA -ExecutionPolicy Bypass -File $startupInstaller
 if ($LASTEXITCODE -ne 0) {
   throw "JARVIS silent startup kurulumu basarisiz."
 }
