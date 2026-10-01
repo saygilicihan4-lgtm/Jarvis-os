@@ -1097,19 +1097,20 @@ function dialogueFeedbackIntent(text){
   if(!raw||raw.length>180)return null;
   const s=raw.toLocaleLowerCase('tr-TR').replace(/[!?.,;:]+/g,' ').replace(/\s+/g,' ').trim();
 
-  if(/\b(?:çok soru soruyorsun|cok soru soruyorsun|bu kadar soru sorma|her seferinde soru sorma|soru sorma|takip sorusu sorma)\b/.test(s)){
+  const hasAny=phrases=>phrases.some(p=>s.includes(p));
+  if(hasAny(['çok soru soruyorsun','cok soru soruyorsun','bu kadar soru sorma','her seferinde soru sorma','soru sorma','takip sorusu sorma'])){
     return{kind:'followup-less',followup:-0.30,negative:true,reply:'Tamam. Takip sorularını azaltıyorum; gerektiğinde doğrudan cevabı bırakacağım.'};
   }
-  if(/\b(?:bana daha çok soru sor|bana daha cok soru sor|biraz daha soru sor|sohbeti soru sorarak devam ettir|takip sorusu sorabilirsin)\b/.test(s)){
+  if(hasAny(['bana daha çok soru sor','bana daha cok soru sor','biraz daha soru sor','sohbeti soru sorarak devam ettir','takip sorusu sorabilirsin'])){
     return{kind:'followup-more',followup:0.22,positive:true,reply:'Tamam. Sohbet uygunsa arada tek kısa takip sorusuyla devam ettireceğim.'};
   }
-  if(/\b(?:gırgırı artır|girgiri artir|şakayı artır|sakayi artir|daha komik ol|biraz daha gırgır|biraz daha girgir)\b/.test(s)){
+  if(hasAny(['gırgırı artır','girgiri artir','şakayı artır','sakayi artir','daha komik ol','biraz daha gırgır','biraz daha girgir'])){
     return{kind:'banter-more',banter:0.22,positive:true,reply:'Tamam, gırgırı bir tık yükseltiyorum; her cümleyi de stand-up gösterisine çevirmiyorum.'};
   }
-  if(/\b(?:gırgırı azalt|girgiri azalt|şakayı azalt|sakayi azalt|çok şaka yapıyorsun|cok saka yapiyorsun|daha ciddi konuş|daha ciddi konus)\b/.test(s)){
+  if(hasAny(['gırgırı azalt','girgiri azalt','şakayı azalt','sakayi azalt','çok şaka yapıyorsun','cok saka yapiyorsun','daha ciddi konuş','daha ciddi konus'])){
     return{kind:'banter-less',banter:-0.28,negative:true,reply:'Tamam. Şakayı geri çekiyorum; doğal ama daha ciddi kalacağım.'};
   }
-  if(/\b(?:aynı giriş|ayni giris|aynı şeyleri söylüyorsun|ayni seyleri soyluyorsun|kendini tekrar etme|hep aynı konuşuyorsun|hep ayni konusuyorsun|robot gibi konuşuyorsun|robot gibi konusuyorsun)\b/.test(s)){
+  if(hasAny(['aynı giriş','ayni giris','aynı şeyleri söylüyorsun','ayni seyleri soyluyorsun','kendini tekrar etme','hep aynı konuşuyorsun','hep ayni konusuyorsun','robot gibi konuşuyorsun','robot gibi konusuyorsun'])){
     return{kind:'variation-more',variation:0.30,negative:true,reply:'Aldım. Aynı girişleri ve kalıp cümleleri tekrarlamayı daha agresif biçimde keseceğim.'};
   }
   if(/^(?:işte bu|iste bu|aynen böyle|aynen boyle|tam istediğim gibi|tam istedigim gibi|böyle iyi|boyle iyi|şimdi oldu|simdi oldu|bu cevap iyi)$/i.test(s)){
