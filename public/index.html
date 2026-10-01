@@ -1206,17 +1206,15 @@ async function bootstrapSession(){
     }catch(_){return false}
   };
 
-  // PHONE and local PC wake launches (F8 / double clap): trusted Wi-Fi first.
-  // This prevents WebAuthn/passkey popups during hands-free/local wake while
-  // still requiring the approved signed PC Worker to be online on the same network.
-  const localWakeLaunch=(wakeSource==='f8'||wakeSource==='clap');
-  if(isPhoneClient||localWakeLaunch){
-    if(await tryTrustedNetwork())return;
-    if(!isPhoneClient&&await tryTrustedSession())return;
-  }else{
-    if(await tryTrustedSession())return;
-    if(await tryTrustedNetwork())return;
-  }
+  // Always prefer trusted Wi-Fi before any passkey/session unlock flow.
+  // The trusted-network route already requires the approved signed PC Worker
+  // to be online on the same network, so a normal refresh must not trigger a
+  // WebAuthn/passkey popup while the trusted PC bridge is available.
+  if(await tryTrustedNetwork())return;
+
+  // Desktop may reuse its trusted session only after trusted Wi-Fi was not
+  // available. Phone keeps passkey as its off-network recovery path.
+  if(!isPhoneClient&&await tryTrustedSession())return;
 
   // If the phone is outside the trusted Wi-Fi, use a real device credential.
   try{
