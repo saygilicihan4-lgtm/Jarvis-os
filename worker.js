@@ -502,6 +502,16 @@ function startLocalTtsBridge(){
         localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper'}
       }));
     }
+    if(req.method==='GET'&&req.url==='/brain-status'){
+      localBrainStatus().then(status=>{
+        res.writeHead(200,{'content-type':'application/json'});
+        res.end(JSON.stringify({ok:true,...status,persona:brainPersona(),memoryFacts:readBrainFacts().length}));
+      }).catch(e=>{
+        res.writeHead(503,{'content-type':'application/json'});
+        res.end(JSON.stringify({ok:false,error:String(e.message||e)}));
+      });
+      return;
+    }
     if(req.method==='POST'&&req.url==='/wake'){
       const now=Date.now();
       if((now-lastLocalWakeAt)<12000){
