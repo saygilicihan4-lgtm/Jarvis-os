@@ -32,7 +32,7 @@ $files = @(
   "start-worker-windows.bat",
   "jarvis-wake-hotkey.ps1",
   "jarvis-double-clap-v9.py",
-  "jarvis-local-stt-v1.py",
+  "jarvis-local-stt-v2.py",
   "JARVIS-LIVE-ACCEPTANCE.ps1"
 )
 foreach ($f in $files) { Download-RepoFile $f | Out-Null }
