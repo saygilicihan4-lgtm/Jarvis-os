@@ -27,8 +27,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.51.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1'];
+const WORKER_VERSION='2.52.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1'];
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -1100,6 +1100,273 @@ async function analyzeLocalImage(imageBase64,question='Bu görüntüde ne görü
     return{ok:false,error:String(e.message||e),model:LOCAL_BRAIN_MODEL};
   }
 }
+function nativeAgentTools(){
+  return[
+    {
+      type:'function',
+      function:{
+        name:'system_status',
+        description:'Bilgisayarın temel sistem durumunu getir.',
+        parameters:{type:'object',properties:{},additionalProperties:false}
+      }
+    },
+    {
+      type:'function',
+      function:{
+        name:'disk_status',
+        description:'Yerel disklerin boş ve toplam alanını getir.',
+        parameters:{type:'object',properties:{},additionalProperties:false}
+      }
+    },
+    {
+      type:'function',
+      function:{
+        name:'network_status',
+        description:'Bilgisayarın aktif yerel ağ arayüzlerini getir.',
+        parameters:{type:'object',properties:{},additionalProperties:false}
+      }
+    },
+    {
+      type:'function',
+      function:{
+        name:'power_status',
+        description:'Pil ve güç durumunu getir.',
+        parameters:{type:'object',properties:{},additionalProperties:false}
+      }
+    },
+    {
+      type:'function',
+      function:{
+        name:'open_target',
+        description:'Yalnızca JARVIS güvenli katalogunda bulunan uygulama, ayar veya siteyi aç.',
+        parameters:{
+          type:'object',
+          properties:{target:{type:'string',description:'Örn. youtube, google, github, chatgpt, opera gx, chrome, edge, not defteri, hesap makinesi, dosya gezgini, görev yöneticisi, ayarlar, ses ayarları, bluetooth ayarları, wifi ayarları, çalışma alanı'}},
+          required:['target'],
+          additionalProperties:false
+        }
+      }
+    },
+    {
+      type:'function',
+      function:{
+        name:'media_control',
+        description:'Windows medya veya ses kontrolü uygula.',
+        parameters:{
+          type:'object',
+          properties:{action:{type:'string',enum:['volume_up','volume_down','mute','play_pause','next','previous','stop']}},
+          required:['action'],
+          additionalProperties:false
+        }
+      }
+    },
+    {
+      type:'function',
+      function:{
+        name:'workspace_search',
+        description:'JARVIS çalışma alanındaki güvenli metin dosyalarında arama yap. Hassas dosyalar otomatik dışlanır.',
+        parameters:{
+          type:'object',
+          properties:{query:{type:'string'}},
+          required:['query'],
+          additionalProperties:false
+        }
+      }
+    },
+    {
+      type:'function',
+      function:{
+        name:'workspace_read',
+        description:'JARVIS çalışma alanındaki güvenli bir metin dosyasını oku. Önce workspace_search ile doğru yolu bul.',
+        parameters:{
+          type:'object',
+          properties:{path:{type:'string'}},
+          required:['path'],
+          additionalProperties:false
+        }
+      }
+    }
+  ];
+}
+function safeWorkspaceReadForAgent(relPath){
+  try{
+    const rel=String(relPath||'').replace(/\\/g,'/').replace(/^\/+/, '').trim();
+    if(!rel)return{ok:false,message:'Dosya yolu boş.'};
+    if(isSensitiveWorkspacePath(rel))return{ok:false,message:'Hassas dosya erişimi engellendi.'};
+    const file=safeFile(rel);
+    if(!fs.existsSync(file)||!fs.statSync(file).isFile())return{ok:false,message:'Dosya bulunamadı: '+rel};
+    const ext=path.extname(file).toLowerCase();
+    const allowed=new Set(['.txt','.md','.json','.js','.ts','.tsx','.jsx','.css','.html','.py','.ps1','.bat','.cmd','.yml','.yaml','.csv','.log']);
+    if(!allowed.has(ext))return{ok:false,message:'Bu dosya türü yerel ajan okumasına açık değil: '+ext};
+    const size=fs.statSync(file).size;
+    if(size>768*1024)return{ok:false,message:'Dosya ajan okuması için çok büyük: '+Math.round(size/1024)+' KB'};
+    const data=fs.readFileSync(file,'utf8').replace(/\u0000/g,'').slice(0,7000);
+    return{ok:true,message:'DOSYA ['+path.relative(WORKSPACE,file)+']:\n'+data};
+  }catch(e){
+    return{ok:false,message:'Dosya okuma hatası: '+String(e.message||e).slice(0,180)};
+  }
+}
+function nativeToolSignature(name,args){
+  let packed='';
+  try{packed=JSON.stringify(args||{})}catch(_){packed=String(args||'')}
+  return String(name||'')+'|'+packed;
+}
+async function executeNativeAgentTool(name,args){
+  const n=String(name||'').trim();
+  const a=args&&typeof args==='object'?args:{};
+  let command='';
+  if(n==='system_status')command='sistem durumu';
+  else if(n==='disk_status')command='disk durumu';
+  else if(n==='network_status')command='ağ durumu';
+  else if(n==='power_status')command='pil durumu';
+  else if(n==='open_target'){
+    const target=String(a.target||'').replace(/[\r\n]/g,' ').trim().slice(0,100);
+    command=target?target+' aç':'';
+  }else if(n==='media_control'){
+    const map={
+      volume_up:'sesi yükselt',
+      volume_down:'sesi azalt',
+      mute:'sessize al',
+      play_pause:'oynat',
+      next:'sonraki',
+      previous:'önceki',
+      stop:'medyayı durdur'
+    };
+    command=map[String(a.action||'')]||'';
+  }else if(n==='workspace_search'){
+    const query=String(a.query||'').replace(/[\r\n]/g,' ').trim().slice(0,240);
+    command=query?'dosyalarda ara '+query:'';
+  }else if(n==='workspace_read'){
+    return safeWorkspaceReadForAgent(a.path);
+  }else{
+    return{ok:false,message:'Bilinmeyen yerel araç engellendi: '+n};
+  }
+
+  if(!command||!isLocalSafeControlCommand(command)){
+    return{ok:false,message:'Güvenli olmayan veya geçersiz yerel araç isteği engellendi.'};
+  }
+  const result=await execute({command});
+  return result||{ok:false,message:'Araç sonucu alınamadı.'};
+}
+async function runNativeAgent(message,{maxRounds=4}={}){
+  const text=String(message||'').replace(/\s+/g,' ').trim().slice(0,1800);
+  if(!text)return{ok:true,type:'chat',reply:'Sizi dinliyorum Cihan Bey.',tone:'balanced',actions:[]};
+
+  const status=await localBrainStatus();
+  if(!status.ready)return{ok:false,error:'OLLAMA_OFFLINE',model:LOCAL_BRAIN_MODEL};
+  if(!status.installed)return{ok:false,error:'MODEL_NOT_INSTALLED',model:LOCAL_BRAIN_MODEL};
+
+  const persona=updateBrainPersonaFromUserText(text);
+  maybeRememberExplicitPreference(text);
+  const turnStyle=inferBrainTurnStyle(text,persona);
+  const recent=recentBrainHistory(10);
+  const memory=relevantBrainMemory(text,5);
+  const memoryText=memory.length
+    ? memory.map(x=>'- '+(x.role==='memory'?'Hatırlanan tercih':x.role==='episode'?'Eski sohbet özeti':'Önceki konuşma')+': '+x.text).join('\n')
+    : '- İlgili eski kayıt yok.';
+
+  const system=[
+    'Sen JARVIS\'sin; Cihan Bey\'in kişisel yerel yapay zeka asistanısın.',
+    'Doğal Türkçe konuş; kısa soruya kısa cevap, iş sorusuna net cevap ver. Uygun olduğunda kısa espri yap ama yapmacık olma.',
+    'Elindeki yerel araçları yalnızca gerçekten gerektiğinde kullan. Araç kullanmadan cevap verebiliyorsan doğrudan cevap ver.',
+    'Bir araç sonucuna göre başka bir araca ihtiyaç varsa sonucu gördükten sonra ikinci aracı çağır. Körlemesine peş peşe araç çağırma.',
+    'Araç sonuçlarında olmayan bilgiyi uydurma. Bir eylem başarısızsa başarılı olmuş gibi konuşma.',
+    'workspace_read kullanmadan önce mümkünse workspace_search ile doğru dosya yolunu bul.',
+    'Gizli dosya, parola, token, anahtar veya credential aramaya çalışma.',
+    'Kullanıcı tehlikeli, katalog dışı veya geri döndürülemez bir PC eylemi isterse araç çağırma; bu eylemin bağlı olmadığını kısa söyle.',
+    'Cihan Bey hitabını ara sıra kullan; her cevapta tekrarlama.',
+    'Bu tur konuşma modu: '+turnStyle.mode+'. '+turnStyle.instruction,
+    'İlgili yerel hafıza:\n'+memoryText
+  ].join(' ');
+
+  const messages=[
+    {role:'system',content:system},
+    ...recent.map(x=>({role:x.role,content:x.content})),
+    {role:'user',content:text}
+  ];
+  const tools=nativeAgentTools();
+  const actions=[];
+  const seenCalls=new Set();
+  const started=Date.now();
+
+  for(let round=0;round<Math.max(1,Math.min(6,Number(maxRounds)||4));round++){
+    const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),45000);
+    let j;
+    try{
+      const r=await fetch(LOCAL_BRAIN_URL+'/api/chat',{
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body:JSON.stringify({
+          model:LOCAL_BRAIN_MODEL,
+          stream:false,
+          think:false,
+          keep_alive:LOCAL_BRAIN_KEEP_ALIVE,
+          options:{temperature:0.42,top_p:0.9,repeat_penalty:1.08,num_ctx:4096,num_predict:260},
+          messages,
+          tools
+        }),
+        signal:ctl.signal
+      });
+      clearTimeout(timer);
+      j=await r.json().catch(()=>({}));
+      if(!r.ok)throw new Error(j.error||('OLLAMA '+r.status));
+    }catch(e){
+      clearTimeout(timer);
+      return{ok:false,error:String(e.message||e),model:LOCAL_BRAIN_MODEL,actions};
+    }
+
+    const msg=j&&j.message&&typeof j.message==='object'?j.message:{};
+    const toolCalls=Array.isArray(msg.tool_calls)?msg.tool_calls.filter(Boolean):[];
+    if(!toolCalls.length){
+      const reply=normalizeBrainReply(msg.content);
+      appendLocalBrainHistory('user',text);
+      appendLocalBrainHistory('assistant',reply);
+      remember({kind:'native_agent_final',rounds:round+1,actions:actions.length,model:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-started});
+      return{
+        ok:true,type:'chat',reply,tone:turnStyle.mode,model:LOCAL_BRAIN_MODEL,
+        actions,rounds:round+1,nativeTools:true,latencyMs:Date.now()-started
+      };
+    }
+
+    messages.push({
+      role:'assistant',
+      content:String(msg.content||''),
+      tool_calls:toolCalls
+    });
+
+    for(const tc of toolCalls.slice(0,3)){
+      const fn=tc&&tc.function||{};
+      const name=String(fn.name||'');
+      let args=fn.arguments&&typeof fn.arguments==='object'?fn.arguments:{};
+      if(typeof fn.arguments==='string'){
+        try{args=JSON.parse(fn.arguments)}catch(_){args={}}
+      }
+      const signature=nativeToolSignature(name,args);
+      let result;
+      if(seenCalls.has(signature)){
+        result={ok:false,message:'Aynı araç çağrısı tekrarlandı; döngüyü önlemek için engellendi.'};
+      }else{
+        seenCalls.add(signature);
+        result=await executeNativeAgentTool(name,args);
+      }
+      const content=String(result&&result.message||'Araç sonucu yok.').slice(0,7000);
+      actions.push({tool:name,args,ok:!!(result&&result.ok),result:content.slice(0,900)});
+      messages.push({role:'tool',content,tool_name:name});
+    }
+  }
+
+  const summaries=actions.map(x=>(x.ok?'OK ':'FAIL ')+x.tool+': '+x.result).slice(-6);
+  appendLocalBrainHistory('user',text);
+  const final=await finalizeToolReply(text,summaries,actions.some(x=>!x.ok)?'warm':'focused');
+  remember({kind:'native_agent_bounded_stop',actions:actions.length,model:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-started});
+  return{
+    ok:true,type:'chat',
+    reply:String(final&&final.reply||summaries.join('. ')||'Araç döngüsü güvenli sınırda durduruldu.'),
+    tone:String(final&&final.tone||(actions.some(x=>!x.ok)?'warm':'focused')),
+    model:LOCAL_BRAIN_MODEL,actions,rounds:maxRounds,nativeTools:true,bounded:true,
+    latencyMs:Date.now()-started
+  };
+}
 function shouldReflectToolResult(command,message,resultCount=1){
   const c=String(command||'').toLocaleLowerCase('tr-TR');
   const m=String(message||'');
@@ -1213,7 +1480,7 @@ function startLocalTtsBridge(){
         localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2',vision:isLocalVisionModel()},
         localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper'},
         adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',interruptible:true,offlineFallback:'windows-sapi',profiles:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']},
-        brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,toolReflection:true,multimodal:isLocalVisionModel()},
+        brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,toolReflection:true,multimodal:isLocalVisionModel(),nativeTools:true,maxToolRounds:4},
         mobileRelay:{brain:true,tts:true,pollMs:650}
       }));
     }
@@ -1281,6 +1548,24 @@ function startLocalTtsBridge(){
           const d=JSON.parse(body||'{}');
           const result=await analyzeLocalImage(d.image,d.question);
           res.writeHead(result.ok?200:(result.error==='VISION_MODEL_REQUIRED'?409:503),{'content-type':'application/json'});
+          return res.end(JSON.stringify(result));
+        }catch(e){
+          res.writeHead(500,{'content-type':'application/json'});
+          return res.end(JSON.stringify({ok:false,error:String(e.message||e)}));
+        }
+      });
+      return;
+    }
+
+    if(req.method==='POST'&&req.url==='/agent'){
+      let body='',tooLarge=false;
+      req.on('data',chunk=>{body+=chunk;if(body.length>65536){tooLarge=true;req.destroy()}});
+      req.on('end',async()=>{
+        if(tooLarge){res.writeHead(413,{'content-type':'application/json'});return res.end(JSON.stringify({ok:false,error:'too large'}))}
+        try{
+          const d=JSON.parse(body||'{}');
+          const result=await runNativeAgent(d.message,{maxRounds:d.maxRounds||4});
+          res.writeHead(result.ok?200:503,{'content-type':'application/json'});
           return res.end(JSON.stringify(result));
         }catch(e){
           res.writeHead(500,{'content-type':'application/json'});
@@ -2279,7 +2564,10 @@ async function serviceMobileBrain(){
     if(!r||!r.request)return false;
     const q=r.request;
     try{
-      let result=await callLocalBrain(q.message);
+      let result=await runNativeAgent(q.message,{maxRounds:4});
+      if(!result||result.ok!==true){
+        result=await callLocalBrain(q.message);
+      }
       if(!result||result.ok!==true)throw new Error(result&&result.error||'local brain failed');
 
       if(result.type==='plan'&&Array.isArray(result.commands)&&result.commands.length){
