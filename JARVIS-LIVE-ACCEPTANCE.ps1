@@ -172,6 +172,16 @@ try {
   Add-Result "Fast simple finalizer" $false $_.Exception.Message
 }
 
+try {
+  $seed=(Ask-Brain "Bu kabul testi icin gecici kod mavi lale 731. Sadece bu sohbet icinde aklinda tut.").result
+  $ctx=(Ask-Brain "Az onceki gecici kod neydi?").result
+  $ctxReply=[string]$ctx.reply
+  $ctxOk=($ctx.ok -eq $true -and $ctxReply -match "mavi" -and $ctxReply -match "lale" -and $ctxReply -match "731")
+  Add-Result "Short-term context continuity" $ctxOk $ctxReply
+} catch {
+  Add-Result "Short-term context continuity" $false $_.Exception.Message
+}
+
 $memoryPhrase = "Test tercihim: videolarda sinematik ama komik bir ton."
 try {
   $r=(Ask-Brain ("Hatirla: "+$memoryPhrase)).result
@@ -240,6 +250,7 @@ $criticalFailed=($results | Where-Object {
     "Conversation latency",
     "Tool-result reflection",
     "Fast simple finalizer",
+    "Short-term context continuity",
     "Persistent memory write",
     "Persistent memory recall",
     "Turn-taking TTS state",

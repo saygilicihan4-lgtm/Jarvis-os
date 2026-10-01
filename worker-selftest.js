@@ -101,7 +101,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.47.0','worker version');
+    assert(hj.version==='2.48.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.adaptiveTts&&hj.adaptiveTts.interruptible===true,'interruptible TTS health');
     assert(hj.brainRuntime&&hj.brainRuntime.keepAlive,'brain runtime health');
@@ -254,6 +254,20 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const reqs=seen.slice(beforeSeen);
     const episodicPrompt=reqs.map(x=>(x.messages||[]).map(m=>String(m.content||'')).join('\n')).join('\n');
     assert(/Eski sohbet özeti:.*Mavi roket/is.test(episodicPrompt),'episodic summary was not retrieved into prompt');
+
+    const recallSeen=seen.length;
+    const recallGeneric=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Nerede kalmıştık?'});
+    assert(recallGeneric.status===200,'generic context recall request');
+    const recallReqs=seen.slice(recallSeen);
+    const recallPrompt=recallReqs.map(x=>(x.messages||[]).map(m=>String(m.content||'')).join('\n')).join('\n');
+    assert(/Eski sohbet özeti:.*Mavi roket/is.test(recallPrompt),'generic recall did not inject recent episode');
+
+    const continueSeen=seen.length;
+    const continueGeneric=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Devam et.'});
+    assert(continueGeneric.status===200,'continue context request');
+    const continueReqs=seen.slice(continueSeen);
+    const continuePrompt=continueReqs.map(x=>(x.messages||[]).map(m=>String(m.content||'')).join('\n')).join('\n');
+    assert(/Eski sohbet özeti:.*Mavi roket/is.test(continuePrompt),'devam et did not recover recent episode');
 
     console.log('WORKER BRAIN SELFTEST PASS');
     process.exitCode=0;
