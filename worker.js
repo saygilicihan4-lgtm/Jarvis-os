@@ -247,12 +247,23 @@ function prepareJarvisSpeechText(text,tone='balanced'){
   if(tone==='gentle')s=s.replace(/!+/g,'.');
   return s.slice(0,900);
 }
+function speechSentences(text){
+  const clean=String(text||'').replace(/\s+/g,' ').trim();
+  if(!clean)return[];
+  try{
+    if(typeof Intl!=='undefined'&&Intl.Segmenter){
+      const seg=new Intl.Segmenter('tr',{granularity:'sentence'});
+      const rows=[...seg.segment(clean)].map(x=>String(x.segment||'').trim()).filter(Boolean);
+      if(rows.length)return rows;
+    }
+  }catch(_){}
+  return clean.match(/.*?[.!?…]+(?=\s|$)|.+$/g)?.map(x=>x.trim()).filter(Boolean)||[clean];
+}
 function splitSpeechChunks(text,maxLen=220){
   const clean=String(text||'').replace(/\s+/g,' ').trim();
   if(!clean)return[];
-  if(clean.length<=maxLen)return[clean];
 
-  const raw=clean.match(/[^.!?…]+[.!?…]+|[^.!?…]+$/g)||[clean];
+  const raw=speechSentences(clean);
   const out=[];
   for(const partRaw of raw){
     let part=String(partRaw||'').trim();
@@ -268,6 +279,19 @@ function splitSpeechChunks(text,maxLen=220){
     if(part)out.push(part);
   }
   return out.filter(Boolean).slice(0,8);
+}
+function prosodyPreview(text,tone='balanced'){
+  const clean=prepareJarvisSpeechText(text,tone);
+  const chunks=splitSpeechChunks(clean,220);
+  return{
+    ok:true,
+    tone:String(tone||'balanced'),
+    chunks:chunks.map((chunk,index)=>({
+      text:chunk,
+      profile:ttsProfileForChunk(tone,chunk,index,chunks.length),
+      pauseMs:speechChunkPauseMs(chunk,index,chunks.length)
+    }))
+  };
 }
 function cacheableJarvisSpeech(text){
   const s=String(text||'').replace(/\s+/g,' ').trim();
@@ -2155,6 +2179,23 @@ function startLocalTtsBridge(){
           const code=String(e.code||e.message)==='NOT_STREAMABLE'?409:503;
           res.writeHead(code,{'content-type':'application/json'});
           return res.end(JSON.stringify({ok:false,error:String(e.code||e.message||e)}));
+        }
+      });
+      return;
+    }
+    if(req.method==='POST'&&req.url==='/prosody-preview'){
+      let body='',tooLarge=false;
+      req.on('data',chunk=>{body+=chunk;if(body.length>32768){tooLarge=true;req.destroy()}});
+      req.on('end',()=>{
+        if(tooLarge){res.writeHead(413,{'content-type':'application/json'});return res.end(JSON.stringify({ok:false,error:'too large'}))}
+        try{
+          const d=JSON.parse(body||'{}');
+          const preview=prosodyPreview(String(d.text||'').slice(0,900),String(d.tone||'balanced'));
+          res.writeHead(200,{'content-type':'application/json'});
+          return res.end(JSON.stringify(preview));
+        }catch(e){
+          res.writeHead(500,{'content-type':'application/json'});
+          return res.end(JSON.stringify({ok:false,error:String(e.message||e)}));
         }
       });
       return;
