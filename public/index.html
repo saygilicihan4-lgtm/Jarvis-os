@@ -1835,7 +1835,7 @@ function shouldStreamLocalConversation(message){
   if(/(?:kapsamli|derin dusun|detayli dusun|analiz et|karsilastir|strateji|nedenlerini incele|mantigini incele)/.test(k))return false;
   if(/^(?:devam et|devam|nerede kalmistik|ne yapiyorduk|onu yap|onu ac|az onceki)$/i.test(k))return false;
   if(/(?:hatirla|unut|dedigimde|dersem|duzeltmesini)/.test(k))return false;
-  if(/(?:\bac\b|\bkapat\b|\bbaslat\b|\bcalistir\b|ayar|\bsesi\b|\bsesini\b|\bpil\b|batarya|\bdisk\b|\bag\b|wifi|bluetooth|dosya|klasor|ekran|kamera|gorev yoneticisi|workspace|terminal|powershell)/.test(k))return false;
+  if(/(?:\b(?:ac|acar|acabilir|kapat|kapatir|kapatabilir|baslat|baslatir|baslatabilir|calistir|calistirir|calistirabilir|gir|girer|girebilir)\b|ayar|\bsesi\b|\bsesini\b|\bpil\b|batarya|\bdisk\b|\bag\b|wifi|bluetooth|dosya|klasor|ekran|kamera|gorev yoneticisi|workspace|terminal|powershell)/.test(k))return false;
   return true;
 }
 function splitStreamSpeechBuffer(buffer,final=false){
