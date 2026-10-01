@@ -2046,10 +2046,12 @@ async function streamLocalConversation(message){
 function beginLocalBrainRequest(timeoutMs=65000){
   const id=++currentBrainRequestId;
   const ctl=new AbortController();
+  let timedOut=false;
   currentBrainRequestController=ctl;
-  const timer=setTimeout(()=>{try{ctl.abort()}catch(_){}},timeoutMs);
+  const timer=setTimeout(()=>{timedOut=true;try{ctl.abort()}catch(_){}},timeoutMs);
   return{
     id,ctl,timer,
+    get timedOut(){return timedOut},
     finish(){
       clearTimeout(timer);
       if(currentBrainRequestId===id&&currentBrainRequestController===ctl){
@@ -2088,9 +2090,13 @@ async function askNativeLocalAgent(message){
     scheduleVoiceConversationFollowup(reply);
     return{handled:true,result:j};
   }catch(e){
-    if(e&&e.name==='AbortError'){
+    if(e&&e.name==='AbortError'&&!reqState.timedOut){
       if(window.consoleStatus)consoleStatus.textContent='LOCAL AGENT · KESİLDİ · YENİ SÖZÜNÜZ BEKLENİYOR';
       return{handled:true,interrupted:true};
+    }
+    if(e&&e.name==='AbortError'&&reqState.timedOut){
+      if(window.consoleStatus)consoleStatus.textContent='LOCAL AGENT · ZAMAN AŞIMI · FALLBACK';
+      return{handled:false,error:e,timeout:true};
     }
     consoleStatus.textContent='LOCAL AGENT FALLBACK · '+String(e.message||e).slice(0,80);
     return{handled:false,error:e};
@@ -2166,9 +2172,11 @@ async function askJarvisBrainCore(message){
   if(/Windows/i.test(navigator.userAgent)&&!isMobileJarvis()){
     const native=await askNativeLocalAgent(message);
     if(native.handled)return native;
+    let brainReqState=null;
     try{
       const brainRequestStarted=performance.now();
       const reqState=beginLocalBrainRequest(45000);
+      brainReqState=reqState;
       if(voiceConversationActive&&desktopWakeWordEnabled)armBargeInRecognition(220);
       const lr=await fetch('http://127.0.0.1:8765/brain',{
         method:'POST',
@@ -2236,7 +2244,7 @@ async function askJarvisBrainCore(message){
         consoleStatus.textContent='LOCAL BRAIN · OLLAMA KAPALI';
       }
     }catch(e){
-      if(e&&e.name==='AbortError'){
+      if(e&&e.name==='AbortError'&&brainReqState&&!brainReqState.timedOut){
         if(window.consoleStatus)consoleStatus.textContent='LOCAL BRAIN · KESİLDİ · YENİ SÖZÜNÜZ BEKLENİYOR';
         if(currentBrainRequestController){
           try{currentBrainRequestController.abort()}catch(_){}
@@ -2244,8 +2252,12 @@ async function askJarvisBrainCore(message){
         }
         return{handled:true,interrupted:true};
       }
+      if(e&&e.name==='AbortError'&&brainReqState&&brainReqState.timedOut){
+        if(window.consoleStatus)consoleStatus.textContent='LOCAL BRAIN · ZAMAN AŞIMI · FALLBACK';
+      }else{
+        consoleStatus.textContent='LOCAL BRAIN FALLBACK · '+String(e.message||e).slice(0,80);
+      }
       if(currentBrainRequestController)currentBrainRequestController=null;
-      consoleStatus.textContent='LOCAL BRAIN FALLBACK · '+String(e.message||e).slice(0,80);
     }
   }
 
