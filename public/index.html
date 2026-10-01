@@ -640,8 +640,15 @@ async function listenWithLocalStt(source='command'){
     if(!r.ok||j.ok!==true||!j.text)throw new Error(j.error||('LOCAL STT '+r.status));
 
     const heard=String(j.text).replace(/\s+/g,' ').trim();
-    const normalized=canonicalJarvisCommand(heard);
     localSttListening=false;
+    if(await maybeLearnVoiceCorrection(heard)){
+      wakeWordAwaitingCommand=false;
+      wakeWordConversationUntil=0;
+      wakeWordMutedUntil=Date.now()+9000;
+      return true;
+    }
+    const learned=await normalizeWithWorkerSpeechLexicon(heard);
+    const normalized=canonicalJarvisCommand(learned.normalized);
     wakeWordAwaitingCommand=false;
     wakeWordConversationUntil=0;
     wakeWordMutedUntil=Date.now()+12000;
@@ -649,7 +656,9 @@ async function listenWithLocalStt(source='command'){
     voiceConversationUntil=Date.now()+120000;
 
     if(window.voiceState)voiceState.textContent='VOICE: LOCAL STT CAPTURED';
-    if(window.consoleStatus)consoleStatus.textContent='LOCAL STT · DUYULAN: '+heard+' · YORUM: '+normalized;
+    if(window.consoleStatus)consoleStatus.textContent=learned.changed
+      ?('LOCAL STT · DUYULAN: '+heard+' · ÖĞRENİLMİŞ: '+learned.normalized+' · KOMUT: '+normalized)
+      :('LOCAL STT · DUYULAN: '+heard+' · YORUM: '+normalized);
     cmd.value=normalized;
     await send();
     return true;
@@ -768,7 +777,7 @@ if(SpeechRecognition){
     }
     if(desktopWakeWordEnabled)scheduleDesktopWakeWord(1200);
   };
-  recognition.onresult=e=>{
+  recognition.onresult=async e=>{
     const choice=chooseRecognitionCandidate(e);
     const captured=String(choice.text||'').trim();
     if(e.results[e.results.length-1].isFinal){
@@ -778,6 +787,7 @@ if(SpeechRecognition){
         }
         return;
       }
+      if(await maybeLearnVoiceCorrection(captured))return;
       if(/jarvis.*(bu konuşmayı|bu konusmayi).*dinleme|dinlemeyi (durdur|kapat)|gizlilik modu/i.test(captured)){
         enterPrivacyMode();return;
       }
@@ -790,7 +800,8 @@ if(SpeechRecognition){
           return;
         }
         // One-breath mode: "Jarvis, sistem durumu".
-        const repairedCommand=canonicalJarvisCommand(choice.repaired||wake.command);
+        const learnedWake=await normalizeWithWorkerSpeechLexicon(choice.repaired||wake.command);
+        const repairedCommand=canonicalJarvisCommand(learnedWake.normalized);
         activeLanguage=detectLanguage(repairedCommand);
         recognition.lang=activeLanguage;
         cmd.value=repairedCommand;
@@ -800,7 +811,9 @@ if(SpeechRecognition){
         voiceConversationActive=true;
         voiceConversationUntil=Date.now()+120000;
         voiceState.textContent='VOICE: JARVIS · COMMAND CAPTURED';
-        consoleStatus.textContent='JARVIS · DUYULAN: '+captured+' · KOMUT: '+repairedCommand;
+        consoleStatus.textContent=learnedWake.changed
+          ?('JARVIS · DUYULAN: '+captured+' · ÖĞRENİLMİŞ: '+learnedWake.normalized+' · KOMUT: '+repairedCommand)
+          :('JARVIS · DUYULAN: '+captured+' · KOMUT: '+repairedCommand);
         setTimeout(()=>send(),120);
         return;
       }
@@ -819,7 +832,8 @@ if(SpeechRecognition){
         return;
       }
 
-      const repairedFollowUp=canonicalJarvisCommand(choice.repaired||captured);
+      const learnedFollow=await normalizeWithWorkerSpeechLexicon(choice.repaired||captured);
+      const repairedFollowUp=canonicalJarvisCommand(learnedFollow.normalized);
       activeLanguage=detectLanguage(repairedFollowUp);
       recognition.lang=activeLanguage;
       cmd.value=repairedFollowUp;
@@ -827,7 +841,9 @@ if(SpeechRecognition){
       wakeWordConversationUntil=0;
       wakeWordMutedUntil=Date.now()+12000;
       voiceState.textContent='VOICE: '+(LANGUAGE_NAMES[activeLanguage.split('-')[0]]||activeLanguage)+' · COMMAND CAPTURED';
-      consoleStatus.textContent='JARVIS · DUYULAN: '+captured+' · KOMUT: '+repairedFollowUp;
+      consoleStatus.textContent=learnedFollow.changed
+        ?('JARVIS · DUYULAN: '+captured+' · ÖĞRENİLMİŞ: '+learnedFollow.normalized+' · KOMUT: '+repairedFollowUp)
+        :('JARVIS · DUYULAN: '+captured+' · KOMUT: '+repairedFollowUp);
       setTimeout(()=>send(),140);
     }
   };
@@ -1628,6 +1644,7 @@ async function refreshLocalWorkerHealth(){
       consoleStatus.textContent='JARVIS VOICE · ADAPTIVE PROSODY READY · '+String(j.adaptiveTts.voice||'');
     }
     if(j.localStt){
+      if(j.localStt.adaptiveLexicon)loadLocalSpeechLexicon().catch(()=>{});
       localSttHealth().then(ok=>{
         if(ok&&window.voiceState)voiceState.textContent='VOICE: LOCAL STT READY · '+String(j.localStt.model||'base').toUpperCase();
       }).catch(()=>{});
