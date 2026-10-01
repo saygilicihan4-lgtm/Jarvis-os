@@ -27,8 +27,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.47.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2'];
+const WORKER_VERSION='2.48.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1'];
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -445,6 +445,22 @@ function maybeRememberExplicitPreference(text){
     appendBrainFact(clean,'explicit_preference');
   }
 }
+function isContextRecallQuery(query){
+  const s=String(query||'').toLocaleLowerCase('tr-TR').replace(/[?.!,;:]+/g,' ').replace(/\s+/g,' ').trim();
+  return /^(?:devam et|devam|oradan devam et|kaldığımız yerden devam et|kaldigimiz yerden devam et|nerede kalmıştık|nerede kalmistik|ne yapıyorduk|ne yapiyorduk|ne yapacaktık|ne yapacaktik|az önceki|az onceki|önceki konu|onceki konu|ona devam et|onu yap|onu aç|onu ac|ikincisi|ikincisini yap)$/i.test(s)
+    || /\b(?:az önce|az once|bir önceki|bir onceki|kaldığımız yer|kaldigimiz yer|devam edelim)\b/i.test(s);
+}
+function recentEpisodeContext(limit=3){
+  return readBrainEpisodes(120).slice(-limit).reverse().map((ep,i)=>{
+    const packed=[
+      ep.summary,
+      ...(Array.isArray(ep.decisions)?ep.decisions:[]),
+      ...(Array.isArray(ep.unresolved)?ep.unresolved:[]),
+      ...(Array.isArray(ep.topics)?ep.topics:[])
+    ].filter(Boolean).join(' · ');
+    return{score:1.40-(i*0.10),text:String(ep.summary||packed),role:'episode',packed};
+  }).filter(x=>x.text);
+}
 function relevantBrainMemory(query,limit=5){
   const rows=[];
   try{
@@ -471,6 +487,11 @@ function relevantBrainMemory(query,limit=5){
     ].filter(Boolean).join(' · ');
     const score=brainSimilarity(query,packed)+0.10;
     if(score>0.16)rows.push({score,text:String(ep.summary||packed),role:'episode'});
+  }
+  if(isContextRecallQuery(query)){
+    for(const r of recentEpisodeContext(3)){
+      rows.push({score:r.score,text:r.text,role:'episode'});
+    }
   }
   rows.sort((a,b)=>b.score-a.score);
   const seen=new Set(),out=[];
@@ -765,6 +786,7 @@ async function callLocalBrain(message){
     'Cihan Bey hitabını ara sıra kullan; her cevapta tekrarlama.',
     'Kısa soruya kısa cevap ver. Sohbet uzarsa doğal biçimde devam ettir.',
     'Önceki konuşmadaki zamirleri ve eksik ifadeleri bağlamdan çözmeye çalış.',
+    'Kullanıcı sadece "devam et", "nerede kalmıştık", "onu yap", "az önceki" gibi bir bağlam ifadesi kullanırsa son konuşma ve Eski sohbet özeti kayıtlarını özellikle kullan. Tek makul referans varsa tekrar sorma; birden fazla makul referans varsa tek kısa netleştirme sorusu sor.',
     'Bilmediğin şeyi uydurma. Gerçek PC eylemi yapılmadıysa yapıldı deme.',
     'Bir bilgisayar eylemi isteniyorsa yalnızca desteklenen güvenli komutlardan birine normalize et.',
     'Kullanıcı aynı cümlede iki veya daha fazla güvenli eylem isterse type=plan kullan ve commands alanına en fazla dört komutu doğru sırayla koy.',
@@ -871,7 +893,7 @@ async function callLocalBrain(message){
     remember({
       kind:'local_brain_v2',
       type,command:command||null,commands,model:LOCAL_BRAIN_MODEL,
-      memoryHits:memory.length,mode:turnStyle.mode
+      memoryHits:memory.length,mode:turnStyle.mode,contextRecall:isContextRecallQuery(text)
     });
     return{ok:true,type,reply,command,commands,model:LOCAL_BRAIN_MODEL,memoryHits:memory.length,personaVersion:persona.version,tone};
   }catch(e){
