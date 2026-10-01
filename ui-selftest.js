@@ -11,6 +11,9 @@ const required=[
   'localSttHealthState',
   'listenWithLocalStt',
   'scheduleVoiceConversationFollowup',
+  'nextWakeAcknowledgement',
+  'wakeAckGeneration',
+  'answerJarvisWakeWord',
   'askJarvisBrain',
   'askJarvisBrainCore',
   'shouldStreamLocalConversation',
@@ -92,3 +95,12 @@ if(!html.includes('SELF-ECHO IGNORED'))throw new Error('Speaker echo rejection d
 if(!html.includes("if(/^jarvis\\b/.test(key))return false"))throw new Error('Explicit Jarvis interruption is not exempted from echo rejection');
 
 if(!html.includes("SOCIAL '+String(evt.socialMode"))throw new Error('Streaming social-mode diagnostics missing');
+
+if(!html.includes('waitForLocalTtsIdle(9000,650)'))throw new Error('Natural wake TTS-idle gate missing');
+if(!html.includes('async function answerJarvisWakeWord()'))throw new Error('Wake acknowledgement is not async');
+if(!html.includes("sessionStorage.setItem('jarvisWakeAckCursor'"))throw new Error('Wake acknowledgement rotation persistence missing');
+const wakeStart=html.indexOf('async function answerJarvisWakeWord()');
+const wakeEnd=html.indexOf('const SpeechRecognition=',wakeStart);
+const wakeBlock=html.slice(wakeStart,wakeEnd);
+if(wakeBlock.includes('},3000);'))throw new Error('Fixed 3-second wake delay still present');
+if(!wakeBlock.includes('generation!==wakeAckGeneration'))throw new Error('Stale wake acknowledgement guard missing');
