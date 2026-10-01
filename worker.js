@@ -27,9 +27,9 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.59.0';
+const WORKER_VERSION='2.60.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
-CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1');
+CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -752,6 +752,38 @@ function isContextRecallQuery(query){
   return /^(?:devam et|devam|oradan devam et|kaldığımız yerden devam et|kaldigimiz yerden devam et|nerede kalmıştık|nerede kalmistik|ne yapıyorduk|ne yapiyorduk|ne yapacaktık|ne yapacaktik|az önceki|az onceki|önceki konu|onceki konu|ona devam et|onu yap|onu aç|onu ac|ikincisi|ikincisini yap)$/i.test(s)
     || /\b(?:az önce|az once|bir önceki|bir onceki|kaldığımız yer|kaldigimiz yer|devam edelim)\b/i.test(s);
 }
+function isConversationRepairQuery(query){
+  const s=String(query||'')
+    .toLocaleLowerCase('tr-TR')
+    .replace(/[?.!,;:]+/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+  if(!s)return false;
+  return /\b(?:beni yanlış anladın|beni yanlis anladin|yanlış anladın|yanlis anladin|ne alaka|öyle demedim|oyle demedim|onu demedim|ben onu demedim|ben onu sormadım|ben onu sormadim|öyle demek istemedim|oyle demek istemedim|demek istediğim bu değildi|demek istedigim bu degildi|yanlış cevap verdin|yanlis cevap verdin|başka bir şey demiştim|baska bir sey demistim)\b/i.test(s);
+}
+function conversationRepairContext(query,recent=[]){
+  if(!isConversationRepairQuery(query))return'';
+  const rows=Array.isArray(recent)?recent:[];
+  let previousUser='',previousAssistant='';
+  for(let i=rows.length-1;i>=0;i--){
+    const role=String(rows[i]&&rows[i].role||'');
+    const content=String(rows[i]&&rows[i].content||'').replace(/\s+/g,' ').trim();
+    if(!content)continue;
+    if(!previousAssistant&&role==='assistant'){previousAssistant=content;continue}
+    if(!previousUser&&role==='user'){previousUser=content}
+    if(previousUser&&previousAssistant)break;
+  }
+  const parts=[
+    'KONUŞMA ONARIM MODU: Kullanıcı önceki cevabın yanlış anlaşıldığını söylüyor.',
+    'Savunmaya geçme ve önceki hatalı yorumu tekrarlama.',
+    'Kullanıcının düzeltmesini önceki kullanıcı mesajıyla birlikte yorumla.',
+    'Tek bir makul yorum varsa doğrudan düzeltilmiş cevap ver; gerçekten iki veya daha fazla makul yorum varsa yalnızca bir kısa netleştirme sorusu sor.'
+  ];
+  if(previousUser)parts.push('Önceki kullanıcı mesajı: '+previousUser);
+  if(previousAssistant)parts.push('Önceki JARVIS cevabı: '+previousAssistant);
+  parts.push('Şimdiki düzeltme: '+String(query||'').replace(/\s+/g,' ').trim());
+  return parts.join(' ');
+}
 function recentEpisodeContext(limit=3){
   return readBrainEpisodes(120).slice(-limit).reverse().map((ep,i)=>{
     const packed=[
@@ -1095,6 +1127,7 @@ async function callLocalBrain(message){
   const persona=adjustedPersona||brainPersona();
   const turnStyle=inferBrainTurnStyle(text,persona);
   const deepRequested=shouldDeepReflect(text);
+  const repairContext=conversationRepairContext(text,recent);
   const memoryText=memory.length
     ? memory.map(x=>'- '+(x.role==='memory'?'Hatırlanan tercih':x.role==='episode'?'Eski sohbet özeti':'Önceki konuşma')+': '+x.text).join('\n')
     : '- İlgili eski kayıt yok.';
@@ -1123,6 +1156,7 @@ async function callLocalBrain(message){
     'Yerel ses sözlüğü daha önce yanlış duyulan ifadeleri düzeltebilir. Düzeltilmiş kullanıcı metnini esas al; eski yanlış biçimi geri üretmeye çalışma.',
     'Kişilik ayarları: sıcaklık '+persona.warmth+', mizah '+persona.humor+', doğrudanlık '+persona.directness+', oyunbazlık '+persona.playfulness+'.',
     'Bu tur konuşma modu: '+turnStyle.mode+'. '+turnStyle.instruction,
+    repairContext||'Bu tur için özel bir konuşma onarım talebi yok.',
     'tone alanı seslendirme duygusudur. balanced/casual/playful/warm/focused/work/serious/excited/gentle seçeneklerinden cevabın anlamına en uygun olanı seç.',
     'İlgili yerel hafıza:\n'+memoryText,
     workspaceCtx.context
@@ -1274,13 +1308,13 @@ async function callLocalBrain(message){
     remember({
       kind:'local_brain_v2',
       type,command:command||null,commands,model:LOCAL_BRAIN_MODEL,
-      memoryHits:memory.length,mode:turnStyle.mode,contextRecall:isContextRecallQuery(text),
+      memoryHits:memory.length,mode:turnStyle.mode,contextRecall:isContextRecallQuery(text),conversationRepair:!!repairContext,
       workspaceSources:workspaceCtx.sources,deepReflected:deepRequested&&type==='chat'
     });
     return{
       ok:true,type,reply,command,commands,model:LOCAL_BRAIN_MODEL,
       memoryHits:memory.length,personaVersion:persona.version,tone,
-      workspaceSources:workspaceCtx.sources,deepReflected:deepRequested&&type==='chat'
+      workspaceSources:workspaceCtx.sources,deepReflected:deepRequested&&type==='chat',repairMode:!!repairContext
     };
   }catch(e){
     return{ok:false,error:String(e.message||e),model:LOCAL_BRAIN_MODEL};
@@ -1602,6 +1636,7 @@ async function runNativeAgent(message,{maxRounds=4}={}){
   const turnStyle=inferBrainTurnStyle(text,persona);
   const deepRequested=shouldDeepReflect(text);
   const recent=recentBrainHistory(10);
+  const repairContext=conversationRepairContext(text,recent);
   const memory=relevantBrainMemory(text,5);
   const memoryText=memory.length
     ? memory.map(x=>'- '+(x.role==='memory'?'Hatırlanan tercih':x.role==='episode'?'Eski sohbet özeti':'Önceki konuşma')+': '+x.text).join('\n')
@@ -1620,6 +1655,7 @@ async function runNativeAgent(message,{maxRounds=4}={}){
     'Kullanıcı tehlikeli, katalog dışı veya geri döndürülemez bir PC eylemi isterse araç çağırma; bu eylemin bağlı olmadığını kısa söyle.',
     'Cihan Bey hitabını ara sıra kullan; her cevapta tekrarlama.',
     'Bu tur konuşma modu: '+turnStyle.mode+'. '+turnStyle.instruction,
+    repairContext||'Bu tur için özel bir konuşma onarım talebi yok.',
     'İlgili yerel hafıza:\n'+memoryText
   ].join(' ');
 
@@ -1831,10 +1867,11 @@ function isStreamableConversation(message){
   if(/\b(?:(?:aç|ac)(?:ar|abilir)?|kapat(?:ır|ir|abilir)?|başlat(?:ır|ir|abilir)?|baslat(?:ir|abilir)?|çalıştır(?:ır|ir|abilir)?|calistir(?:ir|abilir)?|gir(?:er|ebilir)?|ayar|ayarlar|sesi|sesini|pil|batarya|disk|ağ|ag|wifi|bluetooth|dosya|klasör|klasor|ekran|kamera|görev yöneticisi|gorev yoneticisi|workspace|terminal|powershell)\b/.test(k))return false;
   return true;
 }
-function streamingConversationSystem(text){
+function streamingConversationSystem(text,recent=[]){
   const persona=updateBrainPersonaFromUserText(text);
   maybeRememberExplicitPreference(text);
   const turnStyle=inferBrainTurnStyle(text,persona);
+  const repairContext=conversationRepairContext(text,recent);
   const memory=relevantBrainMemory(text,4);
   const memoryText=memory.length
     ?memory.map(x=>'- '+(x.role==='memory'?'Hatırlanan tercih':x.role==='episode'?'Eski sohbet özeti':'Önceki konuşma')+': '+x.text).join('\n')
@@ -1842,6 +1879,7 @@ function streamingConversationSystem(text){
   return{
     tone:turnStyle.mode,
     temperature:turnStyle.temperature,
+    repairMode:!!repairContext,
     system:[
       'Sen JARVIS\'sin; Cihan Bey\'in uzun süreli kişisel yerel yapay zeka asistanısın.',
       'Bu kanal yalnızca doğal sohbet içindir. Bilgisayarda eylem yapma, eylem yaptığını söyleme veya araç kullandığını iddia etme.',
@@ -1850,6 +1888,7 @@ function streamingConversationSystem(text){
       'Sesli okunacağı için düz yazı kullan; gereksiz markdown, başlık ve uzun liste kullanma.',
       'Bilmediğin şeyi uydurma. Yerel hafızadaki bilgiyi yalnızca ilgiliyse kullan.',
       'Bu tur modu: '+turnStyle.mode+'. '+turnStyle.instruction,
+      repairContext||'Bu tur için özel bir konuşma onarım talebi yok.',
       'İlgili yerel hafıza:\n'+memoryText
     ].join(' ')
   };
@@ -1865,7 +1904,7 @@ async function streamLocalConversationHttp(message,res){
   if(!status.installed){const e=new Error('MODEL_NOT_INSTALLED');e.code='MODEL_NOT_INSTALLED';throw e}
 
   const recent=recentBrainHistory(10);
-  const cfg=streamingConversationSystem(text);
+  const cfg=streamingConversationSystem(text,recent);
   const ctl=new AbortController();
   const timeout=setTimeout(()=>ctl.abort(),60000);
   let upstream;
@@ -1909,7 +1948,7 @@ async function streamLocalConversationHttp(message,res){
     if(res.destroyed||res.writableEnded)return false;
     try{return res.write(JSON.stringify(obj)+'\n')}catch(_){return false}
   };
-  write({type:'meta',ok:true,model:LOCAL_BRAIN_MODEL,tone:cfg.tone,streaming:true});
+  write({type:'meta',ok:true,model:LOCAL_BRAIN_MODEL,tone:cfg.tone,streaming:true,repairMode:cfg.repairMode===true});
 
   let full='',buffer='',firstDeltaAt=0,doneSeen=false;
   const decoder=new TextDecoder();
@@ -1955,9 +1994,11 @@ async function streamLocalConversationHttp(message,res){
     remember({
       kind:'streaming_chat',
       model:LOCAL_BRAIN_MODEL,
+      repairMode:cfg.repairMode===true,
       firstDeltaMs:firstDeltaAt?firstDeltaAt-started:null,
       latencyMs:Date.now()-started,
       chars:final.length,
+      repairMode:cfg.repairMode===true,
       doneSeen
     });
     write({
