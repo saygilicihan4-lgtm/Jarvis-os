@@ -27,9 +27,9 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.58.0';
+const WORKER_VERSION='2.59.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
-CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1');
+CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','sentence_prosody_v1','cadence_adaptation_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -186,6 +186,49 @@ function ttsProfileForTone(tone='balanced',text=''){
   }
   if(clean.length>420&&t==='balanced')p.rate='-15%';
   return p;
+}
+function clampNumber(x,min,max){
+  return Math.max(min,Math.min(max,Number(x)));
+}
+function parseRatePercent(value,fallback=-18){
+  const m=String(value||'').match(/-?\d+(?:\.\d+)?/);
+  return m?Number(m[0]):fallback;
+}
+function parsePitchHz(value,fallback=-12){
+  const m=String(value||'').match(/-?\d+(?:\.\d+)?/);
+  return m?Number(m[0]):fallback;
+}
+function ttsProfileForSentence(tone='balanced',text='',index=0,total=1){
+  const base=ttsProfileForTone(tone,text);
+  let rate=parseRatePercent(base.rate,-18);
+  let pitch=parsePitchHz(base.pitch,-12);
+  const s=String(text||'').replace(/\s+/g,' ').trim();
+  const last=Math.max(1,Number(total)||1)-1;
+  const isQuestion=/[?]\s*$/.test(s);
+  const isExclaim=/[!]\s*$/.test(s);
+  const isShort=s.length>0&&s.length<=48;
+
+  // Keep the changes subtle: the goal is human cadence, not a cartoon voice.
+  if(isQuestion){rate+=1.5;pitch+=2.0}
+  if(isExclaim){rate+=2.0;pitch+=1.5}
+  if(isShort)rate+=1.0;
+  if(/^(?:tamam|evet|aynen|olur|hımm|hmm|peki|bak|şöyle|soyle)\b/i.test(s))rate+=1.0;
+
+  // A non-question closing sentence settles slightly, like natural speech.
+  if(Number(index)===last&&last>0&&!isQuestion&&!isExclaim){
+    rate-=1.5;
+    pitch-=1.0;
+  }
+  // Middle sentences keep momentum in longer answers.
+  if(last>=2&&Number(index)>0&&Number(index)<last)rate+=0.8;
+
+  rate=clampNumber(rate,-28,-4);
+  pitch=clampNumber(pitch,-16,-4);
+  return{
+    ...base,
+    rate:(rate>0?'+':'')+Number(rate.toFixed(1))+'%',
+    pitch:(pitch>0?'+':'')+Number(pitch.toFixed(1))+'Hz'
+  };
 }
 function prepareJarvisSpeechText(text,tone='balanced'){
   let s=String(text||'').replace(/\s+/g,' ').trim();
@@ -359,9 +402,9 @@ async function speakJarvisNow(text,tone='balanced',generation=ttsGeneration){
   if(!TTS_ENABLED||generation!==ttsGeneration)return;
   const clean=prepareJarvisSpeechText(text,tone);
   if(!clean)return;
-  const profile=ttsProfileForTone(tone,clean);
   const chunks=splitSpeechChunks(clean,220);
   if(!chunks.length)return;
+  const sentenceProfile=i=>ttsProfileForSentence(tone,chunks[i],i,chunks.length);
 
   ttsSpeaking=true;
   ttsLastStartedAt=Date.now();
@@ -371,7 +414,7 @@ async function speakJarvisNow(text,tone='balanced',generation=ttsGeneration){
 
   let current=null;
   try{
-    current=await renderEdgeTtsChunk(chunks[0],profile,generation);
+    current=await renderEdgeTtsChunk(chunks[0],sentenceProfile(0),generation);
     for(let i=0;i<chunks.length;i++){
       if(generation!==ttsGeneration)break;
       ttsCurrentChunk=i+1;
@@ -379,7 +422,7 @@ async function speakJarvisNow(text,tone='balanced',generation=ttsGeneration){
       // Render the next chunk while the current chunk is playing. This hides
       // most Edge TTS network/render latency during natural speech.
       const nextPromise=(i+1<chunks.length)
-        ? renderEdgeTtsChunk(chunks[i+1],profile,generation)
+        ? renderEdgeTtsChunk(chunks[i+1],sentenceProfile(i+1),generation)
         : null;
 
       if(current&&current.path){
@@ -411,7 +454,7 @@ async function renderJarvisMp3Base64(text,tone='balanced'){
   if(!TTS_ENABLED)throw new Error('local TTS disabled');
   const clean=prepareJarvisSpeechText(text,tone).slice(0,700);
   if(!clean)throw new Error('text required');
-  const profile=ttsProfileForTone(tone,clean);
+  const profile=ttsProfileForSentence(tone,clean,0,1);
   const mp3=path.join(os.tmpdir(),'jarvis-mobile-tts-'+process.pid+'-'+Date.now()+'-'+crypto.randomBytes(3).toString('hex')+'.mp3');
   try{
     await runHidden('py',[
@@ -2048,7 +2091,7 @@ function startLocalTtsBridge(){
         capabilities:CAPS,
         localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2',vision:isLocalVisionModel()},
         localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper',adaptiveLexicon:true,adaptiveDecode:true,dynamicEndpointing:true,lexiconCount:Object.keys(readSpeechLexicon().aliases||{}).length},
-        adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',interruptible:true,offlineFallback:'windows-sapi',chunkedPipeline:true,prefetch:true,safeCache:true,backchannelPrewarm:true,backchannelState:ttsBackchannelPrewarmState,profiles:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']},
+        adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',interruptible:true,offlineFallback:'windows-sapi',chunkedPipeline:true,prefetch:true,safeCache:true,sentenceProsody:true,cadenceAdaptation:true,backchannelPrewarm:true,backchannelState:ttsBackchannelPrewarmState,profiles:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']},
         brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,toolReflection:true,multimodal:isLocalVisionModel(),screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,streamingChat:true,sentenceStreamTts:true},
         mobileRelay:{brain:true,tts:true,pollMs:650}
       }));
