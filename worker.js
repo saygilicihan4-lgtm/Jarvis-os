@@ -1707,7 +1707,7 @@ async function runNativeAgent(message,{maxRounds=4}={}){
           ok:true,type:'chat',
           reply:String(final&&final.reply||summaries.join('. ')),
           tone:String(final&&final.tone||(actions.some(x=>!x.ok)?'warm':'focused')),
-          model:LOCAL_BRAIN_MODEL,actions,rounds:round+1,nativeTools:true,reasoning:deepRequested?'deep':'fast',recovered:true,
+          model:LOCAL_BRAIN_MODEL,actions,rounds:round+1,nativeTools:true,reasoning:deepRequested?'deep':'fast',repairMode:!!repairContext,recovered:true,
           latencyMs:Date.now()-started
         };
       }
@@ -1723,7 +1723,7 @@ async function runNativeAgent(message,{maxRounds=4}={}){
       remember({kind:'native_agent_final',rounds:round+1,actions:actions.length,model:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-started});
       return{
         ok:true,type:'chat',reply,tone:turnStyle.mode,model:LOCAL_BRAIN_MODEL,
-        actions,rounds:round+1,nativeTools:true,reasoning:deepRequested?'deep':'fast',latencyMs:Date.now()-started
+        actions,rounds:round+1,nativeTools:true,reasoning:deepRequested?'deep':'fast',repairMode:!!repairContext,latencyMs:Date.now()-started
       };
     }
 
@@ -2090,7 +2090,7 @@ function startLocalTtsBridge(){
         localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2',vision:isLocalVisionModel()},
         localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper',adaptiveLexicon:true,adaptiveDecode:true,dynamicEndpointing:true,lexiconCount:Object.keys(readSpeechLexicon().aliases||{}).length},
         adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',interruptible:true,offlineFallback:'windows-sapi',chunkedPipeline:true,prefetch:true,safeCache:true,backchannelPrewarm:true,backchannelState:ttsBackchannelPrewarmState,profiles:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']},
-        brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,toolReflection:true,multimodal:isLocalVisionModel(),screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,streamingChat:true,sentenceStreamTts:true},
+        brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,toolReflection:true,multimodal:isLocalVisionModel(),screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,streamingChat:true,sentenceStreamTts:true,conversationRepair:true},
         mobileRelay:{brain:true,tts:true,pollMs:650}
       }));
     }
@@ -2129,7 +2129,7 @@ function startLocalTtsBridge(){
     if(req.method==='GET'&&req.url==='/brain-status'){
       localBrainStatus().then(status=>{
         res.writeHead(200,{'content-type':'application/json'});
-        res.end(JSON.stringify({ok:true,...status,warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,persona:brainPersona(),memoryFacts:readBrainFacts().length,memoryEpisodes:readBrainEpisodes().length}));
+        res.end(JSON.stringify({ok:true,...status,warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,conversationRepair:true,persona:brainPersona(),memoryFacts:readBrainFacts().length,memoryEpisodes:readBrainEpisodes().length}));
       }).catch(e=>{
         res.writeHead(503,{'content-type':'application/json'});
         res.end(JSON.stringify({ok:false,error:String(e.message||e)}));
