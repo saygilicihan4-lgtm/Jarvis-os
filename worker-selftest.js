@@ -111,6 +111,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.adaptiveTts&&hj.adaptiveTts.interruptible===true,'interruptible TTS health');
     assert(hj.adaptiveTts.offlineFallback==='windows-sapi','offline TTS fallback health');
     assert(hj.brainRuntime&&hj.brainRuntime.keepAlive,'brain runtime health');
+    assert(hj.brainRuntime.adaptiveModelRouter===true,'adaptive model router health');
 
     const vision=await post('http://127.0.0.1:'+BRIDGE_PORT+'/vision',{
       image:'aGVsbG8=',
