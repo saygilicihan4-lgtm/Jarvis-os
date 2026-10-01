@@ -144,7 +144,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.62.0','worker version');
+    assert(hj.version==='2.63.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localStt&&hj.localStt.adaptiveDecode===true,'adaptive STT decode health');
     assert(hj.localStt&&hj.localStt.dynamicEndpointing===true,'dynamic STT endpointing health');
@@ -158,6 +158,9 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.capabilities.includes('misunderstanding_recovery_v1'),'misunderstanding recovery capability health');
     assert(hj.brainRuntime.conversationRepair===true,'conversation repair runtime health');
     assert(hj.brainRuntime.adaptiveModelRouter===true,'adaptive model router health');
+    assert(hj.brainRuntime.adaptiveTurnPacing===true,'adaptive turn pacing health');
+    assert(hj.capabilities.includes('adaptive_turn_pacing_v1'),'adaptive turn pacing capability');
+    assert(hj.capabilities.includes('latency_learning_v1'),'latency learning capability');
     assert(hj.brainRuntime.fastModel==='qwen3.5:2b','fast model health');
     assert(hj.brainRuntime.deepModel==='qwen3.5:4b','deep model health');
     assert(hj.capabilities.includes('adaptive_model_router_v1'),'adaptive model router capability');
