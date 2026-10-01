@@ -650,6 +650,20 @@ async function localTtsState(){
     return await r.json().catch(()=>null);
   }catch(_){clearTimeout(timer);return null}
 }
+async function refreshInterruptionResumeHint(){
+  if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis())return null;
+  try{
+    const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),900);
+    const r=await fetch('http://127.0.0.1:8765/interruption-state',{signal:ctl.signal,cache:'no-store'});
+    clearTimeout(timer);
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||j.ok!==true)return null;
+    if(j.available&&window.consoleStatus){
+      consoleStatus.textContent='JARVIS · SÖZ KESİLDİ · "DEVAM ET" DERSEN KALDIĞI YERDEN SÜRDÜRÜR';
+    }
+    return j;
+  }catch(_){return null}
+}
 async function stopJarvisSpeech(reason='voice-interrupt',{listenAfter=true}={}){
   bargeInMode=false;
   clearTimeout(bargeInRestartTimer);
@@ -671,9 +685,13 @@ async function stopJarvisSpeech(reason='voice-interrupt',{listenAfter=true}={}){
       body:JSON.stringify({reason})
     });
     if(!r.ok)throw new Error('TTS_STOP_'+r.status);
+    const stopState=await r.json().catch(()=>({}));
     document.body.classList.remove('speaking');
     if(window.voiceState)voiceState.textContent='VOICE: JARVIS INTERRUPTED';
-    if(window.consoleStatus)consoleStatus.textContent='JARVIS · SÖZ KESİLDİ · SİZİ DİNLİYOR';
+    if(window.consoleStatus)consoleStatus.textContent=stopState.resumeAvailable
+      ?'JARVIS · SÖZ KESİLDİ · "DEVAM ET" DERSEN KALDIĞI YERDEN SÜRDÜRÜR'
+      :'JARVIS · SÖZ KESİLDİ · SİZİ DİNLİYOR';
+    setTimeout(()=>refreshInterruptionResumeHint().catch(()=>{}),280);
     voiceConversationActive=true;
     voiceConversationUntil=Date.now()+120000;
     if(listenAfter)setTimeout(()=>listenWithLocalStt('after-interrupt').catch(()=>{}),250);
@@ -2173,7 +2191,7 @@ async function askNativeLocalAgent(message){
     recordConversationLatency(performance.now()-requestStarted);
     const reply=String(j.reply||'').trim();
     const actions=Array.isArray(j.actions)?j.actions:[];
-    consoleStatus.textContent='LOCAL AGENT · '+actions.length+' TOOL · '+String(j.model||'READY')+(j.recovered?' · RECOVERED':'');
+    consoleStatus.textContent='LOCAL AGENT · '+actions.length+' TOOL · '+String(j.model||'READY')+(j.recovered?' · RECOVERED':'')+(j.resumed?' · RESUMED '+String(j.resumeSource||'').toUpperCase():'');
     coreSubtitle.textContent=reply.slice(0,220);
     cmd.value='';
     voiceConversationActive=true;
