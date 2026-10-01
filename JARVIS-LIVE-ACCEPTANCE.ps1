@@ -6,6 +6,21 @@ $ReportDir = Join-Path $Workspace ".jarvis-memory"
 $ReportPath = Join-Path $ReportDir "acceptance-latest.json"
 New-Item -ItemType Directory -Force -Path $ReportDir | Out-Null
 
+$PersonaPath=Join-Path $ReportDir "brain-persona.json"
+$FeedbackPath=Join-Path $ReportDir "brain-dialogue-feedback.jsonl"
+$PersonaExisted=Test-Path $PersonaPath
+$FeedbackExisted=Test-Path $FeedbackPath
+$PersonaOriginal=if($PersonaExisted){Get-Content $PersonaPath -Raw}else{$null}
+$FeedbackOriginal=if($FeedbackExisted){Get-Content $FeedbackPath -Raw}else{$null}
+function Restore-DialogueState {
+  try {
+    if($PersonaExisted){$PersonaOriginal | Set-Content -Encoding UTF8 $PersonaPath}
+    else{Remove-Item $PersonaPath -Force -ErrorAction SilentlyContinue}
+    if($FeedbackExisted){$FeedbackOriginal | Set-Content -Encoding UTF8 $FeedbackPath}
+    else{Remove-Item $FeedbackPath -Force -ErrorAction SilentlyContinue}
+  } catch {}
+}
+
 $results = New-Object System.Collections.Generic.List[object]
 function Add-Result([string]$Name,[bool]$Ok,[string]$Detail,[double]$Ms=0) {
   $results.Add([pscustomobject]@{
@@ -205,6 +220,18 @@ try {
   Remove-Item $ragDir -Recurse -Force -ErrorAction SilentlyContinue
 }
 
+try {
+  $fb=(Ask-Brain "Bu cok robotik oldu, boyle konusma.").result
+  $fbOk=($fb.ok -eq $true -and [string]$fb.dialogueFeedback -eq "negative_robotic")
+  Add-Result "Dialogue feedback learning" $fbOk ("feedback="+$fb.dialogueFeedback)
+
+  $bs=Invoke-Json "http://127.0.0.1:8765/brain-status" "GET" $null 5
+  Add-Result "Dialogue feedback persisted" ([int]$bs.dialogueFeedback -ge 1) ("records="+$bs.dialogueFeedback)
+} catch {
+  Add-Result "Dialogue feedback learning" $false $_.Exception.Message
+  Add-Result "Dialogue feedback persisted" $false $_.Exception.Message
+}
+
 $memoryPhrase = "Test tercihim: videolarda sinematik ama komik bir ton."
 try {
   $r=(Ask-Brain ("Hatirla: "+$memoryPhrase)).result
@@ -274,6 +301,8 @@ $criticalFailed=($results | Where-Object {
     "Conversation latency",
     "Tool-result reflection",
     "Fast simple finalizer",
+    "Dialogue feedback learning",
+    "Dialogue feedback persisted",
     "Short-term context continuity",
     "Local project RAG",
     "RAG secret exclusion",
@@ -299,6 +328,7 @@ $report | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 $ReportPath
 Write-Host ""
 Write-Host ("Acceptance: {0}/{1} PASS" -f $passed,$total) -ForegroundColor Cyan
 Write-Host ("Report: {0}" -f $ReportPath)
+Restore-DialogueState
 if($criticalFailed -gt 0) {
   Write-Host "JARVIS ACCEPTANCE FAILED - sistem bitmis sayilmayacak." -ForegroundColor Red
   exit 1
