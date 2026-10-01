@@ -54,6 +54,8 @@ try {
   Add-Result "Chunked voice pipeline" $pipelineOk ("chunked="+$h.adaptiveTts.chunkedPipeline+" prefetch="+$h.adaptiveTts.prefetch+" cache="+$h.adaptiveTts.safeCache)
   $prosodyRuntimeOk=($h.adaptiveTts.dynamicChunkProsody -eq $true -and $h.adaptiveTts.naturalPauseTiming -eq $true)
   Add-Result "Dynamic sentence prosody runtime" $prosodyRuntimeOk ("prosody="+$h.adaptiveTts.dynamicChunkProsody+" pauses="+$h.adaptiveTts.naturalPauseTiming)
+  $voicePrefOk=(@($h.capabilities) -contains "adaptive_voice_profile_v1" -and @($h.capabilities) -contains "spoken_voice_preference_v1" -and $h.adaptiveTts.adaptiveVoicePreferences -eq $true -and $null -ne $h.adaptiveTts.voicePreferences)
+  Add-Result "Adaptive voice preference engine" $voicePrefOk ("rate="+$h.adaptiveTts.voicePreferences.rateOffset+" pitch="+$h.adaptiveTts.voicePreferences.pitchOffset+" volume="+$h.adaptiveTts.voicePreferences.volumeOffset+" pause="+$h.adaptiveTts.voicePreferences.pauseScale)
   $backchannelOk=($h.adaptiveTts.backchannelPrewarm -eq $true -and $null -ne $h.adaptiveTts.backchannelState)
   Add-Result "Thinking backchannel runtime" $backchannelOk ("prewarm="+$h.adaptiveTts.backchannelPrewarm+" state="+$h.adaptiveTts.backchannelState.status+" cached="+$h.adaptiveTts.backchannelState.count+"/"+$h.adaptiveTts.backchannelState.total)
   Add-Result "Offline voice fallback" ([string]$h.adaptiveTts.offlineFallback -eq "windows-sapi") ([string]$h.adaptiveTts.offlineFallback)
@@ -65,6 +67,14 @@ try {
   Add-Result "Full duplex reasoning cancellation" $duplexOk ("interrupt="+$h.brainRuntime.fullDuplexInterrupt+" cancellableAgent="+$h.brainRuntime.cancellableAgent)
 } catch {
   Add-Result "Worker bridge" $false $_.Exception.Message
+}
+
+try {
+  $vp=Invoke-Json "http://127.0.0.1:8765/voice-preferences" "GET" $null 5
+  $vpOk=($vp.ok -eq $true -and $null -ne $vp.pauseScale -and $null -ne $vp.rateOffset -and $null -ne $vp.pitchOffset -and $null -ne $vp.volumeOffset)
+  Add-Result "Voice preference state endpoint" $vpOk ("rate="+$vp.rateOffset+" pitch="+$vp.pitchOffset+" volume="+$vp.volumeOffset+" pause="+$vp.pauseScale)
+} catch {
+  Add-Result "Voice preference state endpoint" $false $_.Exception.Message
 }
 
 try {
@@ -383,6 +393,8 @@ $criticalFailed=($results | Where-Object {
     "Adaptive voice profiles",
     "Chunked voice pipeline",
     "Dynamic sentence prosody runtime",
+    "Adaptive voice preference engine",
+    "Voice preference state endpoint",
     "Dynamic sentence prosody behavior",
     "Thinking backchannel runtime",
     "Ahmet neural voice render",
