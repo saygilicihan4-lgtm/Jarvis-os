@@ -867,7 +867,7 @@ async function callLocalBrain(message){
     }
 
     appendLocalBrainHistory('user',text);
-    appendLocalBrainHistory('assistant',reply);
+    if(type==='chat')appendLocalBrainHistory('assistant',reply);
     remember({
       kind:'local_brain_v2',
       type,command:command||null,commands,model:LOCAL_BRAIN_MODEL,
@@ -894,10 +894,20 @@ async function finalizeToolReply(userMessage,toolResults,toneHint='focused'){
     .slice(0,4);
   if(!results.length)return{ok:false,error:'NO_TOOL_RESULTS'};
 
-  const status=await localBrainStatus();
-  if(!status.ready||!status.installed)return{ok:false,error:status.error||'LOCAL_BRAIN_OFFLINE'};
+  const rawReply=results.join('. ').replace(/\s+/g,' ').trim().slice(0,900);
+  const commandHint=userText;
+  if(!shouldReflectToolResult(commandHint,rawReply,results.length)){
+    appendLocalBrainHistory('assistant',rawReply);
+    remember({kind:'tool_result_final',reflected:false,results:results.length,tone:toneHint});
+    return{ok:true,reply:rawReply,tone:toneHint,model:'deterministic-tool-finalizer',latencyMs:0,reflected:false};
+  }
 
-  const persona=brainPersona();
+  const status=await localBrainStatus();
+  if(!status.ready||!status.installed){
+    appendLocalBrainHistory('assistant',rawReply);
+    return{ok:true,reply:rawReply,tone:toneHint,model:'tool-fallback',latencyMs:0,reflected:false};
+  }
+
   const recent=recentBrainHistory(8);
   const allowedTones=['balanced','casual','playful','warm','focused','work','serious','excited','gentle'];
   const schema={
@@ -910,12 +920,12 @@ async function finalizeToolReply(userMessage,toolResults,toneHint='focused'){
     additionalProperties:false
   };
   const system=[
-    'Sen JARVIS\'sin. Bir araç/PC eylemi az önce gerçekten çalıştırıldı ve aşağıda doğrulanmış sonuçları var.',
-    'Kullanıcıya bu gerçek sonuçları doğal Türkçe ile, insan gibi ve kısa biçimde aktar.',
-    'Sonuçlarda olmayan hiçbir bilgi ekleme, sayı uydurma veya eylem gerçekleşti demeden önce sonuç metnine dayan.',
-    'Ham teknik metni sesli konuşmaya uygun hale getir. Gerekirse tek kısa espri kullan, ama sonucu gölgelememeli.',
-    'Uygulama açma, ses artırma gibi basit başarıları bir cümlede bitir.',
-    'Durum/arama/çok adımlı sonuçlarda önemli noktaları seç; ekran okunuyorsa her satırı sesle tekrarlama.',
+    'Sen JARVIS\'sin. Bir araç veya bilgisayar eylemi az önce gerçekten çalıştırıldı ve aşağıda doğrulanmış sonuçları var.',
+    'Kullanıcıya yalnızca bu gerçek sonuçlara dayanarak doğal Türkçe ile, insan gibi ve kısa biçimde cevap ver.',
+    'Sonuçlarda olmayan bilgi, sayı veya başarı uydurma.',
+    'Ham teknik metni sesli konuşmaya uygun hale getir.',
+    'Durum, arama veya çok adımlı sonuçlarda önemli noktaları seç; ekrandaki her satırı okumaya çalışma.',
+    'Uygunsa tek kısa espri kullanabilirsin; sonucu gölgelememeli.',
     'Cihan Bey hitabını ara sıra kullan, her turda kullanma.',
     'SADECE JSON şemasına uy.'
   ].join(' ');
@@ -950,11 +960,14 @@ async function finalizeToolReply(userMessage,toolResults,toneHint='focused'){
     if(!parsed||!parsed.reply)throw new Error('TOOL_REFLECTION_BAD_JSON');
     const reply=normalizeBrainReply(parsed.reply);
     const tone=allowedTones.includes(String(parsed.tone||''))?String(parsed.tone):toneHint;
-    remember({kind:'tool_result_reflection',model:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-started,results:results.length,tone});
-    return{ok:true,reply,tone,model:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-started};
+    appendLocalBrainHistory('assistant',reply);
+    remember({kind:'tool_result_final',reflected:true,model:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-started,results:results.length,tone});
+    return{ok:true,reply,tone,model:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-started,reflected:true};
   }catch(e){
     clearTimeout(timer);
-    return{ok:false,error:String(e.message||e),reply:results.join('. ').slice(0,900),tone:toneHint};
+    appendLocalBrainHistory('assistant',rawReply);
+    remember({kind:'tool_result_final',reflected:false,error:String(e.message||e).slice(0,180),results:results.length,tone:toneHint});
+    return{ok:true,reply:rawReply,tone:toneHint,model:'tool-fallback',latencyMs:Date.now()-started,reflected:false};
   }
 }
 function startLocalTtsBridge(){
