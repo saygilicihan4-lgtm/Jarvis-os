@@ -20,6 +20,13 @@ ALLOWED_ORIGIN = os.environ.get("JARVIS_WEB_ORIGIN", "https://jarvis-os-1iuv.onr
 _model = None
 _model_lock = threading.Lock()
 _listen_lock = threading.Lock()
+_model_state = {
+    "status": "idle",
+    "started_at": None,
+    "ready_at": None,
+    "load_seconds": None,
+    "error": None,
+}
 
 
 def log(msg):
@@ -43,10 +50,29 @@ def get_model():
     np, sd, WhisperModel = load_deps()
     with _model_lock:
         if _model is None:
+            started = time.time()
+            _model_state["status"] = "loading"
+            _model_state["started_at"] = started
+            _model_state["error"] = None
             log("loading model " + MODEL_NAME + " (cpu/int8)")
-            _model = WhisperModel(MODEL_NAME, device="cpu", compute_type="int8")
-            log("model ready")
+            try:
+                _model = WhisperModel(MODEL_NAME, device="cpu", compute_type="int8")
+                _model_state["status"] = "ready"
+                _model_state["ready_at"] = time.time()
+                _model_state["load_seconds"] = round(_model_state["ready_at"] - started, 2)
+                log("model ready in %.2fs" % _model_state["load_seconds"])
+            except Exception as exc:
+                _model_state["status"] = "error"
+                _model_state["error"] = str(exc)[:300]
+                raise
     return _model
+
+
+def preload_model():
+    try:
+        get_model()
+    except Exception as exc:
+        log("model preload failed: " + str(exc))
 
 
 def rms(np, block):
@@ -225,6 +251,7 @@ class Handler(BaseHTTPRequestHandler):
                 "model": MODEL_NAME,
                 "language": LANGUAGE,
                 "loaded": ready,
+                "load_state": dict(_model_state),
                 "engine": "faster-whisper",
                 "cost": 0,
                 "hotwords": HOTWORDS,
@@ -283,8 +310,9 @@ if __name__ == "__main__":
     except Exception as exc:
         log(exc)
         sys.exit(2)
+    threading.Thread(target=preload_model, name="jarvis-stt-preload", daemon=True).start()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
-    log("READY http://%s:%d model=%s language=%s" % (HOST, PORT, MODEL_NAME, LANGUAGE))
+    log("READY http://%s:%d model=%s language=%s (preloading)" % (HOST, PORT, MODEL_NAME, LANGUAGE))
     try:
         server.serve_forever()
     except KeyboardInterrupt:
