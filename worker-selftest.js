@@ -125,6 +125,22 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const facts=path.join(workspace,'.jarvis-memory','brain-facts.jsonl');
     assert(fs.existsSync(facts),'explicit preference memory file missing');
 
+    const remember=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Hatırla: En sevdiğim video tonu sinematik ve komik.'});
+    assert(remember.status===200,'remember directive status');
+    const rj=JSON.parse(remember.body);
+    assert(rj.ok===true&&rj.model==='local-memory','remember directive routing');
+
+    const recall=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Ne hatırlıyorsun?'});
+    const recallj=JSON.parse(recall.body);
+    assert(/sinematik ve komik/i.test(recallj.reply),'explicit memory recall missing');
+
+    const forget=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Unut: En sevdiğim video tonu sinematik ve komik.'});
+    const forgetj=JSON.parse(forget.body);
+    assert(/hafıza kaydını çıkardım/i.test(forgetj.reply),'forget directive failed');
+
+    const modelReq=seen.find(x=>(x.messages||[]).some(m=>m.role==='system'&&/Bu tur konuşma modu/i.test(String(m.content||''))));
+    assert(!!modelReq,'dynamic conversation mode prompt missing');
+
     console.log('WORKER BRAIN SELFTEST PASS');
     process.exitCode=0;
   }catch(e){
