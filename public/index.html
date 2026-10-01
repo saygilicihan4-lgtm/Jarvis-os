@@ -1734,7 +1734,11 @@ async function refreshLocalWorkerHealth(){
         });
     }
     if(j.adaptiveTts&&window.consoleStatus){
-      consoleStatus.textContent='JARVIS VOICE · ADAPTIVE PROSODY READY · '+String(j.adaptiveTts.voice||'');
+      const vp=j.adaptiveTts.voicePreferences||{};
+      const learned=j.adaptiveTts.adaptiveVoicePreferences
+        ?(' · LEARNED '+String(vp.rateOffset||0)+'%/'+String(vp.pitchOffset||0)+'Hz · PAUSE '+String(vp.pauseScale||1))
+        :'';
+      consoleStatus.textContent='JARVIS VOICE · ADAPTIVE PROSODY READY · '+String(j.adaptiveTts.voice||'')+learned;
     }
     if(j.localStt){
       localSttHealth().then(ok=>{
@@ -1919,6 +1923,10 @@ function armThinkingBackchannel(message){
   },delay);
   return()=>{cancelled=true;clearTimeout(timer)};
 }
+function looksLikeLocalVoicePreference(text){
+  const k=speechKey(text);
+  return /(?:daha hizli konus|daha yavas konus|cok hizli konusuyorsun|cok yavas konusuyorsun|konusma hizini|ses tonun|kendi sesin|konusma sesin|daha kisa durakla|daha az durakla|daha fazla durakla|cumle aralarini|konusma ayar.*(?:sifirla|reset)|varsayilan konusma ayarina don)/.test(k);
+}
 function shouldStreamLocalConversation(message){
   if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis()||privacyMode||document.hidden)return false;
   if(!voiceConversationActive||Date.now()>voiceConversationUntil)return false;
@@ -1928,6 +1936,7 @@ function shouldStreamLocalConversation(message){
   if(/(?:kapsamli|derin dusun|detayli dusun|analiz et|karsilastir|strateji|nedenlerini incele|mantigini incele)/.test(k))return false;
   if(/^(?:devam et|devam|nerede kalmistik|ne yapiyorduk|onu yap|onu ac|az onceki)$/i.test(k))return false;
   if(/(?:hatirla|unut|dedigimde|dersem|duzeltmesini)/.test(k))return false;
+  if(looksLikeLocalVoicePreference(text))return false;
   if(/(?:\b(?:ac|acar|acabilir|kapat|kapatir|kapatabilir|baslat|baslatir|baslatabilir|calistir|calistirir|calistirabilir|gir|girer|girebilir)\b|ayar|\bsesi\b|\bsesini\b|\bpil\b|batarya|\bdisk\b|\bag\b|wifi|bluetooth|dosya|klasor|ekran|kamera|gorev yoneticisi|workspace|terminal|powershell)/.test(k))return false;
   return true;
 }
