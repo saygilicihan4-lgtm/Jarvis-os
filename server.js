@@ -450,7 +450,13 @@ function publicState(){
     tasks:state.tasks,
     audit:state.audit,
     remoteControl:{pcOnline:pcOnline(),queued:state.tasks.filter(x=>x.status==='waiting_worker').length,running:state.tasks.filter(x=>x.status==='claimed').length},
-    assistant:{pushConfigured:!!process.env.JARVIS_VAPID_PUBLIC_KEY,pushSubscriptions:Object.keys(state.pushSubscriptions).length,reminders:state.reminders.length},
+    assistant:{
+      pushConfigured:!!process.env.JARVIS_VAPID_PUBLIC_KEY,
+      pushSubscriptions:Object.keys(state.pushSubscriptions).length,
+      reminders:state.reminders.length,
+      mobileBrainQueued:[...state.mobileBrainRequests.values()].filter(x=>x.status==='queued'||x.status==='claimed').length,
+      mobileTtsQueued:[...state.mobileTtsRequests.values()].filter(x=>x.status==='queued'||x.status==='claimed').length
+    },
     brain:{enabled:!ZERO_COST_ONLY&&!!OPENAI_API_KEY,zeroCostOnly:ZERO_COST_ONLY,provider:ZERO_COST_ONLY?'local-only':(OPENAI_API_KEY?'openai':'deterministic'),model:(!ZERO_COST_ONLY&&OPENAI_API_KEY)?JARVIS_BRAIN_MODEL:null,history:state.brainHistory.length},
     workers:{
       pc:{
