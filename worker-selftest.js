@@ -29,7 +29,9 @@ const mock=http.createServer(async(req,res)=>{
     const text=String(last&&last.content||'');
     const system=(body.messages||[]).filter(x=>x.role==='system').map(x=>String(x.content||'')).join('\n');
     let out;
-    if(/araç veya bilgisayar eylemi az önce gerçekten çalıştırıldı/i.test(system)){
+    if(/JARVIS yanıt kalite denetleyicisisin/i.test(system)){
+      out={reply:'VAROVA için yerel proje notuna dayanarak odak noktası müşteri dönüşümü ve net ürün anlatımı olmalı.',tone:'work'};
+    } else if(/araç veya bilgisayar eylemi az önce gerçekten çalıştırıldı/i.test(system)){
       out={reply:'Pil yüzde seksen iki. Sistem normal görünüyor.',tone:'focused'};
     } else if(/gelecekte bağlamı korumak/i.test(system)){
       out={
@@ -101,7 +103,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.49.0','worker version');
+    assert(hj.version==='2.50.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.adaptiveTts&&hj.adaptiveTts.interruptible===true,'interruptible TTS health');
     assert(hj.adaptiveTts.offlineFallback==='windows-sapi','offline TTS fallback health');
@@ -119,6 +121,25 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const persona=JSON.parse(fs.readFileSync(personaPath,'utf8'));
     assert(Number(persona.humor)>0.68,'persona humor did not adapt upward');
     assert(Number(persona.playfulness)>0.62,'persona playfulness did not adapt upward');
+
+    const projectDir=path.join(workspace,'projects','varova');
+    fs.mkdirSync(projectDir,{recursive:true});
+    fs.writeFileSync(path.join(projectDir,'strategy.md'),'VAROVA safir anka 4821. Odak: müşteri dönüşümü, net ürün anlatımı ve V-GAP demo akışı.','utf8');
+    fs.writeFileSync(path.join(projectDir,'credentials.json'),'api_key=SHOULD_NOT_ENTER_RAG safir anka 4821','utf8');
+
+    const ragSeen=seen.length;
+    const rag=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'VAROVA projesindeki safir anka 4821 notunu kapsamlı analiz et.'});
+    assert(rag.status===200,'local RAG status');
+    const ragj=JSON.parse(rag.body);
+    assert(ragj.ok===true&&ragj.type==='chat','local RAG chat');
+    assert(ragj.deepReflected===true,'deep reflection not activated');
+    assert(Array.isArray(ragj.workspaceSources)&&ragj.workspaceSources.some(x=>/strategy\.md/i.test(x)),'workspace source missing');
+    assert(!ragj.workspaceSources.some(x=>/credentials/i.test(x)),'sensitive workspace file leaked into RAG');
+    const ragRequests=seen.slice(ragSeen);
+    const ragPrompt=ragRequests.map(x=>(x.messages||[]).map(m=>String(m.content||'')).join('\n')).join('\n');
+    assert(/safir anka 4821/i.test(ragPrompt),'workspace RAG snippet missing from prompt');
+    assert(!/SHOULD_NOT_ENTER_RAG/i.test(ragPrompt),'sensitive RAG content leaked');
+    assert(/müşteri dönüşümü|VAROVA için/i.test(ragj.reply),'deep refinement reply missing');
 
     const cmd=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:"YouTube'u açar mısın?"});
     assert(cmd.status===200,'command status');
