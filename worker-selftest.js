@@ -171,7 +171,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.64.0','worker version');
+    assert(hj.version==='2.65.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localStt&&hj.localStt.adaptiveDecode===true,'adaptive STT decode health');
     assert(hj.localStt&&hj.localStt.dynamicEndpointing===true,'dynamic STT endpointing health');
@@ -201,6 +201,8 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.brainRuntime.screenVisionExplicitOnly===true,'screen vision consent health');
     assert(hj.brainRuntime.screenVision===false,'CI must not claim Windows screen capture');
     assert(hj.adaptiveTts&&hj.adaptiveTts.interruptible===true,'interruptible TTS health');
+    assert(hj.adaptiveTts.adaptiveVoicePreferences===true,'adaptive voice preference health');
+    assert(hj.adaptiveTts.voicePreferences&&Number(hj.adaptiveTts.voicePreferences.rateOffset)===0,'default voice preference health');
     assert(hj.adaptiveTts.chunkedPipeline===true,'chunked TTS pipeline health');
     assert(hj.adaptiveTts.prefetch===true,'TTS prefetch health');
     assert(hj.adaptiveTts.safeCache===true,'safe TTS cache health');
@@ -246,6 +248,31 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(cancelUpstreamClosed===true,'native agent abort did not cancel upstream Ollama request');
     const afterCancelHealth=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(afterCancelHealth.status===200,'worker unhealthy after native agent cancellation');
+
+    const voiceFast=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Biraz daha hızlı konuş.'});
+    assert(voiceFast.status===200,'spoken voice speed preference status');
+    const voiceFastJ=JSON.parse(voiceFast.body);
+    assert(voiceFastJ.ok===true&&voiceFastJ.model==='local-voice-preference','spoken voice speed preference routing');
+    assert(Number(voiceFastJ.voicePreferences&&voiceFastJ.voicePreferences.rateOffset)===2,'spoken voice speed preference value');
+
+    const voiceState=await get('http://127.0.0.1:'+BRIDGE_PORT+'/voice-preferences');
+    assert(voiceState.status===200,'voice preference state status');
+    const voiceStateJ=JSON.parse(voiceState.body);
+    assert(voiceStateJ.ok===true&&Number(voiceStateJ.rateOffset)===2,'voice preference persistence');
+
+    const voicePreview=await post('http://127.0.0.1:'+BRIDGE_PORT+'/prosody-preview',{text:'Tamam. Devam ediyorum.',tone:'balanced'});
+    assert(voicePreview.status===200,'adaptive voice prosody preview status');
+    const voicePreviewJ=JSON.parse(voicePreview.body);
+    assert(Array.isArray(voicePreviewJ.chunks)&&voicePreviewJ.chunks.length>=2,'adaptive voice prosody chunks');
+    assert(String(voicePreviewJ.chunks[0].profile.rate)!=='-18%','voice rate preference not applied to prosody');
+
+    const voiceReset=await post('http://127.0.0.1:'+BRIDGE_PORT+'/agent',{message:'Konuşma ayarlarını sıfırla.',maxRounds:1});
+    assert(voiceReset.status===200,'voice preference reset status');
+    const voiceResetJ=JSON.parse(voiceReset.body);
+    assert(voiceResetJ.ok===true&&voiceResetJ.model==='local-voice-preference','voice preference reset routing');
+    assert(Number(voiceResetJ.voicePreferences&&voiceResetJ.voicePreferences.rateOffset)===0,'voice preference reset rate');
+    const voicePrefsFile=path.join(workspace,'.jarvis-memory','voice-preferences.json');
+    assert(fs.existsSync(voicePrefsFile),'voice preference file missing');
 
     const agentDir=path.join(workspace,'projects');
     fs.mkdirSync(agentDir,{recursive:true});
