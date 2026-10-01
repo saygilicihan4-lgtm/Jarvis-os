@@ -38,6 +38,13 @@ const mock=http.createServer(async(req,res)=>{
     const text=String(last&&last.content||'');
     const system=(body.messages||[]).filter(x=>x.role==='system').map(x=>String(x.content||'')).join('\n');
     const toolMessages=(body.messages||[]).filter(x=>x.role==='tool');
+    if(body.stream===true){
+      res.writeHead(200,{'content-type':'application/x-ndjson'});
+      res.write(JSON.stringify({message:{role:'assistant',content:'Olur. '},done:false})+'\n');
+      res.write(JSON.stringify({message:{role:'assistant',content:'Biraz gırgır, biraz fikir; '},done:false})+'\n');
+      res.end(JSON.stringify({message:{role:'assistant',content:'bugün gayet iyi gidiyor.'},done:true})+'\n');
+      return;
+    }
     if(Array.isArray(body.tools)&&body.tools.length){
       if(/arka planda ne var/i.test(text)&&toolMessages.length===0){
         return json(res,200,{message:{role:'assistant',content:'',tool_calls:[{function:{name:'screen_describe',arguments:{question:'Ekranda ne görüyorsun?'}}}]}});
