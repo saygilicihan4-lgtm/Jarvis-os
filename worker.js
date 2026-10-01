@@ -107,6 +107,7 @@ function stopJarvisSpeech(reason='user'){
   lastQueuedSpeech='';
   lastQueuedSpeechAt=0;
   ttsPendingCount=0;
+  speechQueue=Promise.resolve();
   if(activeTtsPlayback){
     killChildTree(activeTtsPlayback);
     activeTtsPlayback=null;
