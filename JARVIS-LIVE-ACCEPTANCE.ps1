@@ -51,6 +51,7 @@ try {
   $ok=($b.ok -eq $true -and $b.ready -eq $true -and $b.installed -eq $true)
   Add-Result "Local brain ready" $ok (($b.model)+" · RAM "+($b.ramGb)+"GB")
   Add-Result "Qwen3 conversational engine" ([string]$b.model -match "^qwen3:") ([string]$b.model)
+  Add-Result "Episodic memory engine" ($null -ne $b.memoryEpisodes) ("episodes="+$b.memoryEpisodes+" facts="+$b.memoryFacts)
 } catch {
   Add-Result "Local brain ready" $false $_.Exception.Message
 }
@@ -59,6 +60,8 @@ try {
   $s=Invoke-Json "http://127.0.0.1:8768/health" "GET" $null 5
   $ok=($s.ok -eq $true -and -not [string]::IsNullOrWhiteSpace([string]$s.microphone))
   Add-Result "Local Turkish STT" $ok (($s.engine)+" · "+($s.model)+" · mic "+($s.microphone))
+  $hotwordsOk=([string]$s.hotwords -match "Jarvis" -and [string]$s.hotwords -match "YouTube")
+  Add-Result "STT command vocabulary bias" $hotwordsOk ([string]$s.hotwords)
 } catch {
   Add-Result "Local Turkish STT" $false $_.Exception.Message
 }
@@ -138,6 +141,8 @@ $criticalFailed=($results | Where-Object {
     "Local brain ready",
     "Qwen3 conversational engine",
     "Local Turkish STT",
+    "STT command vocabulary bias",
+    "Episodic memory engine",
     "Natural command: volume",
     "Natural command: YouTube",
     "Safety: unsafe action blocked",
