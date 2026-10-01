@@ -11,6 +11,8 @@ const required=[
   'listenWithLocalStt',
   'scheduleVoiceConversationFollowup',
   'askJarvisBrain',
+  'askMobileLocalBrain',
+  'playJarvisMobileRelay',
   'tryDirectLocalPcControl'
 ];
 for(const name of required){
