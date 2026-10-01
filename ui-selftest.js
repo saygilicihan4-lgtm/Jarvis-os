@@ -34,6 +34,9 @@ const required=[
   'analyzeFrameAiLocal',
   'capturedFrameBase64',
   'parseBargeInIntent',
+  'rememberJarvisSpeechEcho',
+  'jarvisEchoSimilarity',
+  'isLikelyJarvisEcho',
   'isJarvisBargeInPhrase',
   'handleBargeInTranscript',
   'stopJarvisSpeech',
@@ -82,3 +85,8 @@ if(!html.includes('VOICE: INTERRUPT READY'))throw new Error('Thinking-phase inte
 if(!html.includes('looksLikeLocalVoicePreference(text)'))throw new Error('Adaptive voice preference routing missing from stream guard');
 if(!html.includes('adaptiveVoicePreferences'))throw new Error('Adaptive voice preference health state is not surfaced in UI');
 if(!html.includes(' · LEARNED '))throw new Error('Learned voice profile is not visible in local voice status');
+
+if(!html.includes('rememberJarvisSpeechEcho(spoken)'))throw new Error('JARVIS speech is not registered for echo rejection');
+if(!html.includes('isLikelyJarvisEcho(captured)'))throw new Error('Barge-in transcript does not pass through speaker echo rejection');
+if(!html.includes('SELF-ECHO IGNORED'))throw new Error('Speaker echo rejection diagnostic state missing');
+if(!html.includes("if(/^jarvis\\b/.test(key))return false"))throw new Error('Explicit Jarvis interruption is not exempted from echo rejection');

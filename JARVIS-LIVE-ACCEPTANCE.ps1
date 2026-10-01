@@ -56,6 +56,8 @@ try {
   Add-Result "Dynamic sentence prosody runtime" $prosodyRuntimeOk ("prosody="+$h.adaptiveTts.dynamicChunkProsody+" pauses="+$h.adaptiveTts.naturalPauseTiming)
   $voicePrefOk=(@($h.capabilities) -contains "adaptive_voice_profile_v1" -and @($h.capabilities) -contains "spoken_voice_preference_v1" -and $h.adaptiveTts.adaptiveVoicePreferences -eq $true -and $null -ne $h.adaptiveTts.voicePreferences)
   Add-Result "Adaptive voice preference engine" $voicePrefOk ("rate="+$h.adaptiveTts.voicePreferences.rateOffset+" pitch="+$h.adaptiveTts.voicePreferences.pitchOffset+" volume="+$h.adaptiveTts.voicePreferences.volumeOffset+" pause="+$h.adaptiveTts.voicePreferences.pauseScale)
+  $echoRejectOk=(@($h.capabilities) -contains "speaker_echo_rejection_v1" -and $h.adaptiveTts.speakerEchoRejection -eq $true)
+  Add-Result "Speaker echo rejection" $echoRejectOk ("capability="+(@($h.capabilities) -contains "speaker_echo_rejection_v1")+" runtime="+$h.adaptiveTts.speakerEchoRejection)
   $backchannelOk=($h.adaptiveTts.backchannelPrewarm -eq $true -and $null -ne $h.adaptiveTts.backchannelState)
   Add-Result "Thinking backchannel runtime" $backchannelOk ("prewarm="+$h.adaptiveTts.backchannelPrewarm+" state="+$h.adaptiveTts.backchannelState.status+" cached="+$h.adaptiveTts.backchannelState.count+"/"+$h.adaptiveTts.backchannelState.total)
   Add-Result "Offline voice fallback" ([string]$h.adaptiveTts.offlineFallback -eq "windows-sapi") ([string]$h.adaptiveTts.offlineFallback)
@@ -394,6 +396,7 @@ $criticalFailed=($results | Where-Object {
     "Chunked voice pipeline",
     "Dynamic sentence prosody runtime",
     "Adaptive voice preference engine",
+    "Speaker echo rejection",
     "Voice preference state endpoint",
     "Dynamic sentence prosody behavior",
     "Thinking backchannel runtime",

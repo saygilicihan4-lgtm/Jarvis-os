@@ -44,5 +44,11 @@ if(!html.includes('screenVision')&&!html.includes('SCREEN VISION')){
 if(!html.includes('localSttHealthState')||!html.includes('decode_mode')){
   throw new Error('adaptive STT v4 UI state is missing');
 }
+if(html.includes('\\function canonicalJarvisCommand')||html.includes('\\const escaped=from.replace')){
+  throw new Error('Malformed learned-alias regex escape regression detected');
+}
+if(!html.includes("g,'\\\\$&');")){
+  throw new Error('Learned-alias regex escaping is not using the replacement-safe form');
+}
 
 console.log('LEXICON UI SELFTEST PASS');
