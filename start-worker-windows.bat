@@ -1,8 +1,8 @@
 @echo off
 setlocal
 title JARVIS PC WORKER
-set "LAUNCHER_VERSION=3.3"
-echo [JARVIS] LAUNCHER 3.3
+set "LAUNCHER_VERSION=3.4"
+echo [JARVIS] LAUNCHER 3.4
 cd /d "%~dp0"
 where node >nul 2>nul
 if errorlevel 1 (
@@ -35,7 +35,7 @@ echo.
 echo [JARVIS] Cloud: %JARVIS_URL%
 echo [JARVIS] Workspace: %JARVIS_WORKSPACE%
 echo [JARVIS] Guncelleme kontrol ediliyor...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$u='https://raw.githubusercontent.com/saygilicihan4-lgtm/Jarvis-os/main/worker.js'; try { $n=Join-Path $env:TEMP 'jarvis-worker.new.js'; Invoke-WebRequest -UseBasicParsing -Uri $u -OutFile $n -TimeoutSec 15; node --check $n ^| Out-Null; $txt=Get-Content $n -Raw; $signed=($txt -match 'const WORKER_VERSION='); if($LASTEXITCODE -eq 0 -and $signed){ if(-not (Test-Path 'worker.js') -or ((Get-FileHash $n).Hash -ne (Get-FileHash 'worker.js').Hash)){ Copy-Item $n 'worker.js' -Force; Write-Host '[JARVIS] Worker guncellendi ve dogrulandi.' } else { Write-Host '[JARVIS] Worker guncel.' } } else { Write-Host '[JARVIS] Guncelleme dogrulanamadi; mevcut Worker korundu.' }; Remove-Item $n -Force -ErrorAction SilentlyContinue } catch { Write-Host '[JARVIS] Guncelleme kontrolu atlandi; mevcut Worker kullaniliyor.' }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$u='https://raw.githubusercontent.com/saygilicihan4-lgtm/Jarvis-os/main/worker.js?cb=' + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); try { $n=Join-Path $env:TEMP 'jarvis-worker.new.js'; Invoke-WebRequest -UseBasicParsing -Headers @{'Cache-Control'='no-cache';'Pragma'='no-cache'} -Uri $u -OutFile $n -TimeoutSec 20; node --check $n ^| Out-Null; $txt=Get-Content $n -Raw; $signed=($txt -match 'const WORKER_VERSION='); if($LASTEXITCODE -eq 0 -and $signed){ $ver=([regex]::Match($txt,\"const WORKER_VERSION='([^']+)'\")).Groups[1].Value; if(-not (Test-Path 'worker.js') -or ((Get-FileHash $n).Hash -ne (Get-FileHash 'worker.js').Hash)){ Copy-Item $n 'worker.js' -Force; Write-Host ('[JARVIS] Worker guncellendi ve dogrulandi: v'+$ver) } else { Write-Host ('[JARVIS] Worker guncel: v'+$ver) } } else { Write-Host '[JARVIS] Guncelleme dogrulanamadi; mevcut Worker korundu.' }; Remove-Item $n -Force -ErrorAction SilentlyContinue } catch { Write-Host ('[JARVIS] Guncelleme kontrolu atlandi: '+$_.Exception.Message); Write-Host '[JARVIS] Mevcut Worker kullaniliyor.' }"
 echo [JARVIS] F8 helper yerel dosyadan baslatilacak.
 echo [JARVIS] Worker baslatiliyor...
 node worker.js
