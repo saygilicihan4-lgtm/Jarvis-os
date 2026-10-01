@@ -46,6 +46,8 @@ try {
   Add-Result "Chunked voice pipeline" $pipelineOk ("chunked="+$h.adaptiveTts.chunkedPipeline+" prefetch="+$h.adaptiveTts.prefetch+" cache="+$h.adaptiveTts.safeCache)
   $backchannelOk=($h.adaptiveTts.backchannelPrewarm -eq $true -and $null -ne $h.adaptiveTts.backchannelState)
   Add-Result "Thinking backchannel runtime" $backchannelOk ("prewarm="+$h.adaptiveTts.backchannelPrewarm+" state="+$h.adaptiveTts.backchannelState.status+" cached="+$h.adaptiveTts.backchannelState.count+"/"+$h.adaptiveTts.backchannelState.total)
+  $cadenceOk=($h.adaptiveTts.sentenceProsody -eq $true -and $h.adaptiveTts.cadenceAdaptation -eq $true)
+  Add-Result "Sentence prosody cadence" $cadenceOk ("sentenceProsody="+$h.adaptiveTts.sentenceProsody+" cadence="+$h.adaptiveTts.cadenceAdaptation)
   Add-Result "Offline voice fallback" ([string]$h.adaptiveTts.offlineFallback -eq "windows-sapi") ([string]$h.adaptiveTts.offlineFallback)
   $mobileRelayOk=($null -ne $h.mobileRelay -and $h.mobileRelay.brain -eq $true -and $h.mobileRelay.tts -eq $true)
   Add-Result "Phone local brain relay" $mobileRelayOk ("brain="+$h.mobileRelay.brain+" tts="+$h.mobileRelay.tts+" poll="+$h.mobileRelay.pollMs+"ms")
@@ -53,6 +55,19 @@ try {
   Add-Result "Streaming voice runtime" $streamRuntimeOk ("chat="+$h.brainRuntime.streamingChat+" sentenceTts="+$h.brainRuntime.sentenceStreamTts)
 } catch {
   Add-Result "Worker bridge" $false $_.Exception.Message
+}
+
+try {
+  $qp=Invoke-Json "http://127.0.0.1:8765/tts-profile" "POST" @{text="Bunu gercekten yapalim mi?";tone="balanced";index=0;total=2} 5
+  $fp=Invoke-Json "http://127.0.0.1:8765/tts-profile" "POST" @{text="Tamam, burada bitirelim.";tone="balanced";index=1;total=2} 5
+  $qPitch=[double](([string]$qp.profile.pitch)-replace "Hz","")
+  $fPitch=[double](([string]$fp.profile.pitch)-replace "Hz","")
+  $qRate=[double](([string]$qp.profile.rate)-replace "%","")
+  $fRate=[double](([string]$fp.profile.rate)-replace "%","")
+  $ok=($qp.ok -eq $true -and $fp.ok -eq $true -and $qPitch -gt $fPitch -and $qRate -gt $fRate)
+  Add-Result "Prosody contour verification" $ok ("question="+$qp.profile.rate+"/"+$qp.profile.pitch+" final="+$fp.profile.rate+"/"+$fp.profile.pitch)
+} catch {
+  Add-Result "Prosody contour verification" $false $_.Exception.Message
 }
 
 $voiceTmp=Join-Path $env:TEMP ("jarvis-ahmet-accept-"+[guid]::NewGuid().ToString("N")+".mp3")
@@ -346,6 +361,8 @@ $criticalFailed=($results | Where-Object {
     "Adaptive voice profiles",
     "Chunked voice pipeline",
     "Thinking backchannel runtime",
+    "Sentence prosody cadence",
+    "Prosody contour verification",
     "Ahmet neural voice render",
     "Offline voice fallback",
     "Phone local brain relay",
