@@ -54,7 +54,7 @@ try {
 $voiceTmp=Join-Path $env:TEMP ("jarvis-ahmet-accept-"+[guid]::NewGuid().ToString("N")+".mp3")
 try {
   $sw=[Diagnostics.Stopwatch]::StartNew()
-  & py -m edge_tts --voice "tr-TR-AhmetNeural" --rate=-18% --pitch=-12Hz --volume=+0% --text "Jarvis ses testi." --write-media $voiceTmp
+  & py -m edge_tts --voice "tr-TR-AhmetNeural" "--rate=-18%" "--pitch=-12Hz" "--volume=+0%" --text "Jarvis ses testi." --write-media $voiceTmp
   $sw.Stop()
   $voiceOk=($LASTEXITCODE -eq 0 -and (Test-Path $voiceTmp) -and (Get-Item $voiceTmp).Length -gt 512)
   $detail=if($voiceOk){("AhmetNeural · "+(Get-Item $voiceTmp).Length+" bytes")}else{"render failed"}
