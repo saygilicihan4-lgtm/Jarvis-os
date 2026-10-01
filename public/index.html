@@ -1425,8 +1425,10 @@ async function load(){
   if(coreRow){
     const b=coreRow.parentElement.querySelector('b');
     const detail=coreRow.parentElement.parentElement.querySelector('.agent-state');
-    if(b){b.textContent=brain.enabled?'BRAIN READY':'READY';b.style.color='#65ffbf'}
-    if(detail)detail.textContent=brain.enabled?('JARVIS BRAIN READY · '+String(brain.model||'OPENAI')):'Task routing / safety';
+    if(b){b.textContent=brain.enabled?'BRAIN READY':(brain.zeroCostOnly?'LOCAL READY':'READY');b.style.color='#65ffbf'}
+    if(detail)detail.textContent=brain.enabled
+      ?('JARVIS BRAIN READY · '+String(brain.model||'OPENAI'))
+      :(brain.zeroCostOnly?'ZERO-COST MODE · paid AI blocked · local brain next':'Task routing / safety');
   }
   pcDot.className='dot '+(pc.online?'online':'offline');
   pcState.textContent=pc.online?'ONLINE':'OFFLINE';
