@@ -1012,9 +1012,17 @@ function extractLocalBrainJson(text){
   return null;
 }
 async function callLocalBrain(message){
-  const text=String(message||'').replace(/\s+/g,' ').trim().slice(0,1800);
-  if(!text)return{ok:true,type:'chat',reply:'Sizi dinliyorum Cihan Bey.',command:null};
+  const originalText=String(message||'').replace(/\s+/g,' ').trim().slice(0,1800);
+  if(!originalText)return{ok:true,type:'chat',reply:'Sizi dinliyorum Cihan Bey.',command:null};
 
+  const lexiconDirective=handleSpeechLexiconDirective(originalText);
+  if(lexiconDirective.handled){
+    appendLocalBrainHistory('user',originalText);
+    appendLocalBrainHistory('assistant',lexiconDirective.reply);
+    return{ok:true,...lexiconDirective,model:'local-speech-lexicon',memoryHits:0,personaVersion:brainPersona().version};
+  }
+
+  const text=applySpeechLexicon(originalText);
   const memoryDirective=handleBrainMemoryDirective(text);
   if(memoryDirective.handled){
     appendLocalBrainHistory('user',text);
