@@ -108,3 +108,5 @@ if(!wakeBlock.includes('generation!==wakeAckGeneration'))throw new Error('Stale 
 if(!html.includes('QUALITY ↑'))throw new Error('Automatic quality escalation diagnostic missing');
 
 if(!html.includes('socialMomentum')||!html.includes('MOMENTUM'))throw new Error('Social momentum diagnostics missing from streaming UI');
+
+if(!html.includes('cadenceMode')||!html.includes('RİTİM'))throw new Error('Adaptive conversation cadence diagnostics missing from streaming UI');
