@@ -27,8 +27,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.50.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1'];
+const WORKER_VERSION='2.51.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','dialogue_feedback_learning_v1','style_exemplar_memory_v1'];
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -53,6 +53,7 @@ const LOCAL_BRAIN_KEEP_ALIVE=String(process.env.JARVIS_LOCAL_BRAIN_KEEP_ALIVE||'
 const LOCAL_BRAIN_HISTORY_FILE=path.join(MEMORY_DIR,'brain-history.jsonl');
 const LOCAL_BRAIN_FACTS_FILE=path.join(MEMORY_DIR,'brain-facts.jsonl');
 const LOCAL_BRAIN_EPISODES_FILE=path.join(MEMORY_DIR,'brain-episodes.jsonl');
+const LOCAL_BRAIN_FEEDBACK_FILE=path.join(MEMORY_DIR,'brain-dialogue-feedback.jsonl');
 const LOCAL_BRAIN_PERSONA_FILE=path.join(MEMORY_DIR,'brain-persona.json');
 const TEST_MODE=process.env.JARVIS_TEST_MODE==='1';
 const FORCE_LOCAL_BRIDGE=process.env.JARVIS_LOCAL_BRIDGE_FORCE==='1';
@@ -394,10 +395,10 @@ function updateBrainPersonaFromUserText(text){
 
   if(/daha (?:eğlenceli|eglenceli|komik|şakacı|sakaci)|gırgır|girgir|şamata|samimi konuş|rahat konuş/.test(s)){bump('humor',0.14);bump('playfulness',0.14);bump('warmth',0.06)}
   if(/daha ciddi|şaka yapma|saka yapma|ciddi konuş/.test(s)){bump('humor',-0.22);bump('playfulness',-0.20);bump('directness',0.08)}
-  if(/kısa konuş|kisa konus|uzatma|kısa cevap/.test(s)){bump('verbosity',-0.18);bump('directness',0.08)}
+  if(/kısa konuş|kisa konus|uzatma|kısa cevap|çok uzattın|cok uzattin|fazla uzattın|fazla uzattin/.test(s)){bump('verbosity',-0.18);bump('directness',0.08)}
   if(/detaylı anlat|detayli anlat|uzun anlat|ayrıntılı anlat|ayrintili anlat/.test(s)){bump('verbosity',0.18)}
   if(/daha net|direkt konuş|direkt konus|lafı dolandırma|lafi dolandirma/.test(s)){bump('directness',0.12)}
-  if(/daha sıcak|daha sicak|daha samimi/.test(s)){bump('warmth',0.12)}
+  if(/daha sıcak|daha sicak|daha samimi|çok robotik|cok robotik|çok yapay|cok yapay/.test(s)){bump('warmth',0.12)}
 
   if(changed){
     p.updatedAt=new Date().toISOString();
@@ -406,6 +407,66 @@ function updateBrainPersonaFromUserText(text){
     remember({kind:'brain_persona_adjusted',warmth:p.warmth,humor:p.humor,directness:p.directness,playfulness:p.playfulness,verbosity:p.verbosity});
   }
   return p;
+}
+function readDialogueFeedback(limit=30){
+  try{
+    if(!fs.existsSync(LOCAL_BRAIN_FEEDBACK_FILE))return [];
+    return fs.readFileSync(LOCAL_BRAIN_FEEDBACK_FILE,'utf8').split('\n').filter(Boolean)
+      .slice(-limit).map(x=>{try{return JSON.parse(x)}catch(_){return null}}).filter(Boolean);
+  }catch(_){return []}
+}
+function appendDialogueFeedback(kind,userText,assistantSample=''){
+  try{
+    const cleanUser=String(userText||'').replace(/\s+/g,' ').trim().slice(0,320);
+    const cleanSample=String(assistantSample||'').replace(/\s+/g,' ').trim().slice(0,320);
+    const rows=readDialogueFeedback(80);
+    const last=rows[rows.length-1];
+    if(last&&last.kind===kind&&last.userText===cleanUser&&last.assistantSample===cleanSample)return;
+    fs.mkdirSync(MEMORY_DIR,{recursive:true});
+    fs.appendFileSync(LOCAL_BRAIN_FEEDBACK_FILE,JSON.stringify({
+      at:new Date().toISOString(),kind,userText:cleanUser,assistantSample:cleanSample
+    })+'\n','utf8');
+    const all=fs.readFileSync(LOCAL_BRAIN_FEEDBACK_FILE,'utf8').split('\n').filter(Boolean);
+    if(all.length>120)fs.writeFileSync(LOCAL_BRAIN_FEEDBACK_FILE,all.slice(-90).join('\n')+'\n','utf8');
+  }catch(_){}
+}
+function classifyDialogueFeedback(text){
+  const s=String(text||'').toLocaleLowerCase('tr-TR').replace(/\s+/g,' ').trim();
+  if(/\b(?:aynen böyle|aynen boyle|işte bu|iste bu|tam böyle|tam boyle|böyle devam|boyle devam|bu ton iyi|bu iyi oldu|böyle konuşman iyi|boyle konusman iyi)\b/.test(s))return'positive_style';
+  if(/\b(?:çok robotik|cok robotik|robot gibi|çok yapay|cok yapay|yapay konuşma|yapay konusma|böyle konuşma|boyle konusma)\b/.test(s))return'negative_robotic';
+  if(/\b(?:çok resmi|cok resmi|fazla resmi|resmi konuşma|resmi konusma)\b/.test(s))return'negative_formal';
+  if(/\b(?:çok uzattın|cok uzattin|fazla uzattın|fazla uzattin|çok uzun cevap|cok uzun cevap)\b/.test(s))return'negative_long';
+  if(/\b(?:çok kısa|cok kisa|fazla kısa|fazla kisa|biraz daha anlat)\b/.test(s))return'negative_short';
+  if(/\b(?:espri kötü|espri kotu|şaka kötü|saka kotu|fazla şaka|fazla saka)\b/.test(s))return'negative_humor';
+  return'';
+}
+function learnDialogueFeedback(text,recent){
+  const kind=classifyDialogueFeedback(text);
+  if(!kind)return null;
+  const lastAssistant=(Array.isArray(recent)?recent:[]).filter(x=>x.role==='assistant').slice(-1)[0];
+  const sample=lastAssistant&&lastAssistant.content?String(lastAssistant.content):'';
+  appendDialogueFeedback(kind,text,sample);
+  const p=brainPersona();
+  const bump=(key,delta)=>{p[key]=clamp01(Number(p[key]||0)+delta)};
+  if(kind==='positive_style'){bump('warmth',0.04);bump('playfulness',0.03)}
+  if(kind==='negative_robotic'){bump('warmth',0.10);bump('playfulness',0.08);bump('directness',-0.03)}
+  if(kind==='negative_formal'){bump('warmth',0.08);bump('playfulness',0.05)}
+  if(kind==='negative_long'){bump('verbosity',-0.18);bump('directness',0.08)}
+  if(kind==='negative_short'){bump('verbosity',0.16)}
+  if(kind==='negative_humor'){bump('humor',-0.16);bump('playfulness',-0.10)}
+  p.updatedAt=new Date().toISOString();
+  saveBrainPersona(p);
+  remember({kind:'dialogue_feedback',feedback:kind,hasSample:!!sample});
+  return{kind,sample};
+}
+function dialogueFeedbackContext(limit=5){
+  const rows=readDialogueFeedback(40).slice(-limit);
+  if(!rows.length)return'Konuşma stili için özel kullanıcı geri bildirimi yok.';
+  return rows.map((x,i)=>{
+    const label=x.kind==='positive_style'?'OLUMLU ÖRNEK':'KAÇINILACAK STİL';
+    const sample=x.assistantSample?(' Önceki JARVIS örneği: "'+x.assistantSample.slice(0,240)+'"'):'';
+    return (i+1)+') '+label+' · geri bildirim: "'+String(x.userText||'').slice(0,180)+'".'+sample;
+  }).join('\n');
 }
 function brainTokens(text){
   return [...new Set(String(text||'').toLocaleLowerCase('tr-TR')
@@ -817,8 +878,10 @@ async function callLocalBrain(message){
   // Keep enough short-term dialogue turns for natural references such as
   // "az önce", "onu", "ikincisi" even after several tool/command turns.
   const recent=recentBrainHistory(12);
+  const dialogueFeedback=learnDialogueFeedback(text,recent);
   const memory=relevantBrainMemory(text,6);
   const workspaceCtx=workspaceBrainContext(text,3);
+  const feedbackContext=dialogueFeedbackContext(5);
   const persona=adjustedPersona||brainPersona();
   const turnStyle=inferBrainTurnStyle(text,persona);
   const deepRequested=shouldDeepReflect(text);
@@ -849,6 +912,8 @@ async function callLocalBrain(message){
     'Kullanıcının açık tercihlerini hatırla ancak hassas özellikler hakkında çıkarım yapma.',
     'Kişilik ayarları: sıcaklık '+persona.warmth+', mizah '+persona.humor+', doğrudanlık '+persona.directness+', oyunbazlık '+persona.playfulness+'.',
     'Bu tur konuşma modu: '+turnStyle.mode+'. '+turnStyle.instruction,
+    'Kullanıcının konuşma stili geri bildirimleri:\n'+feedbackContext,
+    'OLUMLU ÖRNEK varsa kelimeleri kopyalamadan benzer doğallığı koru. KAÇINILACAK STİL varsa o cevabın kalıp, resmiyet, uzunluk veya mizah hatasını tekrarlama.',
     'tone alanı seslendirme duygusudur. balanced/casual/playful/warm/focused/work/serious/excited/gentle seçeneklerinden cevabın anlamına en uygun olanı seç.',
     'İlgili yerel hafıza:\n'+memoryText,
     workspaceCtx.context
@@ -1001,12 +1066,14 @@ async function callLocalBrain(message){
       kind:'local_brain_v2',
       type,command:command||null,commands,model:LOCAL_BRAIN_MODEL,
       memoryHits:memory.length,mode:turnStyle.mode,contextRecall:isContextRecallQuery(text),
-      workspaceSources:workspaceCtx.sources,deepReflected:deepRequested&&type==='chat'
+      workspaceSources:workspaceCtx.sources,deepReflected:deepRequested&&type==='chat',
+      dialogueFeedback:dialogueFeedback&&dialogueFeedback.kind||null
     });
     return{
       ok:true,type,reply,command,commands,model:LOCAL_BRAIN_MODEL,
       memoryHits:memory.length,personaVersion:persona.version,tone,
-      workspaceSources:workspaceCtx.sources,deepReflected:deepRequested&&type==='chat'
+      workspaceSources:workspaceCtx.sources,deepReflected:deepRequested&&type==='chat',
+      dialogueFeedback:dialogueFeedback&&dialogueFeedback.kind||null
     };
   }catch(e){
     return{ok:false,error:String(e.message||e),model:LOCAL_BRAIN_MODEL};
@@ -1162,7 +1229,7 @@ function startLocalTtsBridge(){
     if(req.method==='GET'&&req.url==='/brain-status'){
       localBrainStatus().then(status=>{
         res.writeHead(200,{'content-type':'application/json'});
-        res.end(JSON.stringify({ok:true,...status,warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,persona:brainPersona(),memoryFacts:readBrainFacts().length,memoryEpisodes:readBrainEpisodes().length}));
+        res.end(JSON.stringify({ok:true,...status,warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,persona:brainPersona(),memoryFacts:readBrainFacts().length,memoryEpisodes:readBrainEpisodes().length,dialogueFeedback:readDialogueFeedback().length}));
       }).catch(e=>{
         res.writeHead(503,{'content-type':'application/json'});
         res.end(JSON.stringify({ok:false,error:String(e.message||e)}));
