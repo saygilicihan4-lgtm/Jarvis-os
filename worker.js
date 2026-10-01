@@ -881,7 +881,11 @@ function startLocalTtsBridge(){
           const tone=['balanced','casual','playful','warm','focused','work','serious','excited','gentle'].includes(String(d.tone||''))?String(d.tone):'balanced';
           queueJarvisSpeech(text,tone);
           res.writeHead(202,{'content-type':'application/json'});
-          return res.end(JSON.stringify({ok:true,queued:true,tone,profile:ttsProfileForTone(tone,text)}));
+          return res.end(JSON.stringify({
+            ok:true,queued:true,tone,
+            profile:ttsProfileForTone(tone,text),
+            spokenText:prepareJarvisSpeechText(text,tone)
+          }));
         }catch(e){res.writeHead(400);return res.end('bad request')}
       });
       return;
