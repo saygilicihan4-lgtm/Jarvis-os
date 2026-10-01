@@ -28,6 +28,25 @@ const mock=http.createServer(async(req,res)=>{
     const last=(body.messages||[]).filter(x=>x.role==='user').slice(-1)[0];
     const text=String(last&&last.content||'');
     const system=(body.messages||[]).filter(x=>x.role==='system').map(x=>String(x.content||'')).join('\n');
+    const toolMessages=(body.messages||[]).filter(x=>x.role==='tool');
+    if(Array.isArray(body.tools)&&body.tools.length){
+      if(/gizli env/i.test(text)&&toolMessages.length===0){
+        return json(res,200,{message:{role:'assistant',content:'',tool_calls:[{function:{name:'workspace_read',arguments:{path:'.env'}}}]}});
+      }
+      if(/mavi roket/i.test(text)){
+        if(toolMessages.length===0){
+          return json(res,200,{message:{role:'assistant',content:'',tool_calls:[{function:{name:'workspace_search',arguments:{query:'mavi roket'}}}]}});
+        }
+        if(toolMessages.length===1){
+          return json(res,200,{message:{role:'assistant',content:'',tool_calls:[{function:{name:'workspace_read',arguments:{path:'projects/mavi-roket.md'}}}]}});
+        }
+        return json(res,200,{message:{role:'assistant',content:'Mavi roket dosyasını buldum ve içeriğini okudum.'}});
+      }
+      if(toolMessages.length){
+        return json(res,200,{message:{role:'assistant',content:'Yerel araç sonucunu aldım ve işlemi tamamladım.'}});
+      }
+      return json(res,200,{message:{role:'assistant',content:'Bu turda araca gerek yok; doğrudan cevap veriyorum.'}});
+    }
     let out;
     if(last&&Array.isArray(last.images)&&last.images.length){
       out={reply:'Görüntüde kırmızı bir kare görüyorum.',tone:'focused',observations:['kırmızı kare','sade arka plan']};
@@ -105,12 +124,34 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.51.0','worker version');
+    assert(hj.version==='2.52.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localBrain.vision===true,'local multimodal health');
+    assert(hj.brainRuntime&&hj.brainRuntime.nativeTools===true,'native tools health');
     assert(hj.adaptiveTts&&hj.adaptiveTts.interruptible===true,'interruptible TTS health');
     assert(hj.adaptiveTts.offlineFallback==='windows-sapi','offline TTS fallback health');
     assert(hj.brainRuntime&&hj.brainRuntime.keepAlive,'brain runtime health');
+
+    const agentDir=path.join(workspace,'projects');
+    fs.mkdirSync(agentDir,{recursive:true});
+    fs.writeFileSync(path.join(agentDir,'mavi-roket.md'),'# Mavi Roket\n\nYerel ajan zincir testi için doğrulanmış içerik.','utf8');
+    fs.writeFileSync(path.join(workspace,'.env'),'SUPER_SECRET=never-read','utf8');
+
+    const agent=await post('http://127.0.0.1:'+BRIDGE_PORT+'/agent',{message:'Mavi roket dosyasını bul ve oku.',maxRounds:4});
+    assert(agent.status===200,'native agent status');
+    const aj=JSON.parse(agent.body);
+    assert(aj.ok===true&&aj.nativeTools===true,'native agent routing');
+    assert(Array.isArray(aj.actions)&&aj.actions.length===2,'adaptive tool chain length');
+    assert(aj.actions[0].tool==='workspace_search'&&aj.actions[1].tool==='workspace_read','adaptive tool chain order');
+    assert(aj.actions.every(x=>x.ok===true),'adaptive tool chain result');
+    assert(/Mavi roket dosyasını buldum/i.test(aj.reply),'native agent final reply');
+
+    const secret=await post('http://127.0.0.1:'+BRIDGE_PORT+'/agent',{message:'Gizli env dosyasını oku.',maxRounds:2});
+    assert(secret.status===200,'native secret guard status');
+    const sg=JSON.parse(secret.body);
+    assert(Array.isArray(sg.actions)&&sg.actions.length>=1,'native secret guard action');
+    assert(sg.actions[0].tool==='workspace_read'&&sg.actions[0].ok===false,'native secret read must be blocked');
+    assert(/Hassas dosya erişimi engellendi/i.test(sg.actions[0].result),'native secret guard result');
 
     const vision=await post('http://127.0.0.1:'+BRIDGE_PORT+'/vision',{
       image:'aGVsbG8=',
