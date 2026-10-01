@@ -463,28 +463,17 @@ function speechLexiconKey(text){
     .trim()
     .slice(0,240);
 }
-function defaultSpeechLexicon(){
-  return{version:1,updatedAt:null,aliases:{},hotwords:[],history:[]};
-}
+function defaultSpeechLexicon(){return{version:1,updatedAt:null,aliases:{},hotwords:[],history:[]}}
 function readSpeechLexicon(){
   try{
     if(!fs.existsSync(SPEECH_LEXICON_FILE))return defaultSpeechLexicon();
     const x=JSON.parse(fs.readFileSync(SPEECH_LEXICON_FILE,'utf8'));
     const aliases=x&&x.aliases&&typeof x.aliases==='object'&&!Array.isArray(x.aliases)?x.aliases:{};
-    return{
-      version:1,updatedAt:x.updatedAt||null,aliases,
-      hotwords:Array.isArray(x.hotwords)?x.hotwords.filter(Boolean).slice(-160):[],
-      history:Array.isArray(x.history)?x.history.slice(-120):[]
-    };
+    return{version:1,updatedAt:x.updatedAt||null,aliases,hotwords:Array.isArray(x.hotwords)?x.hotwords.filter(Boolean).slice(-160):[],history:Array.isArray(x.history)?x.history.slice(-120):[]};
   }catch(_){return defaultSpeechLexicon()}
 }
 function writeSpeechLexicon(data){
-  const clean={
-    version:1,updatedAt:new Date().toISOString(),
-    aliases:data&&data.aliases&&typeof data.aliases==='object'?data.aliases:{},
-    hotwords:Array.isArray(data&&data.hotwords)?[...new Set(data.hotwords.map(x=>String(x||'').trim()).filter(Boolean))].slice(-160):[],
-    history:Array.isArray(data&&data.history)?data.history.slice(-120):[]
-  };
+  const clean={version:1,updatedAt:new Date().toISOString(),aliases:data&&data.aliases&&typeof data.aliases==='object'?data.aliases:{},hotwords:Array.isArray(data&&data.hotwords)?[...new Set(data.hotwords.map(x=>String(x||'').trim()).filter(Boolean))].slice(-160):[],history:Array.isArray(data&&data.history)?data.history.slice(-120):[]};
   fs.mkdirSync(MEMORY_DIR,{recursive:true});
   fs.writeFileSync(SPEECH_LEXICON_FILE,JSON.stringify(clean,null,2),'utf8');
   return clean;
@@ -494,8 +483,7 @@ function learnSpeechAlias(heard,intended,source='voice-correction'){
   const target=String(intended||'').replace(/\s+/g,' ').trim().slice(0,240);
   if(!from||from.length<2||!target)return{ok:false,error:'heard and intended required'};
   if(from===speechLexiconKey(target))return{ok:false,error:'correction is identical'};
-  const x=readSpeechLexicon();
-  x.aliases[from]=target;
+  const x=readSpeechLexicon();x.aliases[from]=target;
   const targetWords=target.split(/\s+/).filter(y=>y.length>=3);
   x.hotwords=[...new Set([...(x.hotwords||[]),target,...targetWords])].slice(-160);
   x.history=[...(x.history||[]),{at:new Date().toISOString(),action:'learn',heard:from,intended:target,source:String(source||'voice-correction').slice(0,80)}].slice(-120);
@@ -506,16 +494,45 @@ function learnSpeechAlias(heard,intended,source='voice-correction'){
 function forgetSpeechAlias(heard){
   const key=speechLexiconKey(heard),x=readSpeechLexicon();
   if(!Object.prototype.hasOwnProperty.call(x.aliases,key))return{ok:false,error:'alias not found',heard:key};
-  const intended=x.aliases[key];
-  delete x.aliases[key];
+  const intended=x.aliases[key];delete x.aliases[key];
   x.history=[...(x.history||[]),{at:new Date().toISOString(),action:'forget',heard:key,intended}].slice(-120);
-  const saved=writeSpeechLexicon(x);
-  remember({kind:'speech_lexicon_forget',heard:key,intended});
+  const saved=writeSpeechLexicon(x);remember({kind:'speech_lexicon_forget',heard:key,intended});
   return{ok:true,heard:key,intended,count:Object.keys(saved.aliases).length};
 }
 function escapeRegexLiteral(s){
   const specials='\\.^$*+?()[]{}|';
-  return String(s||'').replace(/[.*+?^${}()|[\]\\]/g,'\\function brainPersona(){
+  return [...String(s||'')].map(ch=>specials.includes(ch)?'\\'+ch:ch).join('');
+}
+function applySpeechLexicon(text){
+  const raw=String(text||'').replace(/\s+/g,' ').trim(),key=speechLexiconKey(raw);
+  if(!key)return raw;
+  const x=readSpeechLexicon();if(x.aliases[key])return String(x.aliases[key]);
+  const entries=Object.entries(x.aliases||{}).sort((a,b)=>b[0].length-a[0].length);let normalized=key;
+  for(const [from,to] of entries){
+    if(from.length<4)continue;
+    const re=new RegExp('(^|\\s)'+escapeRegexLiteral(from)+'(?=\\s|$)','i');
+    if(re.test(normalized))normalized=normalized.replace(re,(m,prefix)=>prefix+String(to).toLocaleLowerCase('tr-TR'));
+  }
+  return normalized===key?raw:normalized;
+}
+function handleSpeechLexiconDirective(text){
+  const raw=String(text||'').replace(/\s+/g,' ').trim(),plain=raw.replace(/[?.!,;:]+$/g,'').trim();
+  let m=plain.match(/^(?:jarvis\s+)?(.{2,80}?)\s+(?:dediğimde|dedigimde|dersem)\s+(.{2,120}?)\s+(?:anla|olarak anla|diye anla)$/i)
+    || plain.match(/^(?:jarvis\s+)?(.{2,80}?)\s+(?:demek|demek istiyorum|demek istedim)\s+(.{2,120})$/i)
+    || plain.match(/^(?:jarvis\s+)?(.{2,80}?)\s*=\s*(.{2,120})$/i);
+  if(m){
+    const learned=learnSpeechAlias(m[1],m[2],'explicit-teach');
+    return learned.ok?{handled:true,type:'chat',reply:'Tamam. "'+m[1].trim()+'" duyduğumda "'+m[2].trim()+'" olarak anlayacağım.',command:null,commands:[],tone:'warm'}:{handled:true,type:'chat',reply:'Bu düzeltmeyi kaydedemedim: '+learned.error,command:null,commands:[],tone:'warm'};
+  }
+  m=plain.match(/^(?:jarvis\s+)?(.{2,100}?)\s+(?:düzeltmesini|duyma düzeltmesini)\s+unut$/i);
+  if(m){const forgotten=forgetSpeechAlias(m[1]);return{handled:true,type:'chat',reply:forgotten.ok?'Tamam, o ses düzeltmesini unuttum.':'Bu ifadeyle eşleşen bir ses düzeltmesi bulamadım.',command:null,commands:[],tone:'warm'}}
+  if(/^(?:jarvis\s+)?(?:ses|konuşma|konusma)\s+düzeltmelerini\s+(?:göster|soyle|söyle)$/i.test(plain)){
+    const entries=Object.entries(readSpeechLexicon().aliases||{}).slice(-12);
+    return{handled:true,type:'chat',reply:entries.length?'Öğrendiğim son ses düzeltmeleri: '+entries.map(([a,b])=>'"'+a+'" → "'+b+'"').join(' · '):'Henüz öğrendiğim özel bir ses düzeltmesi yok.',command:null,commands:[],tone:'focused'};
+  }
+  return{handled:false};
+}
+function brainPersona(){
   const defaults={
     version:2,
     name:'JARVIS',
