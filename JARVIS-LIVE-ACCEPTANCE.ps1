@@ -55,6 +55,8 @@ try {
   Add-Result "Local brain ready" $ok (($b.model)+" · RAM "+($b.ramGb)+"GB")
   Add-Result "Qwen3.5 multimodal engine" ([string]$b.model -match "^qwen3\.5:") ([string]$b.model)
   Add-Result "Local multimodal capability" ($b.vision -eq $true) ("vision="+$b.vision)
+  $nativeToolsOk=($b.ok -eq $true -and $null -ne $b.keepAlive)
+  Add-Result "Native tool runtime" $nativeToolsOk ("model="+$b.model+" keepAlive="+$b.keepAlive)
   Add-Result "Episodic memory engine" ($null -ne $b.memoryEpisodes) ("episodes="+$b.memoryEpisodes+" facts="+$b.memoryFacts)
 
   $warmSw=[Diagnostics.Stopwatch]::StartNew()
@@ -266,6 +268,27 @@ try {
   Remove-Item $acceptFile -Force -ErrorAction SilentlyContinue
 }
 
+$nativeAgentFile=Join-Path $Workspace "acceptance-native-agent.md"
+try {
+  @("# JARVIS native agent acceptance","","Dogrulama kodu: mercan-kartal-4281") | Set-Content -Encoding UTF8 $nativeAgentFile
+  $sw=[Diagnostics.Stopwatch]::StartNew()
+  $agent=Invoke-Json "http://127.0.0.1:8765/agent" "POST" @{
+    message="Calisma alaninda acceptance-native-agent.md dosyasini bul, icerigini oku ve dogrulama kodunu soyle."
+    maxRounds=4
+  } 120
+  $sw.Stop()
+  $actions=@($agent.actions)
+  $hasSearch=($actions | Where-Object {$_.tool -eq "workspace_search" -and $_.ok -eq $true}).Count -ge 1
+  $hasRead=($actions | Where-Object {$_.tool -eq "workspace_read" -and $_.ok -eq $true}).Count -ge 1
+  $reply=[string]$agent.reply
+  $ok=($agent.ok -eq $true -and $agent.nativeTools -eq $true -and $hasSearch -and $hasRead -and $reply -match "mercan|kartal|4281")
+  Add-Result "Adaptive native tool chain" $ok ("actions="+$actions.Count+" · "+$reply.Substring(0,[Math]::Min(180,$reply.Length))) $sw.Elapsed.TotalMilliseconds
+} catch {
+  Add-Result "Adaptive native tool chain" $false $_.Exception.Message
+} finally {
+  Remove-Item $nativeAgentFile -Force -ErrorAction SilentlyContinue
+}
+
 $zeroCost = ([Environment]::GetEnvironmentVariable("JARVIS_ZERO_COST_ONLY","User") -ne "0")
 Add-Result "Zero-cost guard" $zeroCost ("JARVIS_ZERO_COST_ONLY="+[Environment]::GetEnvironmentVariable("JARVIS_ZERO_COST_ONLY","User"))
 
@@ -281,6 +304,7 @@ $criticalFailed=($results | Where-Object {
     "Local brain prewarm",
     "Qwen3.5 multimodal engine",
     "Local multimodal capability",
+    "Native tool runtime",
     "Local multimodal vision",
     "Local Turkish STT",
     "STT model preloaded",
@@ -303,6 +327,7 @@ $criticalFailed=($results | Where-Object {
     "Interruptible Jarvis speech",
     "TTS interrupt endpoint",
     "Workspace local search",
+    "Adaptive native tool chain",
     "Zero-cost guard"
   )
 }).Count
