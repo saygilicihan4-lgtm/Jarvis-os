@@ -1225,7 +1225,7 @@ function inferConversationSocialPolicy(text,recent=[],persona=brainPersona()){
   if(learnedFeedback.followupBias<=-0.20)followupAllowed=false;
   if(learnedFeedback.followupBias>=0.25&&!repair&&!work&&!directQuestion)followupAllowed=true;
   const learnedBanter=learnedFeedback.banterBias>=0.30&&!repair&&!work&&(greeting||story||(!directQuestion&&raw.length<150));
-  if(learnedBanter&&mode==='natural'){
+  if(learnedBanter&&(mode==='natural'||mode==='casual')){
     mode='banter';
     instruction='Kullanıcının öğrendiğin sohbet tercihine göre hafif gırgır ekle; zorlama şaka yapma.';
   }
