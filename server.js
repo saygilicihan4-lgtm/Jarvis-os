@@ -18,6 +18,8 @@ const VAPID_PUBLIC=String(process.env.JARVIS_VAPID_PUBLIC_KEY||'').trim();
 const VAPID_PRIVATE=String(process.env.JARVIS_VAPID_PRIVATE_KEY||'').trim();
 const VAPID_SUBJECT=String(process.env.JARVIS_VAPID_SUBJECT||'mailto:jarvis@localhost').trim();
 const DATABASE_URL=String(process.env.DATABASE_URL||'').trim();
+const OPENAI_API_KEY=String(process.env.OPENAI_API_KEY||'').trim();
+const JARVIS_BRAIN_MODEL=String(process.env.JARVIS_BRAIN_MODEL||'gpt-5.6-luna').trim();
 const db=DATABASE_URL?new Pool({connectionString:DATABASE_URL,ssl:DATABASE_URL.includes('localhost')?false:{rejectUnauthorized:false}}):null;
 let dbReady=false;
 async function initDurableMemory(){
@@ -79,6 +81,7 @@ const state={
   reminders:[],
   webauthnChallenges:{registration:new Map(),authentication:new Map()},
   mobileTtsRequests:new Map(),
+  brainHistory:[],
   stateRevision:0,
   workers:{pc:{name:null,version:null,lastSeen:null,capabilities:[],memory:null},devices:{}}
 };
@@ -90,6 +93,85 @@ function cleanupMobileTtsRequests(){
   }
 }
 setInterval(cleanupMobileTtsRequests,30000);
+function openAIResponseText(payload){
+  const out=Array.isArray(payload&&payload.output)?payload.output:[];
+  const parts=[];
+  for(const item of out){
+    if(!item||!Array.isArray(item.content))continue;
+    for(const c of item.content){
+      if(c&&c.type==='output_text'&&typeof c.text==='string')parts.push(c.text);
+    }
+  }
+  return parts.join('\n').trim();
+}
+function safeBrainCommand(command){
+  const need=requiredCapability(command);
+  return !!need&&SAFE_AUTO_CAPS.has(need);
+}
+function trimBrainHistory(){
+  if(state.brainHistory.length>24)state.brainHistory=state.brainHistory.slice(-24);
+}
+async function callJarvisBrain(message){
+  if(!OPENAI_API_KEY)return{enabled:false,reason:'OPENAI_API_KEY missing'};
+  const userText=String(message||'').replace(/\s+/g,' ').trim().slice(0,1800);
+  if(!userText)return{enabled:true,type:'chat',reply:'Sizi dinliyorum Cihan Bey.',command:null};
+
+  const instructions=[
+    'You are JARVIS, Cihan Bey\'s personal AI assistant.',
+    'Default language is Turkish. Speak naturally, warmly, confidently and concisely.',
+    'Use light wit when appropriate, but never become silly, repetitive, flattering, or theatrical.',
+    'Address the user as Cihan Bey occasionally, not in every sentence.',
+    'Understand imperfect Turkish speech recognition, omitted suffixes, colloquial wording, and follow-up references from recent conversation.',
+    'Never claim a real-world or PC action was completed unless an actual tool/Worker result confirms it.',
+    'For a safe PC control request, normalize it to ONE of the supported command forms below and return type=command.',
+    'Supported safe command families: system status, disk status, network status, battery/power status, volume up/down/mute, media play/pause/next/previous/stop, open YouTube/Google/GitHub/ChatGPT/Opera GX/Chrome/Edge/Notepad/Calculator/File Explorer/Task Manager/Windows Settings/Sound/Bluetooth/Wi-Fi/JARVIS workspace.',
+    'For conversation, questions, brainstorming, jokes, explanations, or anything not in that safe command catalog, return type=chat.',
+    'If the request is ambiguous, ask one short clarification instead of guessing.',
+    'Return ONLY compact JSON with exactly these keys: type, reply, command.',
+    'type must be "chat" or "command". command must be null for chat. reply should sound natural when spoken aloud.'
+  ].join(' ');
+
+  const history=state.brainHistory.slice(-12).map(x=>({role:x.role,content:x.content}));
+  const input=[...history,{role:'user',content:userText}];
+
+  const r=await fetch('https://api.openai.com/v1/responses',{
+    method:'POST',
+    headers:{
+      'authorization':'Bearer '+OPENAI_API_KEY,
+      'content-type':'application/json'
+    },
+    body:JSON.stringify({
+      model:JARVIS_BRAIN_MODEL,
+      instructions,
+      input,
+      max_output_tokens:260,
+      store:false
+    })
+  });
+  const payload=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error('OpenAI '+r.status+' · '+String(payload&&payload.error&&payload.error.message||'brain request failed').slice(0,180));
+
+  const text=openAIResponseText(payload);
+  let parsed=null;
+  try{
+    const cleaned=text.replace(/^\s*```(?:json)?/i,'').replace(/```\s*$/,'').trim();
+    parsed=JSON.parse(cleaned);
+  }catch(_){}
+
+  let type=parsed&&parsed.type==='command'?'command':'chat';
+  let reply=String(parsed&&parsed.reply||text||'Sizi dinliyorum.').replace(/\s+/g,' ').trim().slice(0,1200);
+  let command=parsed&&parsed.command!=null?String(parsed.command).trim():null;
+
+  if(type==='command'&&!safeBrainCommand(command)){
+    type='chat';
+    command=null;
+    reply='Bu isteği anladım, fakat henüz güvenli komut kataloğumda yok. İsterseniz bu yeteneği ekleyebiliriz.';
+  }
+
+  state.brainHistory.push({role:'user',content:userText},{role:'assistant',content:reply});
+  trimBrainHistory();
+  return{enabled:true,type,reply,command,model:JARVIS_BRAIN_MODEL};
+}
 function now(){return new Date().toISOString()}
 function touchState(){state.stateRevision++;}
 function log(type,message){
@@ -360,6 +442,7 @@ function publicState(){
     audit:state.audit,
     remoteControl:{pcOnline:pcOnline(),queued:state.tasks.filter(x=>x.status==='waiting_worker').length,running:state.tasks.filter(x=>x.status==='claimed').length},
     assistant:{pushConfigured:!!process.env.JARVIS_VAPID_PUBLIC_KEY,pushSubscriptions:Object.keys(state.pushSubscriptions).length,reminders:state.reminders.length},
+    brain:{enabled:!!OPENAI_API_KEY,provider:OPENAI_API_KEY?'openai':'deterministic',model:OPENAI_API_KEY?JARVIS_BRAIN_MODEL:null,history:state.brainHistory.length},
     workers:{
       pc:{
         name:pc.name,
@@ -799,6 +882,19 @@ const server=http.createServer((req,res)=>{
     const existed=!!state.accountPolicies[key];delete state.accountPolicies[key];if(existed)touchState();
     log('ACCOUNT_REVOKE',key+' kaldırıldı');
     return json(res,200,{ok:true,existed});
+  }
+
+  if(pathname==='/api/brain'&&req.method==='POST'){
+    return readJson(req,async(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      try{
+        const result=await callJarvisBrain(d&&d.message);
+        return json(res,200,result);
+      }catch(e){
+        log('BRAIN_ERROR',String(e.message||e).slice(0,220));
+        return json(res,502,{enabled:!!OPENAI_API_KEY,error:String(e.message||e).slice(0,220)});
+      }
+    });
   }
 
   if(pathname==='/api/tasks'&&req.method==='POST'){
