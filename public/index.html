@@ -1233,8 +1233,9 @@ function speak(text,lang=activeLanguage,tone='balanced'){
   if(!spoken)return;
   if(isMobileJarvis()){
     playJarvisMobileRelay(spoken,tone).catch(err=>{
-      if(window.voiceState)voiceState.textContent='VOICE: JARVIS RELAY FAILED';
-      consoleStatus.textContent='MOBILE JARVIS VOICE ERROR · '+String(err&&err.message||err).slice(0,80);
+      if(window.voiceState)voiceState.textContent='VOICE: JARVIS RELAY FALLBACK';
+      consoleStatus.textContent='MOBILE JARVIS VOICE FALLBACK · '+String(err&&err.message||err).slice(0,80);
+      browserSpeak(spoken,lang);
     });
     return;
   }
@@ -1542,6 +1543,23 @@ async function finalizeLocalToolReply(message,results,tone='focused'){
     return{ok:true,reply:list.join('. '),tone,model:'ui-fallback',reflected:false,error:String(e.message||e)};
   }
 }
+function armMobileConversationFollowup(delay=350){
+  if(!isMobileJarvis()||!recognition||privacyMode||document.hidden)return false;
+  if(!voiceConversationActive||Date.now()>voiceConversationUntil)return false;
+  setTimeout(()=>{
+    if(!voiceConversationActive||privacyMode||document.hidden)return;
+    if(listening)return;
+    try{
+      recognition.lang='tr-TR';
+      recognition.start();
+      if(window.voiceState)voiceState.textContent='VOICE: PHONE FOLLOW-UP LISTENING';
+      if(window.consoleStatus)consoleStatus.textContent='PHONE JARVIS · SİZİ DİNLİYOR';
+    }catch(e){
+      if(window.voiceState)voiceState.textContent='VOICE: TAP VOICE TO CONTINUE';
+    }
+  },Math.max(150,delay));
+  return true;
+}
 async function askMobileLocalBrain(message){
   if(!isMobileJarvis())return {handled:false};
   try{
@@ -1572,7 +1590,15 @@ async function askMobileLocalBrain(message){
         if(reply){
           coreSubtitle.textContent=reply.slice(0,220);
           cmd.value='';
-          speak(reply,'tr-TR',String(r.tone||'balanced'));
+          voiceConversationActive=true;
+          voiceConversationUntil=Date.now()+120000;
+          try{
+            await playJarvisMobileRelay(reply,String(r.tone||'balanced'));
+            armMobileConversationFollowup(300);
+          }catch(err){
+            browserSpeak(reply,'tr-TR');
+            if(window.consoleStatus)consoleStatus.textContent='PHONE VOICE FALLBACK · '+String(err&&err.message||err).slice(0,80);
+          }
         }
         return {handled:true,result:r};
       }
