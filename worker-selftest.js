@@ -171,7 +171,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.66.0','worker version');
+    assert(hj.version==='2.67.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localStt&&hj.localStt.adaptiveDecode===true,'adaptive STT decode health');
     assert(hj.localStt&&hj.localStt.dynamicEndpointing===true,'dynamic STT endpointing health');
@@ -188,6 +188,12 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.capabilities.includes('conversation_repair_v1'),'conversation repair capability health');
     assert(hj.capabilities.includes('misunderstanding_recovery_v1'),'misunderstanding recovery capability health');
     assert(hj.brainRuntime.conversationRepair===true,'conversation repair runtime health');
+    assert(hj.brainRuntime.socialDialogue===true,'social dialogue runtime health');
+    assert(hj.brainRuntime.responseVariation===true,'response variation runtime health');
+    assert(hj.brainRuntime.contextualFollowup===true,'contextual follow-up runtime health');
+    assert(hj.capabilities.includes('social_dialogue_v1'),'social dialogue capability');
+    assert(hj.capabilities.includes('response_variation_v1'),'response variation capability');
+    assert(hj.capabilities.includes('contextual_followup_v1'),'contextual follow-up capability');
     assert(hj.brainRuntime.adaptiveModelRouter===true,'adaptive model router health');
     assert(hj.brainRuntime.adaptiveTurnPacing===true,'adaptive turn pacing health');
     assert(hj.capabilities.includes('adaptive_turn_pacing_v1'),'adaptive turn pacing capability');
@@ -233,10 +239,13 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(streamed.status===200,'streaming chat status');
     const streamEvents=streamed.body.split(/\r?\n/).filter(Boolean).map(x=>JSON.parse(x));
     assert(streamEvents[0]&&streamEvents[0].type==='meta'&&streamEvents[0].streaming===true,'streaming chat meta');
+    assert(streamEvents[0].socialMode==='casual','streaming social mode');
+    assert(streamEvents[0].followupAllowed===true,'streaming contextual follow-up metadata');
     const deltas=streamEvents.filter(x=>x.type==='delta').map(x=>String(x.text||''));
     assert(deltas.length>=2,'streaming chat deltas missing');
     const doneEvent=streamEvents.find(x=>x.type==='done');
     assert(doneEvent&&doneEvent.ok===true&&/gırgır|fikir/i.test(doneEvent.reply),'streaming chat done payload');
+    assert(doneEvent.socialMode==='casual'&&doneEvent.followupAllowed===true,'streaming social completion metadata');
     const streamReq=seen.slice(streamSeen).find(x=>x.stream===true);
     assert(streamReq&&streamReq.think===false,'streaming Ollama request mode');
     assert(!Array.isArray(streamReq.tools),'streaming chat must not expose PC tools');
@@ -335,6 +344,19 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(cj.ok===true&&cj.type==='chat','chat routing');
     assert(/gırgır|fikir|devam/i.test(cj.reply),'humanlike chat reply');
     assert(['playful','casual','balanced'].includes(cj.tone),'chat tone missing');
+
+    const socialSeen=seen.length;
+    const social=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Bak ne oldu, bugün başıma komik bir şey geldi.'});
+    assert(social.status===200,'social dialogue status');
+    const socialj=JSON.parse(social.body);
+    assert(socialj.ok===true&&socialj.type==='chat','social dialogue routing');
+    assert(socialj.socialMode==='banter'||socialj.socialMode==='story','social dialogue mode');
+    assert(socialj.followupAllowed===true,'social follow-up policy');
+    const socialReqs=seen.slice(socialSeen);
+    const socialPrompt=socialReqs.map(x=>(x.messages||[]).filter(m=>m.role==='system').map(m=>String(m.content||'')).join('\n')).join('\n');
+    assert(/SOSYAL DİYALOG MODU/i.test(socialPrompt),'social dialogue prompt missing');
+    assert(/en fazla bir kısa takip sorusu/i.test(socialPrompt),'bounded social follow-up rule missing');
+    assert(/Son JARVIS açılışlarını tekrar etme/i.test(socialPrompt),'response variation opener memory missing');
 
     const repairSeed=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Bana sade bir uygulama fikri ver.'});
     assert(repairSeed.status===200,'repair seed status');
