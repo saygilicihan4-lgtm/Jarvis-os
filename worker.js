@@ -27,9 +27,9 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.72.0';
+const WORKER_VERSION='2.73.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
-CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1','adaptive_model_router_v1','deep_model_fallback_v1','dynamic_chunk_prosody_v1','natural_pause_timing_v1','adaptive_turn_pacing_v1','latency_learning_v1','full_duplex_interrupt_v1','cancellable_agent_v1','adaptive_voice_profile_v1','spoken_voice_preference_v1','speaker_echo_rejection_v1','social_dialogue_v1','response_variation_v1','contextual_followup_v1','dialogue_feedback_learning_v1','social_preference_adaptation_v1','dynamic_wake_ack_v1','wake_ack_turn_timing_v1','auto_quality_escalation_v1','weak_response_escalation_v1','repair_quality_escalation_v1','social_momentum_v1','elliptical_turn_resolution_v1','conversation_cadence_v1','brevity_mirroring_v1','adaptive_response_length_v1');
+CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1','adaptive_model_router_v1','deep_model_fallback_v1','dynamic_chunk_prosody_v1','natural_pause_timing_v1','adaptive_turn_pacing_v1','latency_learning_v1','full_duplex_interrupt_v1','cancellable_agent_v1','adaptive_voice_profile_v1','spoken_voice_preference_v1','speaker_echo_rejection_v1','social_dialogue_v1','response_variation_v1','contextual_followup_v1','dialogue_feedback_learning_v1','social_preference_adaptation_v1','dynamic_wake_ack_v1','wake_ack_turn_timing_v1','auto_quality_escalation_v1','weak_response_escalation_v1','repair_quality_escalation_v1','social_momentum_v1','elliptical_turn_resolution_v1','conversation_cadence_v1','brevity_mirroring_v1','adaptive_response_length_v1','interruption_continuity_v1','spoken_resume_v1','partial_stream_resume_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -94,6 +94,11 @@ let ttsLastEndedAt=0;
 let ttsLastChunkCount=0;
 let ttsCurrentChunk=0;
 let ttsGeneration=0;
+let activeSpeechText='';
+let activeSpeechTone='balanced';
+let activeSpeechChunks=[];
+let activeSpeechGeneration=0;
+let interruptedConversationState=null;
 let ttsBackchannelPrewarmState={status:'idle',count:0,total:JARVIS_BACKCHANNEL_PHRASES.length+JARVIS_WAKE_ACK_PHRASES.length,error:null};
 let voicePrefsCache=null;
 let activeTtsPlayback=null;
@@ -131,7 +136,104 @@ function killChildTree(p){
     }
   }catch(_){}
 }
+function interruptionResumeIntent(text){
+  const s=String(text||'')
+    .toLocaleLowerCase('tr-TR')
+    .replace(/[!?.,;:]+/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+  if(!s)return false;
+  return /^(?:jarvis\s+)?(?:devam|devam et|kaldığın yerden devam et|kaldigin yerden devam et|sözünü tamamla|sozunu tamamla|anlatmaya devam et|söylemeye devam et|soylemeye devam et|nerede kalmıştın|nerede kalmistin)$/i.test(s);
+}
+function freshInterruptedConversationState(maxAgeMs=120000){
+  const x=interruptedConversationState;
+  if(!x)return null;
+  const age=Date.now()-Number(x.at||0);
+  if(age<0||age>maxAgeMs){
+    interruptedConversationState=null;
+    return null;
+  }
+  return{...x,ageMs:age};
+}
+function setInterruptedConversationState(next){
+  if(!next)return null;
+  const clean={...next,at:Number(next.at||Date.now())};
+  const current=freshInterruptedConversationState(5000);
+  if(current&&current.kind==='stream'&&clean.kind==='tts')return current;
+  interruptedConversationState=clean;
+  remember({
+    kind:'conversation_interrupted',
+    source:clean.kind,
+    partialChars:String(clean.partialText||'').length,
+    remainingChars:String(clean.remainingText||'').length
+  });
+  return clean;
+}
+function clearInterruptedConversationState(reason='cleared'){
+  if(interruptedConversationState){
+    remember({kind:'conversation_interrupt_cleared',reason:String(reason||'cleared').slice(0,80),source:interruptedConversationState.kind});
+  }
+  interruptedConversationState=null;
+}
+function interruptionResumeState(text){
+  const x=freshInterruptedConversationState();
+  if(!x||!interruptionResumeIntent(text))return null;
+  return x;
+}
+function deterministicInterruptedSpeechResume(text){
+  const x=interruptionResumeState(text);
+  if(!x||x.kind!=='tts'||!String(x.remainingText||'').trim())return null;
+  const reply=String(x.remainingText||'').replace(/\s+/g,' ').trim();
+  if(!reply)return null;
+  interruptedConversationState=null;
+  return{
+    handled:true,
+    type:'chat',
+    reply,
+    command:null,
+    commands:[],
+    tone:String(x.tone||'balanced'),
+    model:'local-interruption-resume',
+    resumed:true,
+    resumeSource:'tts',
+    resumeAgeMs:Number(x.ageMs||0)
+  };
+}
+function interruptedStreamResumeContext(text){
+  const x=interruptionResumeState(text);
+  if(!x||x.kind!=='stream'||!String(x.partialText||'').trim())return'';
+  return[
+    'KESİLEN KONUŞMA DEVAMI:',
+    'Kullanıcı önceki JARVIS cevabını konuşurken kesti ve şimdi devam etmenizi istiyor.',
+    'Baştan başlama, gereksiz özür dileme ve söylenmiş kısmı tekrar etme.',
+    'Önceki kullanıcı mesajı: '+String(x.userText||'').slice(0,700),
+    'Kullanıcının duyduğu/üretilmiş son kısım: '+String(x.partialText||'').slice(-1200),
+    'Şimdi kaldığın noktadan doğal biçimde devam et.'
+  ].join(' ');
+}
+function clearInterruptedStateForNewTurn(text){
+  const x=freshInterruptedConversationState();
+  if(!x)return;
+  if(interruptionResumeIntent(text))return;
+  clearInterruptedConversationState('new-user-turn');
+}
 function stopJarvisSpeech(reason='user'){
+  let resumeState=null;
+  if(ttsSpeaking&&activeSpeechGeneration===ttsGeneration&&activeSpeechChunks.length){
+    const start=Math.max(0,Math.min(activeSpeechChunks.length-1,Number(ttsCurrentChunk||1)-1));
+    const remaining=activeSpeechChunks.slice(start).join(' ').replace(/\s+/g,' ').trim();
+    if(activeSpeechText.length>=55&&remaining.length>=20){
+      resumeState=setInterruptedConversationState({
+        kind:'tts',
+        at:Date.now(),
+        originalText:activeSpeechText,
+        remainingText:remaining,
+        tone:activeSpeechTone,
+        currentChunk:Number(ttsCurrentChunk||1),
+        totalChunks:activeSpeechChunks.length
+      });
+    }
+  }
   ttsGeneration++;
   lastQueuedSpeech='';
   lastQueuedSpeechAt=0;
@@ -143,10 +245,19 @@ function stopJarvisSpeech(reason='user'){
   }
   ttsSpeaking=false;
   ttsCurrentChunk=0;
+  activeSpeechText='';
+  activeSpeechTone='balanced';
+  activeSpeechChunks=[];
+  activeSpeechGeneration=0;
   ttsLastEndedAt=Date.now();
   setTtsLock(false);
-  remember({kind:'tts_interrupt',reason:String(reason||'user').slice(0,80),generation:ttsGeneration});
-  return{ok:true,stopped:true,generation:ttsGeneration,reason:String(reason||'user')};
+  remember({kind:'tts_interrupt',reason:String(reason||'user').slice(0,80),generation:ttsGeneration,resumeAvailable:!!resumeState});
+  return{
+    ok:true,stopped:true,generation:ttsGeneration,reason:String(reason||'user'),
+    resumeAvailable:!!resumeState,
+    resumeKind:resumeState&&resumeState.kind||null,
+    remainingChars:resumeState?String(resumeState.remainingText||'').length:0
+  };
 }
 async function playTtsMp3Cancelable(mp3,generation){
   if(generation!==ttsGeneration)return false;
@@ -558,6 +669,10 @@ async function speakJarvisNow(text,tone='balanced',generation=ttsGeneration){
   ttsLastStartedAt=Date.now();
   ttsLastChunkCount=chunks.length;
   ttsCurrentChunk=0;
+  activeSpeechText=clean;
+  activeSpeechTone=String(tone||'balanced');
+  activeSpeechChunks=chunks.slice();
+  activeSpeechGeneration=generation;
   setTtsLock(true);
 
   let current=null;
@@ -596,6 +711,10 @@ async function speakJarvisNow(text,tone='balanced',generation=ttsGeneration){
       await new Promise(r=>setTimeout(r,160));
       ttsSpeaking=false;
       ttsCurrentChunk=0;
+      activeSpeechText='';
+      activeSpeechTone='balanced';
+      activeSpeechChunks=[];
+      activeSpeechGeneration=0;
       ttsLastEndedAt=Date.now();
       setTtsLock(false);
     }
@@ -1684,6 +1803,15 @@ async function callLocalBrain(message){
 
   const text=applySpeechLexicon(originalText);
 
+  const interruptedSpeechResume=deterministicInterruptedSpeechResume(text);
+  if(interruptedSpeechResume){
+    appendLocalBrainHistory('user',text);
+    appendLocalBrainHistory('assistant',interruptedSpeechResume.reply);
+    return{ok:true,...interruptedSpeechResume,memoryHits:0,personaVersion:brainPersona().version};
+  }
+  const interruptionContext=interruptedStreamResumeContext(text);
+  if(!interruptionContext)clearInterruptedStateForNewTurn(text);
+
   const dialogueFeedbackDirective=applyDialogueFeedback(text);
   if(dialogueFeedbackDirective.handled){
     appendLocalBrainHistory('user',text);
@@ -1755,6 +1883,7 @@ async function callLocalBrain(message){
     'Bu tur konuşma modu: '+turnStyle.mode+'. '+turnStyle.instruction,
     socialPolicyPrompt(socialPolicy),
     conversationCadencePrompt(cadence),
+    interruptionContext||'Bu turda devam ettirilecek kesilmiş bir JARVIS cevabı yok.',
     repairContext||'Bu tur için özel bir konuşma onarım talebi yok.',
     'tone alanı seslendirme duygusudur. balanced/casual/playful/warm/focused/work/serious/excited/gentle seçeneklerinden cevabın anlamına en uygun olanı seç.',
     'İlgili yerel hafıza:\n'+memoryText,
@@ -1982,6 +2111,7 @@ async function callLocalBrain(message){
 
     appendLocalBrainHistory('user',text);
     if(type==='chat')appendLocalBrainHistory('assistant',reply);
+    if(interruptionContext)clearInterruptedConversationState('stream-resumed-by-brain');
     remember({
       kind:'local_brain_v2',
       type,command:command||null,commands,model:LOCAL_BRAIN_MODEL,
@@ -1996,7 +2126,8 @@ async function callLocalBrain(message){
       qualityEscalated,qualityEscalationReason,qualityEscalationModel,
       repairMode:!!repairContext,socialMode:socialPolicy.mode,followupAllowed:socialPolicy.followupAllowed,
       socialMomentum:socialPolicy.momentumCarried===true,momentumMode:socialPolicy.momentumMode||null,momentumStrength:Number(socialPolicy.momentumStrength||0),
-      cadenceMode:cadence.mode,targetWords:cadence.targetWords
+      cadenceMode:cadence.mode,targetWords:cadence.targetWords,
+      resumed:!!interruptionContext,resumeSource:interruptionContext?'stream':null
     };
   }catch(e){
     return{ok:false,error:String(e.message||e),model:LOCAL_BRAIN_MODEL};
@@ -2314,6 +2445,15 @@ async function runNativeAgent(message,{maxRounds=4,signal=null}={}){
 
   const text=applySpeechLexicon(originalText);
 
+  const interruptedSpeechResume=deterministicInterruptedSpeechResume(text);
+  if(interruptedSpeechResume){
+    appendLocalBrainHistory('user',text);
+    appendLocalBrainHistory('assistant',interruptedSpeechResume.reply);
+    return{ok:true,type:'chat',reply:interruptedSpeechResume.reply,tone:interruptedSpeechResume.tone||'balanced',actions:[],model:interruptedSpeechResume.model,resumed:true,resumeSource:'tts'};
+  }
+  const interruptionContext=interruptedStreamResumeContext(text);
+  if(!interruptionContext)clearInterruptedStateForNewTurn(text);
+
   const dialogueFeedbackDirective=applyDialogueFeedback(text);
   if(dialogueFeedbackDirective.handled){
     appendLocalBrainHistory('user',text);
@@ -2363,6 +2503,7 @@ async function runNativeAgent(message,{maxRounds=4,signal=null}={}){
     'Bu tur konuşma modu: '+turnStyle.mode+'. '+turnStyle.instruction,
     socialPolicyPrompt(socialPolicy),
     conversationCadencePrompt(cadence),
+    interruptionContext||'Bu turda devam ettirilecek kesilmiş bir JARVIS cevabı yok.',
     repairContext||'Bu tur için özel bir konuşma onarım talebi yok.',
     'İlgili yerel hafıza:\n'+memoryText
   ].join(' ');
@@ -2441,10 +2582,11 @@ async function runNativeAgent(message,{maxRounds=4,signal=null}={}){
       const reply=normalizeBrainReply(msg.content);
       appendLocalBrainHistory('user',text);
       appendLocalBrainHistory('assistant',reply);
+      if(interruptionContext)clearInterruptedConversationState('stream-resumed-by-agent');
       remember({kind:'native_agent_final',rounds:round+1,actions:actions.length,model:agentModel,fastModel:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-started});
       return{
         ok:true,type:'chat',reply,tone:turnStyle.mode,model:agentModel,fastModel:LOCAL_BRAIN_MODEL,
-        actions,rounds:round+1,nativeTools:true,reasoning:deepRequested?'deep':'fast',repairMode:!!repairContext,socialMode:socialPolicy.mode,followupAllowed:socialPolicy.followupAllowed,latencyMs:Date.now()-started
+        actions,rounds:round+1,nativeTools:true,reasoning:deepRequested?'deep':'fast',repairMode:!!repairContext,socialMode:socialPolicy.mode,followupAllowed:socialPolicy.followupAllowed,resumed:!!interruptionContext,resumeSource:interruptionContext?'stream':null,latencyMs:Date.now()-started
       };
     }
 
@@ -2640,6 +2782,7 @@ function streamingConversationSystem(text,recent=[]){
 async function streamLocalConversationHttp(message,res){
   const original=String(message||'').replace(/\s+/g,' ').trim().slice(0,700);
   const text=applySpeechLexicon(original);
+  clearInterruptedStateForNewTurn(text);
   if(!isStreamableConversation(text)){
     const e=new Error('NOT_STREAMABLE');e.code='NOT_STREAMABLE';throw e;
   }
@@ -2760,12 +2903,29 @@ async function streamLocalConversationHttp(message,res){
       repairMode:cfg.repairMode===true,
       socialMode:cfg.socialMode,
       followupAllowed:cfg.followupAllowed===true,
+      socialMomentum:cfg.socialMomentum===true,
+      momentumMode:cfg.momentumMode||null,
+      momentumStrength:Number(cfg.momentumStrength||0),
+      cadenceMode:cfg.cadenceMode,
+      targetWords:cfg.targetWords,
       firstDeltaMs:firstDeltaAt?firstDeltaAt-started:null,
       latencyMs:Date.now()-started
     });
     if(!res.writableEnded)res.end();
   }catch(e){
-    write({type:'error',ok:false,error:String(e.message||e).slice(0,220)});
+    const partial=String(full||'').replace(/\s+/g,' ').trim();
+    if((ctl.signal.aborted||res.destroyed||e&&e.name==='AbortError')&&partial.length>=18){
+      setInterruptedConversationState({
+        kind:'stream',
+        at:Date.now(),
+        userText:text,
+        partialText:partial,
+        tone:cfg.tone,
+        socialMode:cfg.socialMode,
+        cadenceMode:cfg.cadenceMode
+      });
+    }
+    write({type:'error',ok:false,error:String(e.message||e).slice(0,220),resumeAvailable:!!freshInterruptedConversationState()});
     if(!res.writableEnded)res.end();
   }finally{
     clearTimeout(timeout);
@@ -2860,6 +3020,18 @@ function startLocalTtsBridge(){
       });
       return;
     }
+    if(req.method==='GET'&&req.url==='/interruption-state'){
+      const x=freshInterruptedConversationState();
+      res.writeHead(200,{'content-type':'application/json'});
+      return res.end(JSON.stringify({
+        ok:true,
+        available:!!x,
+        kind:x&&x.kind||null,
+        ageMs:x?Number(x.ageMs||0):null,
+        remainingChars:x?String(x.remainingText||'').length:0,
+        partialChars:x?String(x.partialText||'').length:0
+      }));
+    }
     if(req.method==='GET'&&req.url==='/health'){
       res.writeHead(200,{'content-type':'application/json'});
       return res.end(JSON.stringify({
@@ -2868,7 +3040,7 @@ function startLocalTtsBridge(){
         localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2',vision:isLocalVisionModel()},
         localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper',adaptiveLexicon:true,adaptiveDecode:true,dynamicEndpointing:true,lexiconCount:Object.keys(readSpeechLexicon().aliases||{}).length},
         adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',interruptible:true,offlineFallback:'windows-sapi',chunkedPipeline:true,prefetch:true,safeCache:true,backchannelPrewarm:true,backchannelState:ttsBackchannelPrewarmState,wakeAckPrewarm:true,wakeAckVariants:JARVIS_WAKE_ACK_PHRASES.length,dynamicChunkProsody:true,naturalPauseTiming:true,adaptiveVoicePreferences:true,voicePreferences:readVoicePreferences(),speakerEchoRejection:true,profiles:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']},
-        brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,toolReflection:true,multimodal:isLocalVisionModel(),screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,streamingChat:true,sentenceStreamTts:true,conversationRepair:true,adaptiveModelRouter:true,fastModel:LOCAL_BRAIN_MODEL,deepModel:LOCAL_BRAIN_DEEP_MODEL,adaptiveTurnPacing:true,fullDuplexInterrupt:true,cancellableAgent:true,socialDialogue:true,responseVariation:true,contextualFollowup:true,dialogueFeedbackLearning:true,socialPreferenceAdaptation:true,socialMomentum:true,ellipticalTurnResolution:true,conversationCadence:true,brevityMirroring:true,adaptiveResponseLength:true,autoQualityEscalation:true,weakResponseEscalation:true,repairQualityEscalation:true},
+        brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,toolReflection:true,multimodal:isLocalVisionModel(),screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,streamingChat:true,sentenceStreamTts:true,conversationRepair:true,adaptiveModelRouter:true,fastModel:LOCAL_BRAIN_MODEL,deepModel:LOCAL_BRAIN_DEEP_MODEL,adaptiveTurnPacing:true,fullDuplexInterrupt:true,cancellableAgent:true,socialDialogue:true,responseVariation:true,contextualFollowup:true,dialogueFeedbackLearning:true,socialPreferenceAdaptation:true,socialMomentum:true,ellipticalTurnResolution:true,conversationCadence:true,brevityMirroring:true,adaptiveResponseLength:true,interruptionContinuity:true,spokenResume:true,partialStreamResume:true,autoQualityEscalation:true,weakResponseEscalation:true,repairQualityEscalation:true},
         mobileRelay:{brain:true,tts:true,pollMs:650}
       }));
     }
@@ -2884,6 +3056,8 @@ function startLocalTtsBridge(){
         generation:ttsGeneration,
         chunks:ttsLastChunkCount,
         currentChunk:ttsCurrentChunk,
+        resumeAvailable:!!freshInterruptedConversationState(),
+        resumeKind:(freshInterruptedConversationState()||{}).kind||null,
         interruptible:true,
         chunkedPipeline:true
       }));
@@ -2907,7 +3081,7 @@ function startLocalTtsBridge(){
     if(req.method==='GET'&&req.url==='/brain-status'){
       localBrainStatus().then(status=>{
         res.writeHead(200,{'content-type':'application/json'});
-        res.end(JSON.stringify({ok:true,...status,warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,conversationRepair:true,adaptiveModelRouter:true,fastModel:LOCAL_BRAIN_MODEL,deepModel:LOCAL_BRAIN_DEEP_MODEL,adaptiveTurnPacing:true,fullDuplexInterrupt:true,cancellableAgent:true,socialDialogue:true,responseVariation:true,contextualFollowup:true,dialogueFeedbackLearning:true,socialPreferenceAdaptation:true,autoQualityEscalation:true,weakResponseEscalation:true,repairQualityEscalation:true,dialogueFeedback:readDialogueFeedback(),persona:brainPersona(),memoryFacts:readBrainFacts().length,memoryEpisodes:readBrainEpisodes().length}));
+        res.end(JSON.stringify({ok:true,...status,warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,conversationRepair:true,adaptiveModelRouter:true,fastModel:LOCAL_BRAIN_MODEL,deepModel:LOCAL_BRAIN_DEEP_MODEL,adaptiveTurnPacing:true,fullDuplexInterrupt:true,cancellableAgent:true,socialDialogue:true,responseVariation:true,contextualFollowup:true,dialogueFeedbackLearning:true,socialPreferenceAdaptation:true,socialMomentum:true,ellipticalTurnResolution:true,conversationCadence:true,brevityMirroring:true,adaptiveResponseLength:true,interruptionContinuity:true,spokenResume:true,partialStreamResume:true,autoQualityEscalation:true,weakResponseEscalation:true,repairQualityEscalation:true,dialogueFeedback:readDialogueFeedback(),persona:brainPersona(),memoryFacts:readBrainFacts().length,memoryEpisodes:readBrainEpisodes().length}));
       }).catch(e=>{
         res.writeHead(503,{'content-type':'application/json'});
         res.end(JSON.stringify({ok:false,error:String(e.message||e)}));

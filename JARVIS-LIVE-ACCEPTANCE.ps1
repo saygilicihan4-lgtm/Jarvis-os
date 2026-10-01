@@ -77,6 +77,8 @@ try {
   Add-Result "Social momentum runtime" $momentumRuntimeOk ("momentum="+$h.brainRuntime.socialMomentum+" elliptical="+$h.brainRuntime.ellipticalTurnResolution)
   $cadenceRuntimeOk=($h.brainRuntime.conversationCadence -eq $true -and $h.brainRuntime.brevityMirroring -eq $true -and $h.brainRuntime.adaptiveResponseLength -eq $true)
   Add-Result "Conversation cadence runtime" $cadenceRuntimeOk ("cadence="+$h.brainRuntime.conversationCadence+" brevity="+$h.brainRuntime.brevityMirroring+" adaptiveLength="+$h.brainRuntime.adaptiveResponseLength)
+  $interruptRuntimeOk=($h.brainRuntime.interruptionContinuity -eq $true -and $h.brainRuntime.spokenResume -eq $true -and $h.brainRuntime.partialStreamResume -eq $true)
+  Add-Result "Interruption continuity runtime" $interruptRuntimeOk ("continuity="+$h.brainRuntime.interruptionContinuity+" spoken="+$h.brainRuntime.spokenResume+" stream="+$h.brainRuntime.partialStreamResume)
   $duplexOk=(@($h.capabilities) -contains "full_duplex_interrupt_v1" -and @($h.capabilities) -contains "cancellable_agent_v1" -and $h.brainRuntime.fullDuplexInterrupt -eq $true -and $h.brainRuntime.cancellableAgent -eq $true)
   Add-Result "Full duplex reasoning cancellation" $duplexOk ("interrupt="+$h.brainRuntime.fullDuplexInterrupt+" cancellableAgent="+$h.brainRuntime.cancellableAgent)
 } catch {
@@ -98,6 +100,14 @@ try {
   Add-Result "Dynamic sentence prosody behavior" $prosodyOk ("chunks="+$chunks.Count+" qPitch="+$chunks[1].profile.pitch+" basePitch="+$chunks[0].profile.pitch)
 } catch {
   Add-Result "Dynamic sentence prosody behavior" $false $_.Exception.Message
+}
+
+try {
+  $is=Invoke-Json "http://127.0.0.1:8765/interruption-state" "GET" $null 5
+  $isOk=($is.ok -eq $true -and $null -ne $is.available -and [int]$is.remainingChars -ge 0 -and [int]$is.partialChars -ge 0)
+  Add-Result "Interruption state endpoint" $isOk ("available="+$is.available+" kind="+$is.kind+" remaining="+$is.remainingChars+" partial="+$is.partialChars)
+} catch {
+  Add-Result "Interruption state endpoint" $false $_.Exception.Message
 }
 
 try {
@@ -446,6 +456,8 @@ $criticalFailed=($results | Where-Object {
     "Dialogue feedback learning",
     "Social momentum runtime",
     "Conversation cadence runtime",
+    "Interruption continuity runtime",
+    "Interruption state endpoint",
     "Dialogue feedback state",
     "Full duplex reasoning cancellation",
     "Local brain ready",
