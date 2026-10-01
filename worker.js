@@ -571,6 +571,10 @@ function inferBrainTurnStyle(text,persona){
   if(mode==='balanced')temperature=Math.max(0.48,Math.min(0.82,0.56+humor*0.18));
   return{mode,temperature,instruction};
 }
+function shouldDeepReflect(text){
+  const s=String(text||'').toLocaleLowerCase('tr-TR');
+  return /\b(?:kapsamlı|kapsamli|derin düşün|derin dusun|detaylı düşün|detayli dusun|analiz et|karşılaştır|karsilastir|artıları ve eksileri|artilari ve eksileri|strateji|nedenlerini incele|mantığını incele|mantigini incele)\b/.test(s);
+}
 function brainResponseLooksWeak(reply,previous=[]){
   const s=String(reply||'').trim();
   if(s.length<2||s.length>900)return true;
@@ -814,8 +818,10 @@ async function callLocalBrain(message){
   // "az önce", "onu", "ikincisi" even after several tool/command turns.
   const recent=recentBrainHistory(12);
   const memory=relevantBrainMemory(text,6);
+  const workspaceCtx=workspaceBrainContext(text,3);
   const persona=adjustedPersona||brainPersona();
   const turnStyle=inferBrainTurnStyle(text,persona);
+  const deepRequested=shouldDeepReflect(text);
   const memoryText=memory.length
     ? memory.map(x=>'- '+(x.role==='memory'?'Hatırlanan tercih':x.role==='episode'?'Eski sohbet özeti':'Önceki konuşma')+': '+x.text).join('\n')
     : '- İlgili eski kayıt yok.';
@@ -845,6 +851,9 @@ async function callLocalBrain(message){
     'Bu tur konuşma modu: '+turnStyle.mode+'. '+turnStyle.instruction,
     'tone alanı seslendirme duygusudur. balanced/casual/playful/warm/focused/work/serious/excited/gentle seçeneklerinden cevabın anlamına en uygun olanı seç.',
     'İlgili yerel hafıza:\n'+memoryText,
+    workspaceCtx.context
+      ?('Yerel çalışma alanından ilgili bağlam aşağıdadır. Yalnızca gerçekten ilgili olduğunda kullan; kaynakta olmayan bilgiyi uydurma.\n'+workspaceCtx.context)
+      :'Yerel çalışma alanından bu istek için ek bağlam yok.',
     'SADECE verilen JSON şemasına uygun cevap üret.'
   ].join(' ');
 
@@ -933,14 +942,72 @@ async function callLocalBrain(message){
       }
     }
 
+    if(type==='chat'&&deepRequested){
+      const deepSchema={
+        type:'object',
+        properties:{
+          reply:{type:'string'},
+          tone:{type:'string',enum:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']}
+        },
+        required:['reply','tone'],
+        additionalProperties:false
+      };
+      const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),45000);
+      const deepStarted=Date.now();
+      try{
+        const r=await fetch(LOCAL_BRAIN_URL+'/api/chat',{
+          method:'POST',
+          headers:{'content-type':'application/json'},
+          body:JSON.stringify({
+            model:LOCAL_BRAIN_MODEL,
+            stream:false,
+            think:false,
+            format:deepSchema,
+            keep_alive:LOCAL_BRAIN_KEEP_ALIVE,
+            options:{temperature:0.34,top_p:0.88,repeat_penalty:1.10,num_ctx:4096,num_predict:Math.max(220,Math.round(180+Number(persona.verbosity||0.42)*260))},
+            messages:[
+              {role:'system',content:[
+                'Sen JARVIS yanıt kalite denetleyicisisin.',
+                'Aşağıdaki taslak cevabı kullanıcının isteğine göre bir kez iyileştir.',
+                'Mantıksal tutarlılığı artır, gereksiz tekrarları çıkar, doğrudan sonuca git.',
+                'Yerel kaynak bağlamı verilmişse ona sadık kal. Kaynakta veya konuşmada olmayan somut bilgi uydurma.',
+                'Gizli düşünme sürecini anlatma; yalnızca geliştirilmiş nihai cevabı döndür.',
+                'SADECE JSON şemasına uy.'
+              ].join(' ')},
+              {role:'user',content:'İSTEK: '+text+'\nTASLAK: '+reply+'\nYEREL BAĞLAM:\n'+(workspaceCtx.context||'(yok)')}
+            ]
+          }),
+          signal:ctl.signal
+        });
+        clearTimeout(timer);
+        const j=await r.json().catch(()=>({}));
+        if(r.ok){
+          const refined=extractLocalBrainJson(j&&j.message&&j.message.content);
+          if(refined&&refined.reply){
+            reply=normalizeBrainReply(refined.reply);
+            if(allowedTones.has(String(refined.tone||'')))tone=String(refined.tone);
+            remember({kind:'deep_reflection',model:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-deepStarted,workspaceSources:workspaceCtx.sources});
+          }
+        }
+      }catch(e){
+        clearTimeout(timer);
+        remember({kind:'deep_reflection_error',error:String(e.message||e).slice(0,180)});
+      }
+    }
+
     appendLocalBrainHistory('user',text);
     if(type==='chat')appendLocalBrainHistory('assistant',reply);
     remember({
       kind:'local_brain_v2',
       type,command:command||null,commands,model:LOCAL_BRAIN_MODEL,
-      memoryHits:memory.length,mode:turnStyle.mode,contextRecall:isContextRecallQuery(text)
+      memoryHits:memory.length,mode:turnStyle.mode,contextRecall:isContextRecallQuery(text),
+      workspaceSources:workspaceCtx.sources,deepReflected:deepRequested&&type==='chat'
     });
-    return{ok:true,type,reply,command,commands,model:LOCAL_BRAIN_MODEL,memoryHits:memory.length,personaVersion:persona.version,tone};
+    return{
+      ok:true,type,reply,command,commands,model:LOCAL_BRAIN_MODEL,
+      memoryHits:memory.length,personaVersion:persona.version,tone,
+      workspaceSources:workspaceCtx.sources,deepReflected:deepRequested&&type==='chat'
+    };
   }catch(e){
     return{ok:false,error:String(e.message||e),model:LOCAL_BRAIN_MODEL};
   }
