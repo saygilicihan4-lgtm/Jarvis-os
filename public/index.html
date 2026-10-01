@@ -141,6 +141,10 @@ localStorage.removeItem('jarvis_token');
 let recognition=null;
 let listening=false;
 let privacyMode=false;
+let desktopWakeWordEnabled=!/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+let wakeWordConversationUntil=0;
+let wakeWordMutedUntil=0;
+let wakeWordRestartTimer=null;
 let clapStream=null,clapCtx=null,clapRAF=null,lastClap=0,clapArmed=false,clapCooldown=0;
 let cameraStream=null;
 let capturedFrameUrl='';
@@ -260,6 +264,41 @@ setInterval(checkLocalReminders,30000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkLocalReminders()});
 
 const LANGUAGE_NAMES={tr:'Türkçe',en:'English',de:'Deutsch',fr:'Français',es:'Español',it:'Italiano',pt:'Português',ru:'Русский',ar:'العربية',ja:'日本語',ko:'한국어',zh:'中文',nl:'Nederlands',pl:'Polski'};
+function jarvisWakePhrase(text){
+  const s=String(text||'')
+    .toLocaleLowerCase('tr-TR')
+    .replace(/[.,!?;:]+/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+  return /^(?:hey\s+)?jarvis(?:\s+(?:beni\s+dinle|uyan|burada\s+mısın|orada\s+mısın))?$/.test(s);
+}
+function scheduleDesktopWakeWord(delay=700){
+  if(!desktopWakeWordEnabled||!recognition||privacyMode||document.hidden)return;
+  clearTimeout(wakeWordRestartTimer);
+  const wait=Math.max(delay,wakeWordMutedUntil>Date.now()?wakeWordMutedUntil-Date.now():0);
+  wakeWordRestartTimer=setTimeout(()=>{
+    if(!desktopWakeWordEnabled||!recognition||privacyMode||listening||document.hidden)return;
+    try{
+      recognition.lang='tr-TR';
+      recognition.start();
+      if(window.voiceState)voiceState.textContent='VOICE: JARVIS WAKE WORD ARMED';
+    }catch(_){}
+  },wait);
+}
+function answerJarvisWakeWord(){
+  wakeWordMutedUntil=Date.now()+4200;
+  wakeWordConversationUntil=Date.now()+12000;
+  try{if(recognition&&listening)recognition.stop()}catch(_){}
+  if(window.voiceState)voiceState.textContent='VOICE: JARVIS WAKE DETECTED';
+  if(window.coreSubtitle)coreSubtitle.textContent='JARVIS seslenişi algılandı';
+  speak('Buradayım Cihan Bey.');
+  if(desktopWakeWordEnabled){
+    setTimeout(()=>{
+      wakeWordMutedUntil=Date.now()+250;
+      scheduleDesktopWakeWord(0);
+    },3200);
+  }
+}
 const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
 if(SpeechRecognition){
   recognition=new SpeechRecognition();
@@ -267,8 +306,17 @@ if(SpeechRecognition){
   recognition.interimResults=true;
   recognition.continuous=false;
   recognition.onstart=()=>setVoiceMode(true);
-  recognition.onend=()=>setVoiceMode(false);
-  recognition.onerror=e=>{setVoiceMode(false);voiceState.textContent='VOICE: '+String(e.error||'ERROR').toUpperCase()};
+  recognition.onend=()=>{
+    setVoiceMode(false);
+    if(desktopWakeWordEnabled)scheduleDesktopWakeWord(700);
+  };
+  recognition.onerror=e=>{
+    setVoiceMode(false);
+    const err=String(e.error||'ERROR');
+    if(/not-allowed|service-not-allowed/i.test(err))desktopWakeWordEnabled=false;
+    voiceState.textContent='VOICE: '+err.toUpperCase();
+    if(desktopWakeWordEnabled)scheduleDesktopWakeWord(1200);
+  };
   recognition.onresult=e=>{
     let text='';
     for(let i=e.resultIndex;i<e.results.length;i++)text+=e.results[i][0].transcript;
@@ -278,9 +326,24 @@ if(SpeechRecognition){
         enterPrivacyMode();return;
       }
       if(privacyMode)return;
+
+      if(jarvisWakePhrase(captured)){
+        answerJarvisWakeWord();
+        return;
+      }
+
+      // Desktop stays in low-attention wake-word mode until "Jarvis" is heard.
+      // This prevents nearby conversation from becoming a command.
+      if(desktopWakeWordEnabled&&Date.now()>wakeWordConversationUntil){
+        voiceState.textContent='VOICE: JARVIS WAKE WORD ARMED';
+        return;
+      }
+
       activeLanguage=detectLanguage(captured);
       recognition.lang=activeLanguage;
       cmd.value=captured;
+      wakeWordConversationUntil=0;
+      wakeWordMutedUntil=Date.now()+12000;
       voiceState.textContent='VOICE: '+(LANGUAGE_NAMES[activeLanguage.split('-')[0]]||activeLanguage)+' · COMMAND CAPTURED';
       setTimeout(()=>send(),180);
     }
@@ -1064,6 +1127,7 @@ async function load(){
   tasks.innerHTML=(d.tasks||[]).slice().reverse().map(taskCard).join('')||'<div class="task"><small>No active missions.</small></div>';
   audit.innerHTML=(d.audit||[]).slice(-18).reverse().map(x=>'<div class="log"><small>'+esc(x.at)+' · '+esc(x.type)+'</small><br>'+esc(x.message)+'</div>').join('')||'<div class="log"><small>No system events.</small></div>';
   setAuthenticated(true);
+  if(desktopWakeWordEnabled)scheduleDesktopWakeWord(900);
   if(/Windows/i.test(navigator.userAgent)){
     clapState.textContent=' · DOUBLE CLAP: LOCAL WORKER';
   }else if(isMobileJarvis()){
