@@ -27,8 +27,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.35.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1'];
+const WORKER_VERSION='2.36.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1'];
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -612,6 +612,87 @@ function createBundle(name,description){
     throw e;
   }
 }
+function startDetached(exe,args=[]){
+  const p=childProcess.spawn(exe,args,{detached:true,windowsHide:false,stdio:'ignore'});
+  p.unref();
+}
+function openDefaultUrl(url){
+  childProcess.spawn('cmd.exe',['/c','start','','"'+url+'"'],{detached:true,windowsHide:true,stdio:'ignore'}).unref();
+}
+function firstExisting(paths){
+  for(const p of paths)try{if(p&&fs.existsSync(p))return p}catch(_){}
+  return null;
+}
+function openKnownDesktopTarget(raw){
+  if(process.platform!=='win32')return{ok:false,message:'Masaüstü açma komutları şu anda Windows için etkin'};
+  const key=String(raw||'').toLocaleLowerCase('tr-TR').trim()
+    .replace(/\s+/g,' ')
+    .replace(/^(?:uygulama|program|site)\s+/,'')
+    .replace(/\s+(?:uygulamasını|uygulamasini|programını|programini|sitesini)$/,'')
+    .trim();
+
+  const urls={
+    'youtube':'https://www.youtube.com/',
+    'google':'https://www.google.com/',
+    'github':'https://github.com/',
+    'chatgpt':'https://chatgpt.com/'
+  };
+  if(urls[key]){openDefaultUrl(urls[key]);return{ok:true,message:key+' açıldı'}}
+
+  if(['tarayıcı','tarayici','browser','internet'].includes(key)){
+    openDefaultUrl('https://www.google.com/');
+    return{ok:true,message:'Varsayılan tarayıcı açıldı'};
+  }
+  if(['çalışma alanı','calisma alani','workspace','jarvis workspace'].includes(key)){
+    startDetached('explorer.exe',[WORKSPACE]);
+    return{ok:true,message:'JARVIS çalışma alanı açıldı'};
+  }
+
+  const builtins={
+    'not defteri':['notepad.exe',[]],
+    'notepad':['notepad.exe',[]],
+    'hesap makinesi':['calc.exe',[]],
+    'calculator':['calc.exe',[]],
+    'dosya gezgini':['explorer.exe',[]],
+    'gezgin':['explorer.exe',[]],
+    'görev yöneticisi':['taskmgr.exe',[]],
+    'gorev yoneticisi':['taskmgr.exe',[]],
+    'paint':['mspaint.exe',[]],
+    'powershell':['powershell.exe',[]],
+    'terminal':['powershell.exe',[]]
+  };
+  if(builtins[key]){
+    startDetached(builtins[key][0],builtins[key][1]);
+    return{ok:true,message:key+' açıldı'};
+  }
+
+  const home=os.homedir();
+  const browserCandidates={
+    'opera gx':[
+      path.join(home,'AppData','Local','Programs','Opera GX','launcher.exe'),
+      path.join(home,'AppData','Local','Programs','Opera GX','opera.exe'),
+      'C:\\Program Files\\Opera GX\\launcher.exe',
+      'C:\\Program Files\\Opera GX\\opera.exe'
+    ],
+    'chrome':[
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      path.join(home,'AppData','Local','Google','Chrome','Application','chrome.exe')
+    ],
+    'edge':[
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'
+    ]
+  };
+  if(browserCandidates[key]){
+    const exe=firstExisting(browserCandidates[key]);
+    if(!exe)return{ok:false,message:key+' bilgisayarda bulunamadı'};
+    startDetached(exe,[]);
+    return{ok:true,message:key+' açıldı'};
+  }
+
+  return{ok:false,message:'Bu uygulama güvenli açma listesinde yok: '+raw};
+}
 async function execute(task){
   if(task.plan)return runPlan(task);
   const c=String(task.command||'').trim().replace(/^(pc|bilgisayar)\s*:\s*/i,'');
@@ -676,6 +757,20 @@ async function execute(task){
     for(const [name,arr] of Object.entries(nets))for(const x of (arr||[]))if(!x.internal&&x.family==='IPv4')active.push(name+' '+x.address);
     return{ok:true,message:'Ağ arayüzleri: '+(active.join(' · ')||'aktif IPv4 arayüzü bulunamadı')};
   }
+  const openTarget=c.match(/^(?:aç|ac|open|uygulama aç|uygulama ac|program aç|program ac|site aç|site ac)\s+(.+)$/i)
+    || c.match(/^(.+?)\s+(?:aç|ac)$/i);
+  if(openTarget){
+    const r=openKnownDesktopTarget(openTarget[1]);
+    return{ok:!!r.ok,retryable:false,message:r.message};
+  }
+
+  const creatorVoice=c.match(/^(?:creator sesi oluştur|creator sesi olustur|video sesi oluştur|video sesi olustur|shorts sesi oluştur|shorts sesi olustur)(?:\s+([^:]+))?\s*:\s*([\s\S]+)$/i);
+  if(creatorVoice){
+    const requestedName=(creatorVoice[1]||('creator-'+Date.now())).trim();
+    const out=await renderCreatorVoiceFile(creatorVoice[2],requestedName);
+    return{ok:true,message:'Creator anlatım sesi hazır: '+out+' · profil CINEMATIC_CREATOR · Emel'};
+  }
+
   if(/^(dosyaları listele|dosya listesi|list files)/i.test(c)){
     return{ok:true,message:'Workspace: '+(listFiles().join(', ')||'(boş)')};
   }
