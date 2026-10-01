@@ -82,3 +82,5 @@ if(!html.includes('VOICE: INTERRUPT READY'))throw new Error('Thinking-phase inte
 if(!html.includes('looksLikeLocalVoicePreference(text)'))throw new Error('Adaptive voice preference routing missing from stream guard');
 if(!html.includes('adaptiveVoicePreferences'))throw new Error('Adaptive voice preference health state is not surfaced in UI');
 if(!html.includes(' · LEARNED '))throw new Error('Learned voice profile is not visible in local voice status');
+
+if(!html.includes("SOCIAL '+String(evt.socialMode"))throw new Error('Streaming social-mode diagnostics missing');
