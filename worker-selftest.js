@@ -171,7 +171,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.65.0','worker version');
+    assert(hj.version==='2.66.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localStt&&hj.localStt.adaptiveDecode===true,'adaptive STT decode health');
     assert(hj.localStt&&hj.localStt.dynamicEndpointing===true,'dynamic STT endpointing health');
@@ -202,6 +202,8 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.brainRuntime.screenVision===false,'CI must not claim Windows screen capture');
     assert(hj.adaptiveTts&&hj.adaptiveTts.interruptible===true,'interruptible TTS health');
     assert(hj.adaptiveTts.adaptiveVoicePreferences===true,'adaptive voice preference health');
+    assert(hj.adaptiveTts.speakerEchoRejection===true,'speaker echo rejection health');
+    assert(hj.capabilities.includes('speaker_echo_rejection_v1'),'speaker echo rejection capability');
     assert(hj.adaptiveTts.voicePreferences&&Number(hj.adaptiveTts.voicePreferences.rateOffset)===0,'default voice preference health');
     assert(hj.adaptiveTts.chunkedPipeline===true,'chunked TTS pipeline health');
     assert(hj.adaptiveTts.prefetch===true,'TTS prefetch health');
