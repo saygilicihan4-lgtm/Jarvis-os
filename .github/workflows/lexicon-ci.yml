@@ -1,0 +1,31 @@
+name: Jarvis Adaptive Speech CI
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ jarvis-adaptive-lexicon-v18 ]
+
+jobs:
+  adaptive-speech:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Syntax
+        run: |
+          node --check worker.js
+          node --check lexicon-worker-selftest.js
+          node --check lexicon-ui-selftest.js
+          python -m py_compile jarvis-local-stt-v3.py
+          python -m py_compile stt-lexicon-selftest.py
+      - name: STT dynamic hotwords
+        run: python stt-lexicon-selftest.py
+      - name: Adaptive UI
+        run: node lexicon-ui-selftest.js
+      - name: Adaptive Worker integration
+        run: node lexicon-worker-selftest.js
