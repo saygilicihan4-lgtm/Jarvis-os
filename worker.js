@@ -29,6 +29,7 @@ const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
 const WORKER_VERSION='2.55.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
+CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -57,6 +58,7 @@ const LOCAL_BRAIN_HISTORY_FILE=path.join(MEMORY_DIR,'brain-history.jsonl');
 const LOCAL_BRAIN_FACTS_FILE=path.join(MEMORY_DIR,'brain-facts.jsonl');
 const LOCAL_BRAIN_EPISODES_FILE=path.join(MEMORY_DIR,'brain-episodes.jsonl');
 const LOCAL_BRAIN_PERSONA_FILE=path.join(MEMORY_DIR,'brain-persona.json');
+const SPEECH_LEXICON_FILE=path.join(MEMORY_DIR,'speech-lexicon.json');
 const TEST_MODE=process.env.JARVIS_TEST_MODE==='1';
 const FORCE_LOCAL_BRIDGE=process.env.JARVIS_LOCAL_BRIDGE_FORCE==='1';
 const LOCAL_STT_PORT=Number(process.env.JARVIS_STT_PORT||8768);
@@ -452,6 +454,120 @@ function isLocalSafeControlCommand(command){
     || /^(?:dosyalarda ara|dosyalarda arat|workspace search)\s+.+$/i.test(c)
     || /^(?:aç|ac|open|uygulama aç|uygulama ac|program aç|program ac|site aç|site ac)\s+.+$/i.test(c)
     || /^.+?\s+(?:aç|ac)$/i.test(c);
+}
+function speechLexiconKey(text){
+  return String(text||'')
+    .toLocaleLowerCase('tr-TR')
+    .replace(/[’']/g,'')
+    .replace(/[^a-z0-9çğıöşü\s.-]/gi,' ')
+    .replace(/\s+/g,' ')
+    .trim()
+    .slice(0,240);
+}
+function defaultSpeechLexicon(){
+  return{version:1,updatedAt:null,aliases:{},hotwords:[],history:[]};
+}
+function readSpeechLexicon(){
+  try{
+    if(!fs.existsSync(SPEECH_LEXICON_FILE))return defaultSpeechLexicon();
+    const x=JSON.parse(fs.readFileSync(SPEECH_LEXICON_FILE,'utf8'));
+    const aliases=x&&x.aliases&&typeof x.aliases==='object'&&!Array.isArray(x.aliases)?x.aliases:{};
+    return{
+      version:1,
+      updatedAt:x.updatedAt||null,
+      aliases,
+      hotwords:Array.isArray(x.hotwords)?x.hotwords.filter(Boolean).slice(-160):[],
+      history:Array.isArray(x.history)?x.history.slice(-120):[]
+    };
+  }catch(_){return defaultSpeechLexicon()}
+}
+function writeSpeechLexicon(data){
+  const clean={
+    version:1,
+    updatedAt:new Date().toISOString(),
+    aliases:data&&data.aliases&&typeof data.aliases==='object'?data.aliases:{},
+    hotwords:Array.isArray(data&&data.hotwords)?[...new Set(data.hotwords.map(x=>String(x||'').trim()).filter(Boolean))].slice(-160):[],
+    history:Array.isArray(data&&data.history)?data.history.slice(-120):[]
+  };
+  fs.mkdirSync(MEMORY_DIR,{recursive:true});
+  fs.writeFileSync(SPEECH_LEXICON_FILE,JSON.stringify(clean,null,2),'utf8');
+  return clean;
+}
+function learnSpeechAlias(heard,intended,source='voice-correction'){
+  const from=speechLexiconKey(heard);
+  const target=String(intended||'').replace(/\s+/g,' ').trim().slice(0,240);
+  if(!from||from.length<2||!target)return{ok:false,error:'heard and intended required'};
+  if(from===speechLexiconKey(target))return{ok:false,error:'correction is identical'};
+  const x=readSpeechLexicon();
+  x.aliases[from]=target;
+  const targetWords=target.split(/\s+/).filter(y=>y.length>=3);
+  x.hotwords=[...new Set([...(x.hotwords||[]),target,...targetWords])].slice(-160);
+  x.history=[...(x.history||[]),{
+    at:new Date().toISOString(),action:'learn',heard:from,intended:target,source:String(source||'voice-correction').slice(0,80)
+  }].slice(-120);
+  const saved=writeSpeechLexicon(x);
+  remember({kind:'speech_lexicon_learn',heard:from,intended:target,source:String(source||'voice-correction').slice(0,80)});
+  return{ok:true,heard:from,intended:target,count:Object.keys(saved.aliases).length};
+}
+function forgetSpeechAlias(heard){
+  const key=speechLexiconKey(heard);
+  const x=readSpeechLexicon();
+  if(!Object.prototype.hasOwnProperty.call(x.aliases,key))return{ok:false,error:'alias not found',heard:key};
+  const intended=x.aliases[key];
+  delete x.aliases[key];
+  x.history=[...(x.history||[]),{
+    at:new Date().toISOString(),action:'forget',heard:key,intended
+  }].slice(-120);
+  const saved=writeSpeechLexicon(x);
+  remember({kind:'speech_lexicon_forget',heard:key,intended});
+  return{ok:true,heard:key,intended,count:Object.keys(saved.aliases).length};
+}
+function applySpeechLexicon(text){
+  const raw=String(text||'').replace(/\s+/g,' ').trim();
+  const key=speechLexiconKey(raw);
+  if(!key)return raw;
+  const x=readSpeechLexicon();
+  if(x.aliases[key])return String(x.aliases[key]);
+  const entries=Object.entries(x.aliases||{}).sort((a,b)=>b[0].length-a[0].length);
+  let normalized=key;
+  for(const [from,to] of entries){
+    if(from.length<4)continue;
+    const escaped=from.replace(/[.*+?^${}()|[\]\\]/g,'\\function brainPersona(){');
+    const re=new RegExp('(^|\\s)'+escaped+'(?=\\s|$)','i');
+    if(re.test(normalized)){
+      normalized=normalized.replace(re,(m,prefix)=>prefix+String(to).toLocaleLowerCase('tr-TR'));
+      break;
+    }
+  }
+  return normalized===key?raw:normalized;
+}
+function handleSpeechLexiconDirective(text){
+  const raw=String(text||'').replace(/\s+/g,' ').trim();
+  const plain=raw.replace(/[?.!,;:]+$/g,'').trim();
+  let m=plain.match(/^(?:jarvis\s+)?(.{2,80}?)\s+(?:dediğimde|dedigimde|dersem)\s+(.{2,120}?)\s+(?:anla|olarak anla|diye anla)$/i)
+    || plain.match(/^(?:jarvis\s+)?(.{2,80}?)\s+(?:demek|demek istiyorum|demek istedim)\s+(.{2,120})$/i)
+    || plain.match(/^(?:jarvis\s+)?(.{2,80}?)\s*=\s*(.{2,120})$/i)
+    || plain.match(/^(?:jarvis\s+)?(.{2,80}?)\s+(?:ifadesini|kelimesini)?\s*(.{2,120}?)\s+(?:olarak düzelt|olarak duzelt|olarak anla)$/i);
+  if(m){
+    const learned=learnSpeechAlias(m[1],m[2],'explicit-teach');
+    return learned.ok
+      ?{handled:true,type:'chat',reply:'Tamam. "'+m[1].trim()+'" duyduğumda "'+m[2].trim()+'" olarak anlayacağım.',command:null,commands:[],tone:'warm'}
+      :{handled:true,type:'chat',reply:'Bu düzeltmeyi kaydedemedim: '+learned.error,command:null,commands:[],tone:'warm'};
+  }
+  m=plain.match(/^(?:jarvis\s+)?(.{2,100}?)\s+(?:düzeltmesini|duyma düzeltmesini)\s+unut$/i);
+  if(m){
+    const forgotten=forgetSpeechAlias(m[1]);
+    return{handled:true,type:'chat',reply:forgotten.ok?'Tamam, o ses düzeltmesini unuttum.':'Bu ifadeyle eşleşen bir ses düzeltmesi bulamadım.',command:null,commands:[],tone:'warm'};
+  }
+  if(/^(?:jarvis\s+)?(?:ses|konuşma|konusma)\s+düzeltmelerini\s+(?:göster|soyle|söyle)$/i.test(plain)){
+    const x=readSpeechLexicon();
+    const entries=Object.entries(x.aliases||{}).slice(-12);
+    const reply=entries.length
+      ?'Öğrendiğim son ses düzeltmeleri: '+entries.map(([a,b])=>'"'+a+'" → "'+b+'"').join(' · ')
+      :'Henüz öğrendiğim özel bir ses düzeltmesi yok.';
+    return{handled:true,type:'chat',reply,command:null,commands:[],tone:'focused'};
+  }
+  return{handled:false};
 }
 function brainPersona(){
   const defaults={
@@ -909,8 +1025,17 @@ function extractLocalBrainJson(text){
   return null;
 }
 async function callLocalBrain(message){
-  const text=String(message||'').replace(/\s+/g,' ').trim().slice(0,1800);
-  if(!text)return{ok:true,type:'chat',reply:'Sizi dinliyorum Cihan Bey.',command:null};
+  const originalText=String(message||'').replace(/\s+/g,' ').trim().slice(0,1800);
+  if(!originalText)return{ok:true,type:'chat',reply:'Sizi dinliyorum Cihan Bey.',command:null};
+
+  const lexiconDirective=handleSpeechLexiconDirective(originalText);
+  if(lexiconDirective.handled){
+    appendLocalBrainHistory('user',originalText);
+    appendLocalBrainHistory('assistant',lexiconDirective.reply);
+    return{ok:true,...lexiconDirective,model:'local-speech-lexicon',memoryHits:0,personaVersion:brainPersona().version};
+  }
+
+  const text=applySpeechLexicon(originalText);
 
   const memoryDirective=handleBrainMemoryDirective(text);
   if(memoryDirective.handled){
@@ -959,6 +1084,7 @@ async function callLocalBrain(message){
     'Güvenli katalog dışındaki eylemleri type=chat olarak ele al; açık ve kısa biçimde henüz bağlı olmadığını söyle.',
     'Belirsizse tek kısa soru sor. Gereksiz teyit isteme.',
     'Kullanıcının açık tercihlerini hatırla ancak hassas özellikler hakkında çıkarım yapma.',
+    'Yerel ses sözlüğü daha önce yanlış duyulan ifadeleri düzeltebilir. Düzeltilmiş kullanıcı metnini esas al; eski yanlış biçimi geri üretmeye çalışma.',
     'Kişilik ayarları: sıcaklık '+persona.warmth+', mizah '+persona.humor+', doğrudanlık '+persona.directness+', oyunbazlık '+persona.playfulness+'.',
     'Bu tur konuşma modu: '+turnStyle.mode+'. '+turnStyle.instruction,
     'tone alanı seslendirme duygusudur. balanced/casual/playful/warm/focused/work/serious/excited/gentle seçeneklerinden cevabın anlamına en uygun olanı seç.',
@@ -1419,8 +1545,17 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
   return result||{ok:false,message:'Araç sonucu alınamadı.'};
 }
 async function runNativeAgent(message,{maxRounds=4}={}){
-  const text=String(message||'').replace(/\s+/g,' ').trim().slice(0,1800);
-  if(!text)return{ok:true,type:'chat',reply:'Sizi dinliyorum Cihan Bey.',tone:'balanced',actions:[]};
+  const originalText=String(message||'').replace(/\s+/g,' ').trim().slice(0,1800);
+  if(!originalText)return{ok:true,type:'chat',reply:'Sizi dinliyorum Cihan Bey.',tone:'balanced',actions:[]};
+
+  const lexiconDirective=handleSpeechLexiconDirective(originalText);
+  if(lexiconDirective.handled){
+    appendLocalBrainHistory('user',originalText);
+    appendLocalBrainHistory('assistant',lexiconDirective.reply);
+    return{ok:true,type:'chat',reply:lexiconDirective.reply,tone:lexiconDirective.tone||'warm',actions:[],model:'local-speech-lexicon'};
+  }
+
+  const text=applySpeechLexicon(originalText);
 
   const status=await localBrainStatus();
   if(!status.ready)return{ok:false,error:'OLLAMA_OFFLINE',model:LOCAL_BRAIN_MODEL};
@@ -1439,6 +1574,7 @@ async function runNativeAgent(message,{maxRounds=4}={}){
   const system=[
     'Sen JARVIS\'sin; Cihan Bey\'in kişisel yerel yapay zeka asistanısın.',
     'Doğal Türkçe konuş; kısa soruya kısa cevap, iş sorusuna net cevap ver. Uygun olduğunda kısa espri yap ama yapmacık olma.',
+    'Native tool loop da yerel ses sözlüğünden geçirilmiş kullanıcı metnini esas alır; yanlış duyulan eski ifadeyi geri üretme.',
     'Elindeki yerel araçları yalnızca gerçekten gerektiğinde kullan. Araç kullanmadan cevap verebiliyorsan doğrudan cevap ver.',
     'Bir araç sonucuna göre başka bir araca ihtiyaç varsa sonucu gördükten sonra ikinci aracı çağır. Körlemesine peş peşe araç çağırma.',
     'Araç sonuçlarında olmayan bilgiyi uydurma. Bir eylem başarısızsa başarılı olmuş gibi konuşma.',
@@ -1663,13 +1799,43 @@ function startLocalTtsBridge(){
     res.setHeader('Access-Control-Allow-Headers','content-type');
     res.setHeader('Access-Control-Allow-Methods','GET,POST,OPTIONS');
     if(req.method==='OPTIONS'){res.writeHead(204);return res.end()}
+    if(req.method==='GET'&&req.url==='/speech-lexicon'){
+      const x=readSpeechLexicon();
+      res.writeHead(200,{'content-type':'application/json'});
+      return res.end(JSON.stringify({
+        ok:true,
+        aliases:x.aliases,
+        hotwords:x.hotwords,
+        count:Object.keys(x.aliases||{}).length,
+        updatedAt:x.updatedAt
+      }));
+    }
+    if(req.method==='POST'&&req.url==='/speech-lexicon'){
+      let body='',tooLarge=false;
+      req.on('data',chunk=>{body+=chunk;if(body.length>32768){tooLarge=true;req.destroy()}});
+      req.on('end',()=>{
+        if(tooLarge){res.writeHead(413,{'content-type':'application/json'});return res.end(JSON.stringify({ok:false,error:'too large'}))}
+        try{
+          const d=JSON.parse(body||'{}');
+          const result=d.action==='forget'
+            ?forgetSpeechAlias(d.heard)
+            :learnSpeechAlias(d.heard,d.intended,d.source||'local-ui');
+          res.writeHead(result.ok?200:422,{'content-type':'application/json'});
+          return res.end(JSON.stringify(result));
+        }catch(e){
+          res.writeHead(500,{'content-type':'application/json'});
+          return res.end(JSON.stringify({ok:false,error:String(e.message||e)}));
+        }
+      });
+      return;
+    }
     if(req.method==='GET'&&req.url==='/health'){
       res.writeHead(200,{'content-type':'application/json'});
       return res.end(JSON.stringify({
         ok:true,voice:TTS_VOICE,version:WORKER_VERSION,
         capabilities:CAPS,
         localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2',vision:isLocalVisionModel()},
-        localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper'},
+        localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper',adaptiveLexicon:true,lexiconCount:Object.keys(readSpeechLexicon().aliases||{}).length},
         adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',interruptible:true,offlineFallback:'windows-sapi',chunkedPipeline:true,prefetch:true,safeCache:true,profiles:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']},
         brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,toolReflection:true,multimodal:isLocalVisionModel(),screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true},
         mobileRelay:{brain:true,tts:true,pollMs:650}
@@ -1953,10 +2119,16 @@ function startWindowsClapHelper(){
 }
 function startWindowsLocalSttHelper(){
   if(process.platform!=='win32'||TEST_MODE)return;
-  const helper=ensureWindowsHelper('jarvis-local-stt-v2.py');
+  const helper=ensureWindowsHelper('jarvis-local-stt-v3.py');
   if(!helper){console.error('[JARVIS] LOCAL STT: helper hazırlanamadı');return}
   try{
-    const env={...process.env,JARVIS_STT_PORT:String(LOCAL_STT_PORT),JARVIS_STT_MODEL:LOCAL_STT_MODEL,JARVIS_WEB_ORIGIN:new URL(BASE).origin};
+    const env={
+      ...process.env,
+      JARVIS_STT_PORT:String(LOCAL_STT_PORT),
+      JARVIS_STT_MODEL:LOCAL_STT_MODEL,
+      JARVIS_WEB_ORIGIN:new URL(BASE).origin,
+      JARVIS_SPEECH_LEXICON_FILE:SPEECH_LEXICON_FILE
+    };
     const p=childProcess.spawn('py',[helper],{windowsHide:true,stdio:['ignore','pipe','pipe'],env});
     p.stdout.on('data',d=>process.stdout.write(String(d)));
     p.stderr.on('data',d=>process.stderr.write('[JARVIS] LOCAL STT ERROR: '+String(d)));
