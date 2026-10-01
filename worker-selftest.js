@@ -37,10 +37,10 @@ const mock=http.createServer(async(req,res)=>{
         preferences:['Gırgır ve samimi ton'],
         unresolved:['Mavi roket projesinin sonraki adımı']
       };
-    } else if(/youtube/i.test(text))out={type:'command',reply:'YouTube açılıyor.',command:'youtube aç'};
-    else if(/format/i.test(text))out={type:'command',reply:'Tamam, formatlıyorum.',command:'bilgisayarı formatla'};
-    else if(/az önce/i.test(text))out={type:'chat',reply:'Az önce sohbeti biraz daha eğlenceli hale getirmek istediğinizi söylediniz.',command:null};
-    else out={type:'chat',reply:'Olur. Biraz gırgır, biraz fikir; sıkıcı asistan moduna girmeden devam edelim.',command:null};
+    } else if(/youtube/i.test(text))out={type:'command',reply:'YouTube açılıyor.',command:'youtube aç',tone:'focused'};
+    else if(/format/i.test(text))out={type:'command',reply:'Tamam, formatlıyorum.',command:'bilgisayarı formatla',tone:'serious'};
+    else if(/az önce/i.test(text))out={type:'chat',reply:'Az önce sohbeti biraz daha eğlenceli hale getirmek istediğinizi söylediniz.',command:null,tone:'warm'};
+    else out={type:'chat',reply:'Olur. Biraz gırgır, biraz fikir; sıkıcı asistan moduna girmeden devam edelim.',command:null,tone:'playful'};
     return json(res,200,{message:{role:'assistant',content:JSON.stringify(out)}});
   }
   return json(res,404,{error:'not found'});
@@ -98,7 +98,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.43.0','worker version');
+    assert(hj.version==='2.44.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
 
     const chat=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Bugün biraz sohbet edelim; böyle konuşmanı istiyorum, biraz da gırgır olsun.'});
@@ -156,6 +156,17 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(ttsState.status===200,'tts-state status');
     const ts=JSON.parse(ttsState.body);
     assert(ts.ok===true&&typeof ts.active==='boolean','tts-state payload');
+
+    const speechPreview=await post('http://127.0.0.1:'+BRIDGE_PORT+'/speak',{
+      text:'PC güç durumu · pil %75 · RAM 3.5 / 8 GB boş',
+      tone:'serious'
+    });
+    assert(speechPreview.status===202,'speech preview status');
+    const sp=JSON.parse(speechPreview.body);
+    assert(sp.tone==='serious','expressive tone route');
+    assert(/bilgisayar/i.test(sp.spokenText),'PC naturalization missing');
+    assert(/yüzde\s*75/i.test(sp.spokenText),'percent naturalization missing');
+    assert(/8 gigabayt/i.test(sp.spokenText),'GB naturalization missing');
 
     // Force a long local conversation and verify automatic episode compaction.
     const histDir=path.join(workspace,'.jarvis-memory');

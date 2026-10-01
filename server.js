@@ -680,7 +680,7 @@ const server=http.createServer((req,res)=>{
       const text=String(d.text||'').replace(/\s+/g,' ').trim().slice(0,700);
       if(!text)return json(res,400,{error:'text required'});
       if(!pcOnline())return json(res,409,{error:'PC Worker offline'});
-      const tone=['balanced','casual','playful','warm','focused','work'].includes(String(d.tone||''))?String(d.tone):'balanced';
+      const tone=['balanced','casual','playful','warm','focused','work','serious','excited','gentle'].includes(String(d.tone||''))?String(d.tone):'balanced';
       const id=crypto.randomUUID();
       state.mobileTtsRequests.set(id,{id,text,tone,status:'queued',createdAtMs:Date.now(),claimedBy:null,audio:null,error:null});
       return json(res,202,{ok:true,id,status:'queued'});
