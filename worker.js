@@ -27,9 +27,9 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.69.0';
+const WORKER_VERSION='2.70.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
-CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1','adaptive_model_router_v1','deep_model_fallback_v1','dynamic_chunk_prosody_v1','natural_pause_timing_v1','adaptive_turn_pacing_v1','latency_learning_v1','full_duplex_interrupt_v1','cancellable_agent_v1','adaptive_voice_profile_v1','spoken_voice_preference_v1','speaker_echo_rejection_v1','social_dialogue_v1','response_variation_v1','contextual_followup_v1','dialogue_feedback_learning_v1','social_preference_adaptation_v1','dynamic_wake_ack_v1','wake_ack_turn_timing_v1');
+CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1','adaptive_model_router_v1','deep_model_fallback_v1','dynamic_chunk_prosody_v1','natural_pause_timing_v1','adaptive_turn_pacing_v1','latency_learning_v1','full_duplex_interrupt_v1','cancellable_agent_v1','adaptive_voice_profile_v1','spoken_voice_preference_v1','speaker_echo_rejection_v1','social_dialogue_v1','response_variation_v1','contextual_followup_v1','dialogue_feedback_learning_v1','social_preference_adaptation_v1','dynamic_wake_ack_v1','wake_ack_turn_timing_v1','auto_quality_escalation_v1','weak_response_escalation_v1','repair_quality_escalation_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -1584,7 +1584,8 @@ async function callLocalBrain(message){
   const turnStyle=inferBrainTurnStyle(text,persona);
   const socialPolicy=inferConversationSocialPolicy(text,recent,persona);
   const deepRequested=shouldDeepReflect(text);
-  const deepModel=(deepRequested&&status.deepInstalled&&status.deepModel)?status.deepModel:LOCAL_BRAIN_MODEL;
+  const availableDeepModel=(status.deepInstalled&&status.deepModel)?status.deepModel:LOCAL_BRAIN_MODEL;
+  const deepModel=deepRequested?availableDeepModel:LOCAL_BRAIN_MODEL;
   const repairContext=conversationRepairContext(text,recent);
   const memoryText=memory.length
     ? memory.map(x=>'- '+(x.role==='memory'?'Hatırlanan tercih':x.role==='episode'?'Eski sohbet özeti':'Önceki konuşma')+': '+x.text).join('\n')
@@ -1701,7 +1702,85 @@ async function callLocalBrain(message){
       }
     }
 
-    if(type==='chat'&&brainResponseLooksWeak(reply,recent)){
+    let qualityEscalated=false;
+    let qualityEscalationReason=null;
+    let qualityEscalationModel=null;
+    const weakReply=type==='chat'&&brainResponseLooksWeak(reply,recent);
+    const canEscalateQuality=type==='chat'
+      && !deepRequested
+      && status.deepInstalled===true
+      && availableDeepModel
+      && availableDeepModel!==LOCAL_BRAIN_MODEL
+      && (weakReply||!!repairContext);
+
+    if(canEscalateQuality){
+      const qualitySchema={
+        type:'object',
+        properties:{
+          reply:{type:'string'},
+          tone:{type:'string',enum:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']}
+        },
+        required:['reply','tone'],
+        additionalProperties:false
+      };
+      const qualityStarted=Date.now();
+      const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),45000);
+      try{
+        const r=await fetch(LOCAL_BRAIN_URL+'/api/chat',{
+          method:'POST',
+          headers:{'content-type':'application/json'},
+          body:JSON.stringify({
+            model:availableDeepModel,
+            stream:false,
+            think:false,
+            format:qualitySchema,
+            keep_alive:LOCAL_BRAIN_KEEP_ALIVE,
+            options:{
+              temperature:repairContext?0.38:0.46,
+              top_p:0.90,
+              repeat_penalty:1.10,
+              num_ctx:LOCAL_BRAIN_CTX,
+              num_predict:Math.max(180,Math.round(160+Number(persona.verbosity||0.42)*220))
+            },
+            messages:[
+              {role:'system',content:[
+                'Sen JARVIS yanıt kalite denetleyicisisin.',
+                'Bu bir otomatik kalite yükseltme turudur; kullanıcı bunu ayrıca istemek zorunda değildir.',
+                'Kullanıcı mesajını, kısa konuşma bağlamını ve ilk taslağı kullanarak daha doğru, doğal ve insan gibi tek bir nihai cevap üret.',
+                repairContext?'Önceki yanlış anlamayı özellikle düzelt; savunmaya geçme.':'Kalıp, tekrarlı veya cansız ifadeleri düzelt.',
+                'Yeni somut bilgi uydurma. Bilmediğin şeyi biliyormuş gibi yazma.',
+                'Gizli düşünme sürecini açıklama. SADECE verilen JSON şemasına uy.'
+              ].join(' ')},
+              ...recent.slice(-6).map(x=>({role:x.role,content:x.content})),
+              {role:'user',content:'ŞİMDİKİ İSTEK: '+text+'\nİLK TASLAK: '+reply}
+            ]
+          }),
+          signal:ctl.signal
+        });
+        clearTimeout(timer);
+        const j=await r.json().catch(()=>({}));
+        if(r.ok){
+          const upgraded=extractLocalBrainJson(j&&j.message&&j.message.content);
+          if(upgraded&&upgraded.reply){
+            reply=normalizeBrainReply(upgraded.reply);
+            if(allowedTones.has(String(upgraded.tone||'')))tone=String(upgraded.tone);
+            qualityEscalated=true;
+            qualityEscalationReason=repairContext?'conversation-repair':'weak-response';
+            qualityEscalationModel=availableDeepModel;
+            remember({
+              kind:'auto_quality_escalation',
+              reason:qualityEscalationReason,
+              model:availableDeepModel,
+              fastModel:LOCAL_BRAIN_MODEL,
+              latencyMs:Date.now()-qualityStarted
+            });
+          }
+        }
+      }catch(e){
+        clearTimeout(timer);
+        remember({kind:'auto_quality_escalation_error',error:String(e.message||e).slice(0,180),model:availableDeepModel});
+      }
+    }else if(weakReply){
       const repaired=await ask(makeBody('Yanıt fazla kalıp, tekrarlı veya cansız. Aynı anlamı daha doğal, insan gibi ve kısa biçimde yeniden yaz.'));
       if(repaired&&repaired.reply){
         reply=normalizeBrainReply(repaired.reply);
@@ -1768,12 +1847,15 @@ async function callLocalBrain(message){
       kind:'local_brain_v2',
       type,command:command||null,commands,model:LOCAL_BRAIN_MODEL,
       memoryHits:memory.length,mode:turnStyle.mode,contextRecall:isContextRecallQuery(text),conversationRepair:!!repairContext,
-      workspaceSources:workspaceCtx.sources,deepReflected:deepRequested&&type==='chat'
+      workspaceSources:workspaceCtx.sources,deepReflected:deepRequested&&type==='chat',
+      qualityEscalated,qualityEscalationReason,qualityEscalationModel
     });
     return{
       ok:true,type,reply,command,commands,model:LOCAL_BRAIN_MODEL,
       memoryHits:memory.length,personaVersion:persona.version,tone,
-      workspaceSources:workspaceCtx.sources,deepReflected:deepRequested&&type==='chat',deepModel:deepRequested?deepModel:null,repairMode:!!repairContext,socialMode:socialPolicy.mode,followupAllowed:socialPolicy.followupAllowed
+      workspaceSources:workspaceCtx.sources,deepReflected:deepRequested&&type==='chat',deepModel:deepRequested?deepModel:null,
+      qualityEscalated,qualityEscalationReason,qualityEscalationModel,
+      repairMode:!!repairContext,socialMode:socialPolicy.mode,followupAllowed:socialPolicy.followupAllowed
     };
   }catch(e){
     return{ok:false,error:String(e.message||e),model:LOCAL_BRAIN_MODEL};
@@ -2630,7 +2712,7 @@ function startLocalTtsBridge(){
         localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2',vision:isLocalVisionModel()},
         localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper',adaptiveLexicon:true,adaptiveDecode:true,dynamicEndpointing:true,lexiconCount:Object.keys(readSpeechLexicon().aliases||{}).length},
         adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',interruptible:true,offlineFallback:'windows-sapi',chunkedPipeline:true,prefetch:true,safeCache:true,backchannelPrewarm:true,backchannelState:ttsBackchannelPrewarmState,wakeAckPrewarm:true,wakeAckVariants:JARVIS_WAKE_ACK_PHRASES.length,dynamicChunkProsody:true,naturalPauseTiming:true,adaptiveVoicePreferences:true,voicePreferences:readVoicePreferences(),speakerEchoRejection:true,profiles:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']},
-        brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,toolReflection:true,multimodal:isLocalVisionModel(),screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,streamingChat:true,sentenceStreamTts:true,conversationRepair:true,adaptiveModelRouter:true,fastModel:LOCAL_BRAIN_MODEL,deepModel:LOCAL_BRAIN_DEEP_MODEL,adaptiveTurnPacing:true,fullDuplexInterrupt:true,cancellableAgent:true,socialDialogue:true,responseVariation:true,contextualFollowup:true,dialogueFeedbackLearning:true,socialPreferenceAdaptation:true},
+        brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,toolReflection:true,multimodal:isLocalVisionModel(),screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,streamingChat:true,sentenceStreamTts:true,conversationRepair:true,adaptiveModelRouter:true,fastModel:LOCAL_BRAIN_MODEL,deepModel:LOCAL_BRAIN_DEEP_MODEL,adaptiveTurnPacing:true,fullDuplexInterrupt:true,cancellableAgent:true,socialDialogue:true,responseVariation:true,contextualFollowup:true,dialogueFeedbackLearning:true,socialPreferenceAdaptation:true,autoQualityEscalation:true,weakResponseEscalation:true,repairQualityEscalation:true},
         mobileRelay:{brain:true,tts:true,pollMs:650}
       }));
     }
@@ -2669,7 +2751,7 @@ function startLocalTtsBridge(){
     if(req.method==='GET'&&req.url==='/brain-status'){
       localBrainStatus().then(status=>{
         res.writeHead(200,{'content-type':'application/json'});
-        res.end(JSON.stringify({ok:true,...status,warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,conversationRepair:true,adaptiveModelRouter:true,fastModel:LOCAL_BRAIN_MODEL,deepModel:LOCAL_BRAIN_DEEP_MODEL,adaptiveTurnPacing:true,fullDuplexInterrupt:true,cancellableAgent:true,socialDialogue:true,responseVariation:true,contextualFollowup:true,dialogueFeedbackLearning:true,socialPreferenceAdaptation:true,dialogueFeedback:readDialogueFeedback(),persona:brainPersona(),memoryFacts:readBrainFacts().length,memoryEpisodes:readBrainEpisodes().length}));
+        res.end(JSON.stringify({ok:true,...status,warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,conversationRepair:true,adaptiveModelRouter:true,fastModel:LOCAL_BRAIN_MODEL,deepModel:LOCAL_BRAIN_DEEP_MODEL,adaptiveTurnPacing:true,fullDuplexInterrupt:true,cancellableAgent:true,socialDialogue:true,responseVariation:true,contextualFollowup:true,dialogueFeedbackLearning:true,socialPreferenceAdaptation:true,autoQualityEscalation:true,weakResponseEscalation:true,repairQualityEscalation:true,dialogueFeedback:readDialogueFeedback(),persona:brainPersona(),memoryFacts:readBrainFacts().length,memoryEpisodes:readBrainEpisodes().length}));
       }).catch(e=>{
         res.writeHead(503,{'content-type':'application/json'});
         res.end(JSON.stringify({ok:false,error:String(e.message||e)}));
