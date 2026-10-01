@@ -171,7 +171,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.67.0','worker version');
+    assert(hj.version==='2.68.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localStt&&hj.localStt.adaptiveDecode===true,'adaptive STT decode health');
     assert(hj.localStt&&hj.localStt.dynamicEndpointing===true,'dynamic STT endpointing health');
@@ -191,6 +191,10 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.brainRuntime.socialDialogue===true,'social dialogue runtime health');
     assert(hj.brainRuntime.responseVariation===true,'response variation runtime health');
     assert(hj.brainRuntime.contextualFollowup===true,'contextual follow-up runtime health');
+    assert(hj.brainRuntime.dialogueFeedbackLearning===true,'dialogue feedback learning health');
+    assert(hj.brainRuntime.socialPreferenceAdaptation===true,'social preference adaptation health');
+    assert(hj.capabilities.includes('dialogue_feedback_learning_v1'),'dialogue feedback capability');
+    assert(hj.capabilities.includes('social_preference_adaptation_v1'),'social preference adaptation capability');
     assert(hj.capabilities.includes('social_dialogue_v1'),'social dialogue capability');
     assert(hj.capabilities.includes('response_variation_v1'),'response variation capability');
     assert(hj.capabilities.includes('contextual_followup_v1'),'contextual follow-up capability');
@@ -222,6 +226,33 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.adaptiveTts.backchannelState&&Number(hj.adaptiveTts.backchannelState.total)>=4,'backchannel prewarm state metadata');
     assert(hj.adaptiveTts.offlineFallback==='windows-sapi','offline TTS fallback health');
     assert(hj.brainRuntime&&hj.brainRuntime.keepAlive,'brain runtime health');
+
+    const feedback=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Çok soru soruyorsun, biraz azalt.'});
+    assert(feedback.status===200,'dialogue feedback directive status');
+    const feedbackj=JSON.parse(feedback.body);
+    assert(feedbackj.ok===true&&feedbackj.model==='local-dialogue-feedback','dialogue feedback routing');
+    assert(feedbackj.preferences&&Number(feedbackj.preferences.followupBias)<0,'dialogue feedback bias not learned');
+
+    const feedbackState=await get('http://127.0.0.1:'+BRIDGE_PORT+'/dialogue-feedback');
+    assert(feedbackState.status===200,'dialogue feedback state endpoint');
+    const dfs=JSON.parse(feedbackState.body);
+    assert(dfs.ok===true&&Number(dfs.followupBias)<0,'dialogue feedback state did not persist');
+
+    const afterFeedbackSeen=seen.length;
+    const afterFeedback=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Naber Jarvis, bugün nasıl gidiyor?'});
+    assert(afterFeedback.status===200,'dialogue feedback reuse status');
+    const afj=JSON.parse(afterFeedback.body);
+    assert(afj.type==='chat'&&afj.followupAllowed===false,'learned follow-up preference was not reused');
+    const afReqs=seen.slice(afterFeedbackSeen);
+    const afPrompt=afReqs.map(x=>(x.messages||[]).filter(m=>m.role==='system').map(m=>String(m.content||'')).join('\n')).join('\n');
+    assert(/ÖĞRENİLMİŞ SOHBET TERCİHLERİ/i.test(afPrompt),'learned dialogue preference prompt missing');
+
+    const feedbackRestore=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Bana daha çok soru sor.'});
+    assert(feedbackRestore.status===200,'dialogue feedback restore status');
+    const restorej=JSON.parse(feedbackRestore.body);
+    assert(restorej.ok===true&&restorej.model==='local-dialogue-feedback','dialogue feedback restore routing');
+    const restoredState=JSON.parse((await get('http://127.0.0.1:'+BRIDGE_PORT+'/dialogue-feedback')).body);
+    assert(Number(restoredState.followupBias)>-0.20,'dialogue feedback restore bias');
 
     const prosody=await post('http://127.0.0.1:'+BRIDGE_PORT+'/prosody-preview',{
       text:'Tamam. Gerçekten mi? Dikkat, hata var.',
