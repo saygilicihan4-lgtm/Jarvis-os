@@ -1606,7 +1606,7 @@ function startWindowsClapHelper(){
 }
 function startWindowsLocalSttHelper(){
   if(process.platform!=='win32'||TEST_MODE)return;
-  const helper=ensureWindowsHelper('jarvis-local-stt-v2.py');
+  const helper=ensureWindowsHelper('jarvis-local-stt-v3.py');
   if(!helper){console.error('[JARVIS] LOCAL STT: helper hazırlanamadı');return}
   try{
     const env={
