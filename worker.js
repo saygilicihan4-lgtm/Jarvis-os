@@ -609,9 +609,12 @@ function relevantBrainMemory(query,limit=5){
   }
   return out;
 }
-function recentBrainHistory(limit=6){
+function recentBrainHistory(limit=6,maxCharsPerTurn=560){
   const all=readLocalBrainHistory(Math.max(limit,6));
-  return all.slice(-limit);
+  return all.slice(-limit).map(x=>({
+    ...x,
+    content:String(x.content||'').slice(0,Math.max(160,maxCharsPerTurn))
+  }));
 }
 function inferBrainTurnStyle(text,persona){
   const s=String(text||'').toLocaleLowerCase('tr-TR');
@@ -684,14 +687,14 @@ async function summarizeBrainEpisodeIfNeeded(){
     rows=fs.readFileSync(LOCAL_BRAIN_HISTORY_FILE,'utf8').split('\n').filter(Boolean)
       .map(x=>{try{return JSON.parse(x)}catch(_){return null}}).filter(Boolean);
   }catch(_){return false}
-  if(rows.length<72)return false;
+  if(rows.length<28)return false;
 
   const status=await localBrainStatus();
   if(!status.ready||!status.installed)return false;
 
   episodeSummaryRunning=true;
   try{
-    const chunk=rows.slice(0,28);
+    const chunk=rows.slice(0,12);
     const transcript=chunk.map(x=>(x.role==='user'?'Kullanıcı':'JARVIS')+': '+String(x.content||'')).join('\n').slice(0,9000);
     const schema={
       type:'object',
@@ -739,7 +742,7 @@ async function summarizeBrainEpisodeIfNeeded(){
       model:LOCAL_BRAIN_MODEL
     });
 
-    const remaining=rows.slice(28);
+    const remaining=rows.slice(12);
     fs.writeFileSync(LOCAL_BRAIN_HISTORY_FILE,remaining.map(x=>JSON.stringify(x)).join('\n')+(remaining.length?'\n':''),'utf8');
     remember({kind:'brain_episode_compacted',messages:chunk.length,remaining:remaining.length,model:LOCAL_BRAIN_MODEL});
     return true;
@@ -877,7 +880,7 @@ async function callLocalBrain(message){
 
   // Keep enough short-term dialogue turns for natural references such as
   // "az önce", "onu", "ikincisi" even after several tool/command turns.
-  const recent=recentBrainHistory(12);
+  const recent=recentBrainHistory(16,560);
   const dialogueFeedback=learnDialogueFeedback(text,recent);
   const memory=relevantBrainMemory(text,6);
   const workspaceCtx=workspaceBrainContext(text,3);
