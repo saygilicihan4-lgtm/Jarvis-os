@@ -27,8 +27,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.52.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1'];
+const WORKER_VERSION='2.53.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1'];
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -50,6 +50,9 @@ const CREATOR_TTS_VOLUME='+14%';
 const LOCAL_BRAIN_URL=String(process.env.JARVIS_LOCAL_BRAIN_URL||'http://127.0.0.1:11434').replace(/\/$/,'');
 let LOCAL_BRAIN_MODEL=String(process.env.JARVIS_LOCAL_BRAIN_MODEL||'qwen3.5:2b').trim();
 const LOCAL_BRAIN_KEEP_ALIVE=String(process.env.JARVIS_LOCAL_BRAIN_KEEP_ALIVE||'30m').trim();
+const LOCAL_BRAIN_CTX=Math.max(4096,Math.min(16384,Number(process.env.JARVIS_LOCAL_BRAIN_CTX)||(
+  os.totalmem()>=14*1073741824?12288:os.totalmem()>=7*1073741824?8192:4096
+)));
 const LOCAL_BRAIN_HISTORY_FILE=path.join(MEMORY_DIR,'brain-history.jsonl');
 const LOCAL_BRAIN_FACTS_FILE=path.join(MEMORY_DIR,'brain-facts.jsonl');
 const LOCAL_BRAIN_EPISODES_FILE=path.join(MEMORY_DIR,'brain-episodes.jsonl');
@@ -654,7 +657,7 @@ async function summarizeBrainEpisodeIfNeeded(){
         think:false,
         format:schema,
         keep_alive:LOCAL_BRAIN_KEEP_ALIVE,
-        options:{temperature:0.15,top_p:0.8,num_ctx:4096,num_predict:260},
+        options:{temperature:0.15,top_p:0.8,num_ctx:LOCAL_BRAIN_CTX,num_predict:260},
         messages:[
           {role:'system',content:'Aşağıdaki sohbet bölümünü gelecekte bağlamı korumak için Türkçe ve kısa biçimde özetle. Yalnızca açıkça söylenen bilgileri koru; hassas kişisel özellikler hakkında çıkarım yapma. Kararlar, tercihler ve açık kalan işleri ayrı alanlarda tut.'},
           {role:'user',content:transcript}
@@ -887,7 +890,7 @@ async function callLocalBrain(message){
       temperature:repairNote?0.25:turnStyle.temperature,
       top_p:0.9,
       repeat_penalty:1.10,
-      num_ctx:4096,
+      num_ctx:LOCAL_BRAIN_CTX,
       num_predict:Math.round(140+Math.max(0,Math.min(1,Number(persona.verbosity||0.42)))*220)
     },
     messages:[
@@ -968,10 +971,10 @@ async function callLocalBrain(message){
           body:JSON.stringify({
             model:LOCAL_BRAIN_MODEL,
             stream:false,
-            think:false,
+            think:true,
             format:deepSchema,
             keep_alive:LOCAL_BRAIN_KEEP_ALIVE,
-            options:{temperature:0.34,top_p:0.88,repeat_penalty:1.10,num_ctx:4096,num_predict:Math.max(220,Math.round(180+Number(persona.verbosity||0.42)*260))},
+            options:{temperature:0.34,top_p:0.88,repeat_penalty:1.10,num_ctx:LOCAL_BRAIN_CTX,num_predict:Math.max(220,Math.round(180+Number(persona.verbosity||0.42)*260))},
             messages:[
               {role:'system',content:[
                 'Sen JARVIS yanıt kalite denetleyicisisin.',
@@ -993,7 +996,7 @@ async function callLocalBrain(message){
           if(refined&&refined.reply){
             reply=normalizeBrainReply(refined.reply);
             if(allowedTones.has(String(refined.tone||'')))tone=String(refined.tone);
-            remember({kind:'deep_reflection',model:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-deepStarted,workspaceSources:workspaceCtx.sources});
+            remember({kind:'deep_reflection',model:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-deepStarted,workspaceSources:workspaceCtx.sources,thinking:true,context:LOCAL_BRAIN_CTX});
           }
         }
       }catch(e){
@@ -1072,7 +1075,7 @@ async function analyzeLocalImage(imageBase64,question='Bu görüntüde ne görü
         think:false,
         format:schema,
         keep_alive:LOCAL_BRAIN_KEEP_ALIVE,
-        options:{temperature:0.28,top_p:0.86,repeat_penalty:1.06,num_ctx:4096,num_predict:260},
+        options:{temperature:0.28,top_p:0.86,repeat_penalty:1.06,num_ctx:LOCAL_BRAIN_CTX,num_predict:260},
         messages:[
           {role:'system',content:system},
           {role:'user',content:q,images:[image]}
@@ -1259,6 +1262,7 @@ async function runNativeAgent(message,{maxRounds=4}={}){
   const persona=updateBrainPersonaFromUserText(text);
   maybeRememberExplicitPreference(text);
   const turnStyle=inferBrainTurnStyle(text,persona);
+  const deepRequested=shouldDeepReflect(text);
   const recent=recentBrainHistory(10);
   const memory=relevantBrainMemory(text,5);
   const memoryText=memory.length
@@ -1299,9 +1303,15 @@ async function runNativeAgent(message,{maxRounds=4}={}){
         body:JSON.stringify({
           model:LOCAL_BRAIN_MODEL,
           stream:false,
-          think:false,
+          think:deepRequested,
           keep_alive:LOCAL_BRAIN_KEEP_ALIVE,
-          options:{temperature:0.42,top_p:0.9,repeat_penalty:1.08,num_ctx:4096,num_predict:260},
+          options:{
+            temperature:deepRequested?0.32:0.42,
+            top_p:0.9,
+            repeat_penalty:1.08,
+            num_ctx:LOCAL_BRAIN_CTX,
+            num_predict:deepRequested?420:260
+          },
           messages,
           tools
         }),
@@ -1321,7 +1331,7 @@ async function runNativeAgent(message,{maxRounds=4}={}){
           ok:true,type:'chat',
           reply:String(final&&final.reply||summaries.join('. ')),
           tone:String(final&&final.tone||(actions.some(x=>!x.ok)?'warm':'focused')),
-          model:LOCAL_BRAIN_MODEL,actions,rounds:round+1,nativeTools:true,recovered:true,
+          model:LOCAL_BRAIN_MODEL,actions,rounds:round+1,nativeTools:true,reasoning:deepRequested?'deep':'fast',recovered:true,
           latencyMs:Date.now()-started
         };
       }
@@ -1337,7 +1347,7 @@ async function runNativeAgent(message,{maxRounds=4}={}){
       remember({kind:'native_agent_final',rounds:round+1,actions:actions.length,model:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-started});
       return{
         ok:true,type:'chat',reply,tone:turnStyle.mode,model:LOCAL_BRAIN_MODEL,
-        actions,rounds:round+1,nativeTools:true,latencyMs:Date.now()-started
+        actions,rounds:round+1,nativeTools:true,reasoning:deepRequested?'deep':'fast',latencyMs:Date.now()-started
       };
     }
 
@@ -1376,7 +1386,7 @@ async function runNativeAgent(message,{maxRounds=4}={}){
     ok:true,type:'chat',
     reply:String(final&&final.reply||summaries.join('. ')||'Araç döngüsü güvenli sınırda durduruldu.'),
     tone:String(final&&final.tone||(actions.some(x=>!x.ok)?'warm':'focused')),
-    model:LOCAL_BRAIN_MODEL,actions,rounds:maxRounds,nativeTools:true,bounded:true,
+    model:LOCAL_BRAIN_MODEL,actions,rounds:maxRounds,nativeTools:true,reasoning:deepRequested?'deep':'fast',bounded:true,
     latencyMs:Date.now()-started
   };
 }
@@ -1493,7 +1503,7 @@ function startLocalTtsBridge(){
         localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2',vision:isLocalVisionModel()},
         localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper'},
         adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',interruptible:true,offlineFallback:'windows-sapi',profiles:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']},
-        brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,toolReflection:true,multimodal:isLocalVisionModel(),nativeTools:true,maxToolRounds:4},
+        brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,toolReflection:true,multimodal:isLocalVisionModel(),nativeTools:true,maxToolRounds:4,selectiveReasoning:true},
         mobileRelay:{brain:true,tts:true,pollMs:650}
       }));
     }
@@ -1529,7 +1539,7 @@ function startLocalTtsBridge(){
     if(req.method==='GET'&&req.url==='/brain-status'){
       localBrainStatus().then(status=>{
         res.writeHead(200,{'content-type':'application/json'});
-        res.end(JSON.stringify({ok:true,...status,warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,nativeTools:true,maxToolRounds:4,persona:brainPersona(),memoryFacts:readBrainFacts().length,memoryEpisodes:readBrainEpisodes().length}));
+        res.end(JSON.stringify({ok:true,...status,warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,persona:brainPersona(),memoryFacts:readBrainFacts().length,memoryEpisodes:readBrainEpisodes().length}));
       }).catch(e=>{
         res.writeHead(503,{'content-type':'application/json'});
         res.end(JSON.stringify({ok:false,error:String(e.message||e)}));

@@ -57,6 +57,8 @@ try {
   Add-Result "Local multimodal capability" ($b.vision -eq $true) ("vision="+$b.vision)
   $nativeToolsOk=($b.ok -eq $true -and $b.nativeTools -eq $true -and [int]$b.maxToolRounds -ge 2)
   Add-Result "Native tool runtime" $nativeToolsOk ("model="+$b.model+" maxRounds="+$b.maxToolRounds)
+  $reasoningOk=($b.selectiveReasoning -eq $true -and [int]$b.context -ge 4096)
+  Add-Result "Selective reasoning runtime" $reasoningOk ("context="+$b.context+" · fast/deep routing enabled")
   Add-Result "Episodic memory engine" ($null -ne $b.memoryEpisodes) ("episodes="+$b.memoryEpisodes+" facts="+$b.memoryFacts)
 
   $warmSw=[Diagnostics.Stopwatch]::StartNew()
@@ -305,6 +307,7 @@ $criticalFailed=($results | Where-Object {
     "Qwen3.5 multimodal engine",
     "Local multimodal capability",
     "Native tool runtime",
+    "Selective reasoning runtime",
     "Local multimodal vision",
     "Local Turkish STT",
     "STT model preloaded",
