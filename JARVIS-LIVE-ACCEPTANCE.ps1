@@ -61,6 +61,8 @@ try {
   Add-Result "Phone local brain relay" $mobileRelayOk ("brain="+$h.mobileRelay.brain+" tts="+$h.mobileRelay.tts+" poll="+$h.mobileRelay.pollMs+"ms")
   $streamRuntimeOk=($h.brainRuntime.streamingChat -eq $true -and $h.brainRuntime.sentenceStreamTts -eq $true)
   Add-Result "Streaming voice runtime" $streamRuntimeOk ("chat="+$h.brainRuntime.streamingChat+" sentenceTts="+$h.brainRuntime.sentenceStreamTts)
+  $duplexOk=(@($h.capabilities) -contains "full_duplex_interrupt_v1" -and @($h.capabilities) -contains "cancellable_agent_v1" -and $h.brainRuntime.fullDuplexInterrupt -eq $true -and $h.brainRuntime.cancellableAgent -eq $true)
+  Add-Result "Full duplex reasoning cancellation" $duplexOk ("interrupt="+$h.brainRuntime.fullDuplexInterrupt+" cancellableAgent="+$h.brainRuntime.cancellableAgent)
 } catch {
   Add-Result "Worker bridge" $false $_.Exception.Message
 }
@@ -387,6 +389,7 @@ $criticalFailed=($results | Where-Object {
     "Offline voice fallback",
     "Phone local brain relay",
     "Streaming voice runtime",
+    "Full duplex reasoning cancellation",
     "Local brain ready",
     "Local brain prewarm",
     "Streaming local conversation",

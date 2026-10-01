@@ -8,6 +8,7 @@ const OLLAMA_PORT=11445;
 const BRIDGE_PORT=18765;
 const workspace=fs.mkdtempSync(path.join(os.tmpdir(),'jarvis-brain-test-'));
 const seen=[];
+let cancelUpstreamClosed=false;
 
 function json(res,code,obj){
   res.writeHead(code,{'content-type':'application/json'});
@@ -46,6 +47,12 @@ const mock=http.createServer(async(req,res)=>{
       return;
     }
     if(Array.isArray(body.tools)&&body.tools.length){
+      if(/iptal ajan testi/i.test(text)&&toolMessages.length===0){
+        res.on('close',()=>{cancelUpstreamClosed=true});
+        await new Promise(r=>setTimeout(r,1200));
+        if(res.destroyed||res.writableEnded)return;
+        return json(res,200,{message:{role:'assistant',content:'',tool_calls:[{function:{name:'open_target',arguments:{target:'youtube'}}}]}});
+      }
       if(/arka planda ne var/i.test(text)&&toolMessages.length===0){
         return json(res,200,{message:{role:'assistant',content:'',tool_calls:[{function:{name:'screen_describe',arguments:{question:'Ekranda ne görüyorsun?'}}}]}});
       }
@@ -105,6 +112,26 @@ function post(url,obj){
     req.on('error',reject);req.end(body);
   });
 }
+function postAndAbort(url,obj,delay=100){
+  return new Promise((resolve)=>{
+    const u=new URL(url),body=JSON.stringify(obj||{});
+    const req=http.request({
+      hostname:u.hostname,port:u.port,path:u.pathname,method:'POST',
+      headers:{'content-type':'application/json','content-length':Buffer.byteLength(body)}
+    },r=>{
+      r.resume();
+      r.on('end',()=>resolve(false));
+    });
+    let done=false;
+    const finish=v=>{if(done)return;done=true;resolve(v)};
+    req.on('error',()=>finish(true));
+    req.end(body);
+    setTimeout(()=>{
+      try{req.destroy(new Error('intentional-client-abort'))}catch(_){}
+      finish(true);
+    },delay);
+  });
+}
 function waitForBridge(child,timeout=10000){
   return new Promise((resolve,reject)=>{
     const timer=setTimeout(()=>reject(new Error('bridge timeout')),timeout);
@@ -144,7 +171,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.63.0','worker version');
+    assert(hj.version==='2.64.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localStt&&hj.localStt.adaptiveDecode===true,'adaptive STT decode health');
     assert(hj.localStt&&hj.localStt.dynamicEndpointing===true,'dynamic STT endpointing health');
@@ -152,6 +179,10 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.brainRuntime&&hj.brainRuntime.nativeTools===true,'native tools health');
     assert(hj.brainRuntime.selectiveReasoning===true,'selective reasoning health');
     assert(hj.brainRuntime.streamingChat===true,'streaming chat health');
+    assert(hj.brainRuntime.fullDuplexInterrupt===true,'full duplex interrupt health');
+    assert(hj.brainRuntime.cancellableAgent===true,'cancellable native agent health');
+    assert(hj.capabilities.includes('full_duplex_interrupt_v1'),'full duplex interrupt capability');
+    assert(hj.capabilities.includes('cancellable_agent_v1'),'cancellable agent capability');
     assert(Array.isArray(hj.capabilities)&&hj.capabilities.includes('natural_barge_in_v1'),'natural barge-in capability health');
     assert(hj.capabilities.includes('spoken_followup_interrupt_v1'),'spoken follow-up interrupt capability health');
     assert(hj.capabilities.includes('conversation_repair_v1'),'conversation repair capability health');
@@ -208,6 +239,13 @@ function assert(x,msg){if(!x)throw new Error(msg)}
 
     const noStreamAction=await post('http://127.0.0.1:'+BRIDGE_PORT+'/chat-stream',{message:"YouTube'u açar mısın?"});
     assert(noStreamAction.status===409,'PC action must be rejected by chat streaming');
+
+    const clientAborted=await postAndAbort('http://127.0.0.1:'+BRIDGE_PORT+'/agent',{message:'iptal ajan testi',maxRounds:4},120);
+    assert(clientAborted===true,'client abort helper did not abort');
+    for(let i=0;i<20&&!cancelUpstreamClosed;i++)await new Promise(r=>setTimeout(r,50));
+    assert(cancelUpstreamClosed===true,'native agent abort did not cancel upstream Ollama request');
+    const afterCancelHealth=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
+    assert(afterCancelHealth.status===200,'worker unhealthy after native agent cancellation');
 
     const agentDir=path.join(workspace,'projects');
     fs.mkdirSync(agentDir,{recursive:true});
