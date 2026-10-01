@@ -304,12 +304,19 @@ function scheduleDesktopWakeWord(delay=700){
   clearTimeout(wakeWordRestartTimer);
   const wait=Math.max(delay,wakeWordMutedUntil>Date.now()?wakeWordMutedUntil-Date.now():0);
   wakeWordRestartTimer=setTimeout(()=>{
-    if(!desktopWakeWordEnabled||!recognition||privacyMode||listening||document.hidden)return;
+    if(!desktopWakeWordEnabled||!recognition||privacyMode||document.hidden)return;
+    if(listening){
+      // One-shot recognizer may take a moment to close after stop().
+      scheduleDesktopWakeWord(350);
+      return;
+    }
     try{
       recognition.lang='tr-TR';
       recognition.start();
-      if(window.voiceState)voiceState.textContent='VOICE: JARVIS WAKE WORD ARMED';
-    }catch(_){}
+      if(window.voiceState)voiceState.textContent=wakeWordAwaitingCommand?'VOICE: COMMAND WINDOW OPEN':'VOICE: JARVIS WAKE WORD ARMED';
+    }catch(_){
+      scheduleDesktopWakeWord(500);
+    }
   },wait);
 }
 function answerJarvisWakeWord(){
@@ -335,7 +342,7 @@ function answerJarvisWakeWord(){
         }
       },15000);
       // JARVIS_COMMAND_WINDOW_GUARD
-    },3500);
+    },3000);
   }
 }
 const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -343,7 +350,7 @@ if(SpeechRecognition){
   recognition=new SpeechRecognition();
   recognition.lang=activeLanguage;
   recognition.interimResults=true;
-  recognition.continuous=desktopWakeWordEnabled;
+  recognition.continuous=false;
   recognition.onstart=()=>setVoiceMode(true);
   recognition.onend=()=>{
     setVoiceMode(false);
@@ -390,6 +397,11 @@ if(SpeechRecognition){
       // directly as the command without another wake word or button press.
       if(desktopWakeWordEnabled&&Date.now()>wakeWordConversationUntil){
         wakeWordAwaitingCommand=false;
+        voiceState.textContent='VOICE: JARVIS WAKE WORD ARMED';
+        return;
+      }
+      if(desktopWakeWordEnabled&&!wakeWordAwaitingCommand&&Date.now()<=wakeWordConversationUntil){
+        // Safety: only the explicit post-wake command window may route speech.
         voiceState.textContent='VOICE: JARVIS WAKE WORD ARMED';
         return;
       }
