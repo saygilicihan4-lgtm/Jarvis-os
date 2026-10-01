@@ -46,6 +46,8 @@ try {
   Add-Result "Conversation repair capability" $repairCapabilityOk ("runtime="+$h.brainRuntime.conversationRepair)
   $modelRouterOk=(@($h.capabilities) -contains "adaptive_model_router_v1" -and @($h.capabilities) -contains "deep_model_fallback_v1" -and $h.brainRuntime.adaptiveModelRouter -eq $true)
   Add-Result "Adaptive local model router" $modelRouterOk ("fast="+$h.brainRuntime.fastModel+" deep="+$h.brainRuntime.deepModel)
+  $turnPacingOk=(@($h.capabilities) -contains "adaptive_turn_pacing_v1" -and @($h.capabilities) -contains "latency_learning_v1" -and $h.brainRuntime.adaptiveTurnPacing -eq $true)
+  Add-Result "Adaptive turn pacing capability" $turnPacingOk ("runtime="+$h.brainRuntime.adaptiveTurnPacing)
   $adaptiveOk=($null -ne $h.adaptiveTts -and $h.adaptiveTts.engine -eq "edge-neural" -and $h.adaptiveTts.profiles.Count -ge 4)
   Add-Result "Adaptive voice profiles" $adaptiveOk (($h.adaptiveTts.voice)+" · "+(($h.adaptiveTts.profiles -join ",")))
   $pipelineOk=($h.adaptiveTts.chunkedPipeline -eq $true -and $h.adaptiveTts.prefetch -eq $true -and $h.adaptiveTts.safeCache -eq $true)
@@ -375,6 +377,7 @@ $criticalFailed=($results | Where-Object {
     "Natural spoken interruption",
     "Conversation repair capability",
     "Adaptive local model router",
+    "Adaptive turn pacing capability",
     "Adaptive voice profiles",
     "Chunked voice pipeline",
     "Dynamic sentence prosody runtime",
