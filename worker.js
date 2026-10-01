@@ -1828,7 +1828,7 @@ function isStreamableConversation(message){
   if(isLocalSafeControlCommand(s))return false;
   const k=s.toLocaleLowerCase('tr-TR');
   if(/\b(?:hatırla|hatirla|unut|dediğimde|dedigimde|dersem|düzeltmesini|duzeltmesini)\b/.test(k))return false;
-  if(/\b(?:aç|ac|kapat|başlat|baslat|çalıştır|calistir|ayar|ayarlar|sesi|sesini|pil|batarya|disk|ağ|ag|wifi|bluetooth|dosya|klasör|klasor|ekran|kamera|görev yöneticisi|gorev yoneticisi|workspace|terminal|powershell)\b/.test(k))return false;
+  if(/\b(?:(?:aç|ac)(?:ar|abilir)?|kapat(?:ır|ir|abilir)?|başlat(?:ır|ir|abilir)?|baslat(?:ir|abilir)?|çalıştır(?:ır|ir|abilir)?|calistir(?:ir|abilir)?|gir(?:er|ebilir)?|ayar|ayarlar|sesi|sesini|pil|batarya|disk|ağ|ag|wifi|bluetooth|dosya|klasör|klasor|ekran|kamera|görev yöneticisi|gorev yoneticisi|workspace|terminal|powershell)\b/.test(k))return false;
   return true;
 }
 function streamingConversationSystem(text){
