@@ -20,6 +20,7 @@ const required=[
   'recordConversationLatency',
   'conversationLatencyMedian',
   'adaptiveBackchannelDelay',
+  'looksLikeLocalVoicePreference',
   'thinkingBackchannelPhrase',
   'speakThinkingBackchannel',
   'armThinkingBackchannel',
@@ -77,3 +78,7 @@ if(!html.includes('currentBrainRequestController.abort'))throw new Error('Active
 if(!html.includes('beginLocalBrainRequest(65000)'))throw new Error('Native local-agent request is not registered for cancellation');
 if(!html.includes("return{handled:true,interrupted:true}"))throw new Error('Interrupted local-agent turn can still fall through to stale fallback');
 if(!html.includes('VOICE: INTERRUPT READY'))throw new Error('Thinking-phase interruption readiness is not surfaced');
+
+if(!html.includes('looksLikeLocalVoicePreference(text)'))throw new Error('Adaptive voice preference routing missing from stream guard');
+if(!html.includes('adaptiveVoicePreferences'))throw new Error('Adaptive voice preference health state is not surfaced in UI');
+if(!html.includes(' · LEARNED '))throw new Error('Learned voice profile is not visible in local voice status');
