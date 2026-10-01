@@ -25,6 +25,21 @@ s.listen(8765,'127.0.0.1'); setTimeout(()=>s.close(()=>process.exit(0)),6500);
   if(@(Get-Content (Join-Path $temp 'launches.txt')).Count -ne 1){throw 'Duplicate Worker started'}
   if(-not (Test-Path (Join-Path $env:JARVIS_WORKSPACE '.jarvis-memory\worker.log'))){throw 'Worker log missing'}
 
+  # Install twice on the disposable CI account; verify legacy migration and VBS execution.
+  foreach($name in @('jarvis-startup.ps1','jarvis-boot.xaml','install-jarvis-startup.ps1')) { Copy-Item (Join-Path $root $name) $temp }
+  $marker=Join-Path $temp 'vbs-launched.txt'
+  ('CreateObject("Scripting.FileSystemObject").CreateTextFile("' + $marker + '", True).WriteLine "ok"') | Set-Content (Join-Path $temp 'JARVIS-STARTUP-HIDDEN.vbs') -Encoding Unicode
+  $startupFolder=[Environment]::GetFolderPath('Startup')
+  foreach($name in @('JARVIS-PC-Worker.cmd','JARVIS-Startup.cmd')) {'@echo off' | Set-Content (Join-Path $startupFolder $name)}
+  & (Join-Path $temp 'install-jarvis-startup.ps1')
+  & (Join-Path $temp 'install-jarvis-startup.ps1')
+  foreach($name in @('JARVIS-PC-Worker.cmd','JARVIS-Startup.cmd')) {if(Test-Path (Join-Path $startupFolder $name)){throw 'Legacy visible startup entry survived'}}
+  $entry=Join-Path $startupFolder 'JARVIS-Silent-Startup.vbs'
+  & cscript.exe //nologo $entry
+  Start-Sleep -Milliseconds 1500
+  if(-not (Test-Path $marker)){throw 'Installed VBS launcher did not reach canonical bootstrap'}
+  Remove-Item $entry -Force
+
   Copy-Item (Join-Path $root 'jarvis-startup.ps1') $temp
   # The coordinator gets a no-op host. Health services below are entirely local fixtures.
   '# Test fixture: service startup managed by the test' | Set-Content (Join-Path $temp 'start-worker-windows.ps1')

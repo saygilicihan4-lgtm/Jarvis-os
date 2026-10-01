@@ -21,8 +21,15 @@ jobs:
       - name: Hidden host, duplicate prevention, readiness and network timeout
         shell: powershell
         run: ./startup-windows-test.ps1
+      - name: Browser state and responsive layout
+        shell: powershell
+        run: |
+          npm install --no-save --package-lock=false --ignore-scripts playwright
+          node startup-ui-browser-test.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: jarvis-windows-boot-preview
-          path: ${{ runner.temp }}/jarvis-boot-windows.png
+          path: |
+            ${{ runner.temp }}/jarvis-boot-windows.png
+            ${{ runner.temp }}/jarvis-ui-*.png
