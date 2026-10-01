@@ -49,6 +49,8 @@ try {
   Add-Result "Offline voice fallback" ([string]$h.adaptiveTts.offlineFallback -eq "windows-sapi") ([string]$h.adaptiveTts.offlineFallback)
   $mobileRelayOk=($null -ne $h.mobileRelay -and $h.mobileRelay.brain -eq $true -and $h.mobileRelay.tts -eq $true)
   Add-Result "Phone local brain relay" $mobileRelayOk ("brain="+$h.mobileRelay.brain+" tts="+$h.mobileRelay.tts+" poll="+$h.mobileRelay.pollMs+"ms")
+  $streamRuntimeOk=($h.brainRuntime.streamingChat -eq $true -and $h.brainRuntime.sentenceStreamTts -eq $true)
+  Add-Result "Streaming voice runtime" $streamRuntimeOk ("chat="+$h.brainRuntime.streamingChat+" sentenceTts="+$h.brainRuntime.sentenceStreamTts)
 } catch {
   Add-Result "Worker bridge" $false $_.Exception.Message
 }
@@ -89,6 +91,24 @@ try {
 } catch {
   Add-Result "Local brain ready" $false $_.Exception.Message
   Add-Result "Local brain prewarm" $false $_.Exception.Message
+}
+
+try {
+  $streamSw=[Diagnostics.Stopwatch]::StartNew()
+  $streamBody=@{message="Naber Jarvis, bugun kisa ve dogal bir cevap ver."}|ConvertTo-Json -Compress
+  $streamResp=Invoke-WebRequest -Uri "http://127.0.0.1:8765/chat-stream" -Method Post -ContentType "application/json" -Body $streamBody -TimeoutSec 90
+  $streamSw.Stop()
+  $events=New-Object System.Collections.Generic.List[object]
+  foreach($line in ($streamResp.Content -split "\r?\n")) {
+    if([string]::IsNullOrWhiteSpace($line)){continue}
+    try { $events.Add(($line|ConvertFrom-Json)) } catch {}
+  }
+  $deltaCount=@($events|Where-Object {$_.type -eq "delta"}).Count
+  $done=@($events|Where-Object {$_.type -eq "done"}|Select-Object -Last 1)
+  $streamOk=($streamResp.StatusCode -eq 200 -and $deltaCount -ge 1 -and $null -ne $done -and $done.ok -eq $true -and -not [string]::IsNullOrWhiteSpace([string]$done.reply))
+  Add-Result "Streaming local conversation" $streamOk ("deltas="+$deltaCount+" first="+$done.firstDeltaMs+"ms total="+$done.latencyMs+"ms") $streamSw.Elapsed.TotalMilliseconds
+} catch {
+  Add-Result "Streaming local conversation" $false $_.Exception.Message
 }
 
 try {
@@ -329,8 +349,10 @@ $criticalFailed=($results | Where-Object {
     "Ahmet neural voice render",
     "Offline voice fallback",
     "Phone local brain relay",
+    "Streaming voice runtime",
     "Local brain ready",
     "Local brain prewarm",
+    "Streaming local conversation",
     "Qwen3.5 multimodal engine",
     "Local multimodal capability",
     "Native tool runtime",
