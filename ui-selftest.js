@@ -13,6 +13,8 @@ const required=[
   'askJarvisBrain',
   'askMobileLocalBrain',
   'playJarvisMobileRelay',
+  'startMobileBrowserFollowup',
+  'waitForLocalTtsIdle',
   'executeDirectLocalPcControl',
   'tryDirectLocalPcControl'
 ];
@@ -20,3 +22,8 @@ for(const name of required){
   if(!html.includes(name))throw new Error('Missing UI capability: '+name);
 }
 console.log('UI SELFTEST PASS · '+scripts.length+' script block(s)');
+
+if(!html.includes('mobileSpeechPromise=playJarvisMobileRelay'))throw new Error('Mobile speech completion tracking missing');
+if(!html.includes("startMobileBrowserFollowup()"))throw new Error('Mobile hands-free follow-up routing missing');
+if(!html.includes("VOICE: CONVERSATION LISTENING"))throw new Error('Mobile conversation listening state missing');
+console.log('MOBILE HANDSFREE SELFTEST PASS');
