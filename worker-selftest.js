@@ -247,6 +247,13 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const afPrompt=afReqs.map(x=>(x.messages||[]).filter(m=>m.role==='system').map(m=>String(m.content||'')).join('\n')).join('\n');
     assert(/ÖĞRENİLMİŞ SOHBET TERCİHLERİ/i.test(afPrompt),'learned dialogue preference prompt missing');
 
+    const feedbackRestore=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Bana daha çok soru sor.'});
+    assert(feedbackRestore.status===200,'dialogue feedback restore status');
+    const restorej=JSON.parse(feedbackRestore.body);
+    assert(restorej.ok===true&&restorej.model==='local-dialogue-feedback','dialogue feedback restore routing');
+    const restoredState=JSON.parse((await get('http://127.0.0.1:'+BRIDGE_PORT+'/dialogue-feedback')).body);
+    assert(Number(restoredState.followupBias)>-0.20,'dialogue feedback restore bias');
+
     const prosody=await post('http://127.0.0.1:'+BRIDGE_PORT+'/prosody-preview',{
       text:'Tamam. Gerçekten mi? Dikkat, hata var.',
       tone:'balanced'
