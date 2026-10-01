@@ -13,6 +13,7 @@ const required=[
   'askJarvisBrain',
   'askMobileLocalBrain',
   'playJarvisMobileRelay',
+  'executeDirectLocalPcControl',
   'tryDirectLocalPcControl'
 ];
 for(const name of required){
