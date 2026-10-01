@@ -42,11 +42,27 @@ try {
   Add-Result "Worker bridge" ($h.ok -eq $true) ("v"+$h.version)
   $adaptiveOk=($null -ne $h.adaptiveTts -and $h.adaptiveTts.engine -eq "edge-neural" -and $h.adaptiveTts.profiles.Count -ge 4)
   Add-Result "Adaptive voice profiles" $adaptiveOk (($h.adaptiveTts.voice)+" · "+(($h.adaptiveTts.profiles -join ",")))
+  $pipelineOk=($h.adaptiveTts.chunkedPipeline -eq $true -and $h.adaptiveTts.prefetch -eq $true -and $h.adaptiveTts.safeCache -eq $true)
+  Add-Result "Chunked voice pipeline" $pipelineOk ("chunked="+$h.adaptiveTts.chunkedPipeline+" prefetch="+$h.adaptiveTts.prefetch+" cache="+$h.adaptiveTts.safeCache)
   Add-Result "Offline voice fallback" ([string]$h.adaptiveTts.offlineFallback -eq "windows-sapi") ([string]$h.adaptiveTts.offlineFallback)
   $mobileRelayOk=($null -ne $h.mobileRelay -and $h.mobileRelay.brain -eq $true -and $h.mobileRelay.tts -eq $true)
   Add-Result "Phone local brain relay" $mobileRelayOk ("brain="+$h.mobileRelay.brain+" tts="+$h.mobileRelay.tts+" poll="+$h.mobileRelay.pollMs+"ms")
 } catch {
   Add-Result "Worker bridge" $false $_.Exception.Message
+}
+
+$voiceTmp=Join-Path $env:TEMP ("jarvis-ahmet-accept-"+[guid]::NewGuid().ToString("N")+".mp3")
+try {
+  $sw=[Diagnostics.Stopwatch]::StartNew()
+  & py -m edge_tts --voice "tr-TR-AhmetNeural" --rate=-18% --pitch=-12Hz --volume=+0% --text "Jarvis ses testi." --write-media $voiceTmp
+  $sw.Stop()
+  $voiceOk=($LASTEXITCODE -eq 0 -and (Test-Path $voiceTmp) -and (Get-Item $voiceTmp).Length -gt 512)
+  $detail=if($voiceOk){("AhmetNeural · "+(Get-Item $voiceTmp).Length+" bytes")}else{"render failed"}
+  Add-Result "Ahmet neural voice render" $voiceOk $detail $sw.Elapsed.TotalMilliseconds
+} catch {
+  Add-Result "Ahmet neural voice render" $false $_.Exception.Message
+} finally {
+  Remove-Item $voiceTmp -Force -ErrorAction SilentlyContinue
 }
 
 try {
@@ -300,6 +316,8 @@ $criticalFailed=($results | Where-Object {
   -not $_.ok -and $_.name -in @(
     "Worker bridge",
     "Adaptive voice profiles",
+    "Chunked voice pipeline",
+    "Ahmet neural voice render",
     "Offline voice fallback",
     "Phone local brain relay",
     "Local brain ready",
