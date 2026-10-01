@@ -1968,11 +1968,11 @@ async function runNativeAgent(message,{maxRounds=4,signal=null}={}){
 
   const persona=updateBrainPersonaFromUserText(text);
   maybeRememberExplicitPreference(text);
+  const recent=recentBrainHistory(10);
   const turnStyle=inferBrainTurnStyle(text,persona);
-  const socialPolicy=inferConversationSocialPolicy(text,recentBrainHistory(10),persona);
+  const socialPolicy=inferConversationSocialPolicy(text,recent,persona);
   const deepRequested=shouldDeepReflect(text);
   const agentModel=(deepRequested&&status.deepInstalled&&status.deepModel)?status.deepModel:LOCAL_BRAIN_MODEL;
-  const recent=recentBrainHistory(10);
   const repairContext=conversationRepairContext(text,recent);
   const memory=relevantBrainMemory(text,5);
   const memoryText=memory.length
