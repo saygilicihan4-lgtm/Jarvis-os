@@ -106,3 +106,5 @@ if(wakeBlock.includes('},3000);'))throw new Error('Fixed 3-second wake delay sti
 if(!wakeBlock.includes('generation!==wakeAckGeneration'))throw new Error('Stale wake acknowledgement guard missing');
 
 if(!html.includes('QUALITY ↑'))throw new Error('Automatic quality escalation diagnostic missing');
+
+if(!html.includes('socialMomentum')||!html.includes('MOMENTUM'))throw new Error('Social momentum diagnostics missing from streaming UI');
