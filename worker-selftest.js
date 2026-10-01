@@ -98,6 +98,12 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(cj.ok===true&&cj.type==='chat','chat routing');
     assert(/gırgır|fikir|devam/i.test(cj.reply),'humanlike chat reply');
 
+    const personaPath=path.join(workspace,'.jarvis-memory','brain-persona.json');
+    assert(fs.existsSync(personaPath),'persona file missing');
+    const persona=JSON.parse(fs.readFileSync(personaPath,'utf8'));
+    assert(Number(persona.humor)>0.68,'persona humor did not adapt upward');
+    assert(Number(persona.playfulness)>0.62,'persona playfulness did not adapt upward');
+
     const cmd=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:"YouTube'u açar mısın?"});
     assert(cmd.status===200,'command status');
     const cm=JSON.parse(cmd.body);
