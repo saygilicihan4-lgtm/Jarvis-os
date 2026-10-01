@@ -124,13 +124,16 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.53.0','worker version');
+    assert(hj.version==='2.54.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localBrain.vision===true,'local multimodal health');
     assert(hj.brainRuntime&&hj.brainRuntime.nativeTools===true,'native tools health');
     assert(hj.brainRuntime.selectiveReasoning===true,'selective reasoning health');
     assert(Number(hj.brainRuntime.context)>=4096,'adaptive context health');
     assert(hj.adaptiveTts&&hj.adaptiveTts.interruptible===true,'interruptible TTS health');
+    assert(hj.adaptiveTts.chunkedPipeline===true,'chunked TTS pipeline health');
+    assert(hj.adaptiveTts.prefetch===true,'TTS prefetch health');
+    assert(hj.adaptiveTts.safeCache===true,'safe TTS cache health');
     assert(hj.adaptiveTts.offlineFallback==='windows-sapi','offline TTS fallback health');
     assert(hj.brainRuntime&&hj.brainRuntime.keepAlive,'brain runtime health');
 
@@ -270,6 +273,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const ts=JSON.parse(ttsState.body);
     assert(ts.ok===true&&typeof ts.active==='boolean','tts-state payload');
     assert(ts.interruptible===true&&Number.isFinite(Number(ts.generation)),'tts interrupt metadata');
+    assert(ts.chunkedPipeline===true&&Number.isFinite(Number(ts.chunks)),'tts chunk pipeline metadata');
 
     const warm=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain-warm',{});
     assert(warm.status===200,'brain warm endpoint');
