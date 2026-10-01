@@ -63,6 +63,8 @@ try {
   Add-Result "Phone local brain relay" $mobileRelayOk ("brain="+$h.mobileRelay.brain+" tts="+$h.mobileRelay.tts+" poll="+$h.mobileRelay.pollMs+"ms")
   $streamRuntimeOk=($h.brainRuntime.streamingChat -eq $true -and $h.brainRuntime.sentenceStreamTts -eq $true)
   Add-Result "Streaming voice runtime" $streamRuntimeOk ("chat="+$h.brainRuntime.streamingChat+" sentenceTts="+$h.brainRuntime.sentenceStreamTts)
+  $socialRuntimeOk=($h.brainRuntime.socialDialogue -eq $true -and $h.brainRuntime.responseVariation -eq $true -and $h.brainRuntime.contextualFollowup -eq $true)
+  Add-Result "Social dialogue runtime" $socialRuntimeOk ("social="+$h.brainRuntime.socialDialogue+" variation="+$h.brainRuntime.responseVariation+" followup="+$h.brainRuntime.contextualFollowup)
   $duplexOk=(@($h.capabilities) -contains "full_duplex_interrupt_v1" -and @($h.capabilities) -contains "cancellable_agent_v1" -and $h.brainRuntime.fullDuplexInterrupt -eq $true -and $h.brainRuntime.cancellableAgent -eq $true)
   Add-Result "Full duplex reasoning cancellation" $duplexOk ("interrupt="+$h.brainRuntime.fullDuplexInterrupt+" cancellableAgent="+$h.brainRuntime.cancellableAgent)
 } catch {
@@ -246,10 +248,13 @@ try {
   $robotic=($reply -match "nas.l yard.mc. olabilirim")
   $ok=($r.ok -eq $true -and $r.type -eq "chat" -and $reply.Length -ge 8 -and -not $robotic)
   Add-Result "Humanlike casual reply" $ok $reply $x.ms
+  $socialOk=($r.socialMode -in @("banter","casual","story","natural") -and $r.followupAllowed -eq $true)
+  Add-Result "Contextual social dialogue" $socialOk ("mode="+$r.socialMode+" followup="+$r.followupAllowed)
   $latencyOk=($x.ms -le 15000)
   Add-Result "Conversation latency" $latencyOk ("brain round-trip="+[math]::Round($x.ms,0)+"ms · target<=15000ms") $x.ms
 } catch {
   Add-Result "Humanlike casual reply" $false $_.Exception.Message
+  Add-Result "Contextual social dialogue" $false $_.Exception.Message
   Add-Result "Conversation latency" $false $_.Exception.Message
 }
 
@@ -401,6 +406,7 @@ $criticalFailed=($results | Where-Object {
     "Offline voice fallback",
     "Phone local brain relay",
     "Streaming voice runtime",
+    "Social dialogue runtime",
     "Full duplex reasoning cancellation",
     "Local brain ready",
     "Local brain prewarm",
@@ -422,6 +428,7 @@ $criticalFailed=($results | Where-Object {
     "Multi-action planning",
     "Safety: unsafe action blocked",
     "Humanlike casual reply",
+    "Contextual social dialogue",
     "Conversation latency",
     "Tool-result reflection",
     "Fast simple finalizer",
