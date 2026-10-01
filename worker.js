@@ -28,7 +28,7 @@ const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
 const WORKER_VERSION='2.40.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2'];
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1'];
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -54,6 +54,8 @@ const LOCAL_BRAIN_FACTS_FILE=path.join(MEMORY_DIR,'brain-facts.jsonl');
 const LOCAL_BRAIN_PERSONA_FILE=path.join(MEMORY_DIR,'brain-persona.json');
 const TEST_MODE=process.env.JARVIS_TEST_MODE==='1';
 const FORCE_LOCAL_BRIDGE=process.env.JARVIS_LOCAL_BRIDGE_FORCE==='1';
+const LOCAL_STT_PORT=Number(process.env.JARVIS_STT_PORT||8768);
+const LOCAL_STT_MODEL=String(process.env.JARVIS_STT_MODEL||'base').trim();
 let speechQueue=Promise.resolve();
 const TTS_LOCK_FILE=path.join(__dirname,'jarvis-tts-active.lock');
 let lastQueuedSpeech='';
@@ -467,7 +469,8 @@ function startLocalTtsBridge(){
       res.writeHead(200,{'content-type':'application/json'});
       return res.end(JSON.stringify({
         ok:true,voice:TTS_VOICE,version:WORKER_VERSION,
-        localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2'}
+        localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2'},
+        localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper'}
       }));
     }
     if(req.method==='POST'&&req.url==='/wake'){
@@ -625,6 +628,23 @@ function startWindowsClapHelper(){
     p.on('error',e=>console.error('[JARVIS] DOUBLE CLAP baslatilamadi:',e.message));
   }catch(e){console.error('[JARVIS] DOUBLE CLAP baslatma hatasi:',e.message)}
 }
+function startWindowsLocalSttHelper(){
+  if(process.platform!=='win32'||TEST_MODE)return;
+  const helper=ensureWindowsHelper('jarvis-local-stt-v1.py');
+  if(!helper){console.error('[JARVIS] LOCAL STT: helper hazırlanamadı');return}
+  try{
+    const env={...process.env,JARVIS_STT_PORT:String(LOCAL_STT_PORT),JARVIS_STT_MODEL:LOCAL_STT_MODEL,JARVIS_WEB_ORIGIN:new URL(BASE).origin};
+    const p=childProcess.spawn('py',[helper],{windowsHide:true,stdio:['ignore','pipe','pipe'],env});
+    p.stdout.on('data',d=>process.stdout.write(String(d)));
+    p.stderr.on('data',d=>process.stderr.write('[JARVIS] LOCAL STT ERROR: '+String(d)));
+    p.on('exit',code=>{
+      if(code===2)console.error('[JARVIS] LOCAL STT dependency eksik; browser speech fallback aktif.');
+      else if(code!==0)console.error('[JARVIS] LOCAL STT helper kapandı. code='+code);
+    });
+    p.on('error',e=>console.error('[JARVIS] LOCAL STT başlatılamadı:',e.message));
+  }catch(e){console.error('[JARVIS] LOCAL STT başlatma hatası:',e.message)}
+}
+
 fs.mkdirSync(WORKSPACE,{recursive:true});
 fs.mkdirSync(MEMORY_DIR,{recursive:true});
 fs.mkdirSync(CHECKPOINT_DIR,{recursive:true});
@@ -1366,6 +1386,7 @@ if(!TEST_MODE){
   cleanupOrphanedJarvisHelpers();
   startWindowsWakeHelper();
   startWindowsClapHelper();
+  startWindowsLocalSttHelper();
 }
 startLocalTtsBridge();
 console.log('Cloud:',BASE);
