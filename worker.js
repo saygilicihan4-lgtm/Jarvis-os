@@ -737,9 +737,11 @@ function startLocalTtsBridge(){
       res.writeHead(200,{'content-type':'application/json'});
       return res.end(JSON.stringify({
         ok:true,voice:TTS_VOICE,version:WORKER_VERSION,
+        capabilities:CAPS,
         localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2'},
         localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper'},
-        adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',profiles:['balanced','casual','playful','warm','focused','work']}
+        adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',profiles:['balanced','casual','playful','warm','focused','work']},
+        mobileRelay:{brain:true,tts:true,pollMs:650}
       }));
     }
     if(req.method==='GET'&&req.url==='/tts-state'){
