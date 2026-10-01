@@ -3020,6 +3020,18 @@ function startLocalTtsBridge(){
       });
       return;
     }
+    if(req.method==='GET'&&req.url==='/interruption-state'){
+      const x=freshInterruptedConversationState();
+      res.writeHead(200,{'content-type':'application/json'});
+      return res.end(JSON.stringify({
+        ok:true,
+        available:!!x,
+        kind:x&&x.kind||null,
+        ageMs:x?Number(x.ageMs||0):null,
+        remainingChars:x?String(x.remainingText||'').length:0,
+        partialChars:x?String(x.partialText||'').length:0
+      }));
+    }
     if(req.method==='GET'&&req.url==='/health'){
       res.writeHead(200,{'content-type':'application/json'});
       return res.end(JSON.stringify({
@@ -3044,6 +3056,8 @@ function startLocalTtsBridge(){
         generation:ttsGeneration,
         chunks:ttsLastChunkCount,
         currentChunk:ttsCurrentChunk,
+        resumeAvailable:!!freshInterruptedConversationState(),
+        resumeKind:(freshInterruptedConversationState()||{}).kind||null,
         interruptible:true,
         chunkedPipeline:true
       }));
@@ -3067,7 +3081,7 @@ function startLocalTtsBridge(){
     if(req.method==='GET'&&req.url==='/brain-status'){
       localBrainStatus().then(status=>{
         res.writeHead(200,{'content-type':'application/json'});
-        res.end(JSON.stringify({ok:true,...status,warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,conversationRepair:true,adaptiveModelRouter:true,fastModel:LOCAL_BRAIN_MODEL,deepModel:LOCAL_BRAIN_DEEP_MODEL,adaptiveTurnPacing:true,fullDuplexInterrupt:true,cancellableAgent:true,socialDialogue:true,responseVariation:true,contextualFollowup:true,dialogueFeedbackLearning:true,socialPreferenceAdaptation:true,autoQualityEscalation:true,weakResponseEscalation:true,repairQualityEscalation:true,dialogueFeedback:readDialogueFeedback(),persona:brainPersona(),memoryFacts:readBrainFacts().length,memoryEpisodes:readBrainEpisodes().length}));
+        res.end(JSON.stringify({ok:true,...status,warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,conversationRepair:true,adaptiveModelRouter:true,fastModel:LOCAL_BRAIN_MODEL,deepModel:LOCAL_BRAIN_DEEP_MODEL,adaptiveTurnPacing:true,fullDuplexInterrupt:true,cancellableAgent:true,socialDialogue:true,responseVariation:true,contextualFollowup:true,dialogueFeedbackLearning:true,socialPreferenceAdaptation:true,socialMomentum:true,ellipticalTurnResolution:true,conversationCadence:true,brevityMirroring:true,adaptiveResponseLength:true,interruptionContinuity:true,spokenResume:true,partialStreamResume:true,autoQualityEscalation:true,weakResponseEscalation:true,repairQualityEscalation:true,dialogueFeedback:readDialogueFeedback(),persona:brainPersona(),memoryFacts:readBrainFacts().length,memoryEpisodes:readBrainEpisodes().length}));
       }).catch(e=>{
         res.writeHead(503,{'content-type':'application/json'});
         res.end(JSON.stringify({ok:false,error:String(e.message||e)}));
