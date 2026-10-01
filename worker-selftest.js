@@ -92,7 +92,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.version==='2.40.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
 
-    const chat=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Bugün biraz sohbet edelim, biraz da gırgır olsun.'});
+    const chat=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Bugün biraz sohbet edelim; böyle konuşmanı istiyorum, biraz da gırgır olsun.'});
     assert(chat.status===200,'chat status');
     const cj=JSON.parse(chat.body);
     assert(cj.ok===true&&cj.type==='chat','chat routing');
