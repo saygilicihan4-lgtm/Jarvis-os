@@ -27,8 +27,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.44.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1'];
+const WORKER_VERSION='2.45.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2'];
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -237,6 +237,7 @@ function showJarvisScreen(){
 function isLocalSafeControlCommand(command){
   const c=String(command||'').trim().replace(/^(pc|bilgisayar)\s*:\s*/i,'');
   return /^(?:sistem durumu|system status|pc durumu|disk durumu|disk status|depolama durumu|ağ durumu|ag durumu|network status|internet durumu|pil durumu|batarya durumu|güç durumu|guc durumu|power status|sesi yükselt|sesi yukselt|ses yükselt|ses yukselt|sesi artır|sesi arttır|ses artır|volume up|sesi azalt|ses azalt|sesi kıs|sesi kis|ses kıs|ses kis|volume down|sessize al|sesi kapat|sesi sustur|mute|sesi aç|sesi ac|unmute|oynat|duraklat|devam ettir|oynat duraklat|play pause|play|pause|sonraki|sonraki şarkı|sonraki sarki|sonraki medya|next track|önceki|onceki|önceki şarkı|onceki sarki|previous track|medyayı durdur|medyayi durdur|stop media)$/i.test(c)
+    || /^(?:dosyalarda ara|dosyalarda arat|workspace search)\s+.+$/i.test(c)
     || /^(?:aç|ac|open|uygulama aç|uygulama ac|program aç|program ac|site aç|site ac)\s+.+$/i.test(c)
     || /^.+?\s+(?:aç|ac)$/i.test(c);
 }
@@ -445,9 +446,17 @@ function inferBrainTurnStyle(text,persona){
 function brainResponseLooksWeak(reply,previous=[]){
   const s=String(reply||'').trim();
   if(s.length<2||s.length>900)return true;
-  if(/^(?:buradayım cihan bey[.!]?|size nasıl yardımcı olabilirim[?]?|elbette[.!]?)$/i.test(s))return true;
-  const last=previous.filter(x=>x.role==='assistant').slice(-3).map(x=>String(x.content||'').toLocaleLowerCase('tr-TR'));
-  if(last.includes(s.toLocaleLowerCase('tr-TR')))return true;
+  if(/^(?:buradayım cihan bey[.!]?|size nasıl yardımcı olabilirim[?]?|elbette[.!]?|tabii ki[.!]?)$/i.test(s))return true;
+  if((s.match(/Cihan Bey/gi)||[]).length>1)return true;
+
+  const assistant=previous.filter(x=>x.role==='assistant').slice(-5).map(x=>String(x.content||'').trim());
+  if(assistant.map(x=>x.toLocaleLowerCase('tr-TR')).includes(s.toLocaleLowerCase('tr-TR')))return true;
+
+  const opener=x=>x.toLocaleLowerCase('tr-TR').replace(/[^a-z0-9çğıöşüı\s]/gi,' ').split(/\s+/).filter(Boolean).slice(0,3).join(' ');
+  const currentOpener=opener(s);
+  if(currentOpener&&assistant.filter(x=>opener(x)===currentOpener).length>=2)return true;
+
+  if(/^(?:elbette|tabii ki|memnuniyetle|harika bir soru)[,!.\s]/i.test(s)&&assistant.some(x=>/^(?:elbette|tabii ki|memnuniyetle|harika bir soru)[,!.\s]/i.test(x)))return true;
   return false;
 }
 function normalizeBrainReply(reply){
@@ -613,7 +622,7 @@ async function callLocalBrain(message){
   if(memoryDirective.handled){
     appendLocalBrainHistory('user',text);
     appendLocalBrainHistory('assistant',memoryDirective.reply);
-    return{ok:true,...memoryDirective,model:'local-memory',memoryHits:0,personaVersion:brainPersona().version,tone:'warm'};
+    return{ok:true,...memoryDirective,commands:[],model:'local-memory',memoryHits:0,personaVersion:brainPersona().version,tone:'warm'};
   }
 
   maybeRememberExplicitPreference(text);
@@ -623,8 +632,10 @@ async function callLocalBrain(message){
   if(!status.ready)return{ok:false,error:'OLLAMA_OFFLINE',model:LOCAL_BRAIN_MODEL};
   if(!status.installed)return{ok:false,error:'MODEL_NOT_INSTALLED',model:LOCAL_BRAIN_MODEL};
 
-  const recent=recentBrainHistory(6);
-  const memory=relevantBrainMemory(text,5);
+  // Keep enough short-term dialogue turns for natural references such as
+  // "az önce", "onu", "ikincisi" even after several tool/command turns.
+  const recent=recentBrainHistory(12);
+  const memory=relevantBrainMemory(text,6);
   const persona=adjustedPersona||brainPersona();
   const turnStyle=inferBrainTurnStyle(text,persona);
   const memoryText=memory.length
@@ -644,7 +655,10 @@ async function callLocalBrain(message){
     'Önceki konuşmadaki zamirleri ve eksik ifadeleri bağlamdan çözmeye çalış.',
     'Bilmediğin şeyi uydurma. Gerçek PC eylemi yapılmadıysa yapıldı deme.',
     'Bir bilgisayar eylemi isteniyorsa yalnızca desteklenen güvenli komutlardan birine normalize et.',
-    'Desteklenen güvenli komutlar: sistem durumu, disk durumu, ağ durumu, pil durumu, sesi yükselt, sesi azalt, sessize al, oynat, duraklat, sonraki, önceki, medyayı durdur, youtube aç, google aç, github aç, chatgpt aç, opera gx aç, chrome aç, edge aç, not defteri aç, hesap makinesi aç, dosya gezgini aç, görev yöneticisi aç, ayarlar aç, ses ayarları aç, bluetooth ayarları aç, wifi ayarları aç, çalışma alanı aç.',
+    'Kullanıcı aynı cümlede iki veya daha fazla güvenli eylem isterse type=plan kullan ve commands alanına en fazla dört komutu doğru sırayla koy.',
+    'Tek eylem için type=command kullan; command alanına tek standart komut yaz ve commands boş dizi olsun.',
+    'Sohbet için type=chat kullan; command null ve commands boş dizi olsun.',
+    'Desteklenen güvenli komutlar: sistem durumu, disk durumu, ağ durumu, pil durumu, sesi yükselt, sesi azalt, sessize al, oynat, duraklat, sonraki, önceki, medyayı durdur, youtube aç, google aç, github aç, chatgpt aç, opera gx aç, chrome aç, edge aç, not defteri aç, hesap makinesi aç, dosya gezgini aç, görev yöneticisi aç, ayarlar aç, ses ayarları aç, bluetooth ayarları aç, wifi ayarları aç, çalışma alanı aç, dosyalarda ara <arama ifadesi>.',
     'Güvenli katalog dışındaki eylemleri type=chat olarak ele al; açık ve kısa biçimde henüz bağlı olmadığını söyle.',
     'Belirsizse tek kısa soru sor. Gereksiz teyit isteme.',
     'Kullanıcının açık tercihlerini hatırla ancak hassas özellikler hakkında çıkarım yapma.',
@@ -658,12 +672,13 @@ async function callLocalBrain(message){
   const schema={
     type:'object',
     properties:{
-      type:{type:'string',enum:['chat','command']},
+      type:{type:'string',enum:['chat','command','plan']},
       reply:{type:'string'},
       command:{anyOf:[{type:'string'},{type:'null'}]},
+      commands:{type:'array',items:{type:'string'},maxItems:4},
       tone:{type:'string',enum:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']}
     },
-    required:['type','reply','command','tone'],
+    required:['type','reply','command','commands','tone'],
     additionalProperties:false
   };
 
@@ -709,15 +724,26 @@ async function callLocalBrain(message){
 
     if(!parsed)throw new Error('LOCAL_BRAIN_BAD_JSON');
 
-    let type=parsed.type==='command'?'command':'chat';
+    let type=parsed.type==='plan'?'plan':parsed.type==='command'?'command':'chat';
     let reply=normalizeBrainReply(parsed.reply);
     let command=parsed.command==null?null:String(parsed.command).trim();
+    let commands=Array.isArray(parsed.commands)?parsed.commands.map(x=>String(x||'').trim()).filter(Boolean).slice(0,4):[];
     const allowedTones=new Set(['balanced','casual','playful','warm','focused','work','serious','excited','gentle']);
     let tone=allowedTones.has(String(parsed.tone||''))?String(parsed.tone):turnStyle.mode;
 
-    if(type==='command'&&!isLocalSafeControlCommand(command)){
-      type='chat';command=null;
-      reply='Ne demek istediğinizi anladım; fakat bu eylem henüz güvenli yerel araç listeme bağlı değil.';
+    if(type==='command'){
+      commands=[];
+      if(!isLocalSafeControlCommand(command)){
+        type='chat';command=null;
+        reply='Ne demek istediğinizi anladım; fakat bu eylem henüz güvenli yerel araç listeme bağlı değil.';
+      }
+    }
+    if(type==='plan'){
+      command=null;
+      if(commands.length<2||commands.some(x=>!isLocalSafeControlCommand(x))){
+        type='chat';commands=[];
+        reply='İsteğinizde birden fazla adım var ama bazı adımlar henüz güvenli yerel araç listemde değil. Desteklediğim kısmı netleştirirseniz uygulayabilirim.';
+      }
     }
 
     if(type==='chat'&&brainResponseLooksWeak(reply,recent)){
@@ -732,10 +758,10 @@ async function callLocalBrain(message){
     appendLocalBrainHistory('assistant',reply);
     remember({
       kind:'local_brain_v2',
-      type,command:command||null,model:LOCAL_BRAIN_MODEL,
+      type,command:command||null,commands,model:LOCAL_BRAIN_MODEL,
       memoryHits:memory.length,mode:turnStyle.mode
     });
-    return{ok:true,type,reply,command,model:LOCAL_BRAIN_MODEL,memoryHits:memory.length,personaVersion:persona.version,tone};
+    return{ok:true,type,reply,command,commands,model:LOCAL_BRAIN_MODEL,memoryHits:memory.length,personaVersion:persona.version,tone};
   }catch(e){
     return{ok:false,error:String(e.message||e),model:LOCAL_BRAIN_MODEL};
   }
@@ -1330,6 +1356,50 @@ function windowsPowerStatus(){
   else parts.unshift('pil bilgisi alınamadı');
   return{ok:true,message:'PC güç durumu · '+parts.join(' · ')};
 }
+function searchWorkspaceText(query){
+  const raw=String(query||'').replace(/\s+/g,' ').trim();
+  const tokens=[...new Set(raw.toLocaleLowerCase('tr-TR').split(/[^a-z0-9çğıöşüı._-]+/i).filter(x=>x.length>=2))].slice(0,12);
+  if(!tokens.length)return{ok:false,message:'Arama ifadesi boş.'};
+
+  const allowedExt=new Set(['.txt','.md','.json','.js','.mjs','.cjs','.ts','.tsx','.jsx','.py','.csv','.html','.css','.yml','.yaml','.log']);
+  const hits=[];
+  let scanned=0;
+  const walk=(dir,depth=0)=>{
+    if(depth>5||scanned>=220)return;
+    let entries=[];try{entries=fs.readdirSync(dir,{withFileTypes:true})}catch(_){return}
+    for(const e of entries){
+      if(scanned>=220)break;
+      if(e.name==='.jarvis-memory'||e.name==='node_modules'||e.name==='.git')continue;
+      const full=path.join(dir,e.name);
+      if(e.isDirectory()){walk(full,depth+1);continue}
+      if(!e.isFile()||!allowedExt.has(path.extname(e.name).toLowerCase()))continue;
+      scanned++;
+      let stat;try{stat=fs.statSync(full)}catch(_){continue}
+      if(stat.size>1024*1024)continue;
+      let data;try{data=fs.readFileSync(full,'utf8')}catch(_){continue}
+      const lower=data.toLocaleLowerCase('tr-TR');
+      let score=0;
+      for(const t of tokens){
+        let idx=0,count=0;
+        while((idx=lower.indexOf(t,idx))!==-1&&count<8){count++;idx+=t.length}
+        score+=count;
+      }
+      if(!score)continue;
+      const first=tokens.map(t=>lower.indexOf(t)).filter(x=>x>=0).sort((a,b)=>a-b)[0]||0;
+      const start=Math.max(0,first-140),end=Math.min(data.length,first+420);
+      const snippet=data.slice(start,end).replace(/\s+/g,' ').trim();
+      hits.push({score,path:path.relative(WORKSPACE,full),snippet});
+    }
+  };
+  walk(WORKSPACE,0);
+  hits.sort((a,b)=>b.score-a.score||a.path.localeCompare(b.path));
+  const top=hits.slice(0,5);
+  if(!top.length)return{ok:true,message:'Çalışma alanında "'+raw+'" için eşleşme bulamadım.'};
+  return{
+    ok:true,
+    message:'Çalışma alanı araması · '+top.length+' sonuç: '+top.map((x,i)=>(i+1)+') '+x.path+' — '+x.snippet).join(' | ')
+  };
+}
 function openKnownDesktopTarget(raw){
   if(process.platform!=='win32')return{ok:false,message:'Masaüstü açma komutları şu anda Windows için etkin'};
   let key=String(raw||'').toLocaleLowerCase('tr-TR').trim()
@@ -1525,6 +1595,12 @@ async function execute(task){
     return windowsPowerStatus();
   }
 
+  const wsSearch=c.match(/^(?:dosyalarda ara|dosyalarda arat|workspace search)\s+(.+)$/i);
+  if(wsSearch){
+    const r=searchWorkspaceText(wsSearch[1]);
+    return{ok:!!r.ok,retryable:false,message:r.message};
+  }
+
   const openTarget=c.match(/^(?:aç|ac|open|uygulama aç|uygulama ac|program aç|program ac|site aç|site ac)\s+(.+)$/i)
     || c.match(/^(.+?)\s+(?:aç|ac)$/i);
   if(openTarget){
@@ -1686,17 +1762,41 @@ async function serviceMobileBrain(){
       let result=await callLocalBrain(q.message);
       if(!result||result.ok!==true)throw new Error(result&&result.error||'local brain failed');
 
-      if(result.type==='command'&&result.command){
+      if(result.type==='plan'&&Array.isArray(result.commands)&&result.commands.length){
+        const actionResults=[];
+        let allOk=true;
+        for(const command of result.commands.slice(0,4)){
+          if(!isLocalSafeControlCommand(command)){allOk=false;actionResults.push({ok:false,message:'Güvenli olmayan adım engellendi: '+command});break}
+          const action=await execute({command});
+          actionResults.push(action||{ok:false,message:command+' sonucu alınamadı'});
+          if(!action||!action.ok){allOk=false;break}
+        }
+        const summary=actionResults.map(x=>String(x&&x.message||'')).filter(Boolean).join('. ');
+        result={
+          ok:true,
+          type:'chat',
+          reply:summary||String(result.reply||'Plan işlendi.'),
+          command:null,
+          commands:result.commands.slice(0,4),
+          executed:allOk,
+          actionResults,
+          model:result.model,
+          tone:allOk?String(result.tone||'focused'):'warm',
+          memoryHits:result.memoryHits||0,
+          personaVersion:result.personaVersion||2
+        };
+      }else if(result.type==='command'&&result.command){
         const action=await execute({command:result.command});
         result={
           ok:true,
           type:'chat',
           reply:String(action&&action.message||result.reply||'Komut işlendi.'),
           command:result.command,
+          commands:[],
           executed:!!(action&&action.ok),
           actionResult:action||null,
           model:result.model,
-          tone:action&&action.ok?'focused':'warm',
+          tone:action&&action.ok?String(result.tone||'focused'):'warm',
           memoryHits:result.memoryHits||0,
           personaVersion:result.personaVersion||2
         };

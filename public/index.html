@@ -1350,6 +1350,7 @@ async function checkLocalAI(){
 function isDirectLocalPcCommand(command){
   const c=String(command||'').trim().replace(/^(pc|bilgisayar)\s*:\s*/i,'');
   return /^(?:sistem durumu|system status|pc durumu|disk durumu|disk status|depolama durumu|ağ durumu|ag durumu|network status|internet durumu|pil durumu|batarya durumu|güç durumu|guc durumu|power status|sesi yükselt|sesi yukselt|ses yükselt|ses yukselt|sesi artır|sesi arttır|ses artır|volume up|sesi azalt|ses azalt|sesi kıs|sesi kis|ses kıs|ses kis|volume down|sessize al|sesi kapat|sesi sustur|mute|sesi aç|sesi ac|unmute|oynat|duraklat|devam ettir|oynat duraklat|play pause|play|pause|sonraki|sonraki şarkı|sonraki sarki|sonraki medya|next track|önceki|onceki|önceki şarkı|onceki sarki|previous track|medyayı durdur|medyayi durdur|stop media)$/i.test(c)
+    || /^(?:dosyalarda ara|dosyalarda arat|workspace search)\s+.+$/i.test(c)
     || /^(?:aç|ac|open|uygulama aç|uygulama ac|program aç|program ac|site aç|site ac)\s+.+$/i.test(c)
     || /^.+?\s+(?:aç|ac)$/i.test(c);
 }
@@ -1394,10 +1395,10 @@ async function refreshLocalWorkerHealth(){
     return ver;
   }catch(_){clearTimeout(timer);return null}
 }
-async function tryDirectLocalPcControl(command){
-  if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis()||!isDirectLocalPcCommand(command))return false;
+async function executeDirectLocalPcControl(command,{speakResult=true}={}){
+  if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis()||!isDirectLocalPcCommand(command))return null;
   const ctl=new AbortController();
-  const timer=setTimeout(()=>ctl.abort(),5000);
+  const timer=setTimeout(()=>ctl.abort(),7000);
   try{
     const r=await fetch('http://127.0.0.1:8765/control',{
       method:'POST',
@@ -1408,16 +1409,28 @@ async function tryDirectLocalPcControl(command){
     clearTimeout(timer);
     const j=await r.json().catch(()=>({}));
     if(!r.ok||j.ok!==true)throw new Error(j.message||j.error||('LOCAL CONTROL '+r.status));
-    consoleStatus.textContent='LOCAL PC · '+String(j.message||'TAMAMLANDI');
-    coreSubtitle.textContent='Yerel PC komutu Worker tarafından doğrudan yürütüldü';
+
+    const message=String(j.message||'TAMAMLANDI');
+    consoleStatus.textContent='LOCAL PC · '+message.slice(0,520);
+    coreSubtitle.textContent=message.slice(0,220);
     cmd.value='';
-    if(j.message&&!/sessize al|sesi kapat|sesi sustur|mute/i.test(command))speak(String(j.message),'tr-TR');
-    return true;
+
+    if(speakResult&&!/sessize al|sesi kapat|sesi sustur|mute/i.test(command)){
+      if(/^(?:dosyalarda ara|dosyalarda arat|workspace search)/i.test(command)){
+        speak('Dosya aramasını tamamladım. Sonuçları ekranda gösteriyorum.','tr-TR','focused');
+      }else{
+        speak(message,'tr-TR','focused');
+      }
+    }
+    return j;
   }catch(e){
     clearTimeout(timer);
     consoleStatus.textContent='LOCAL PC BRIDGE FALLBACK · '+String(e.message||e).slice(0,80);
-    return false;
+    return null;
   }
+}
+async function tryDirectLocalPcControl(command){
+  return !!(await executeDirectLocalPcControl(command,{speakResult:true}));
 }
 async function askMobileLocalBrain(message){
   if(!isMobileJarvis())return {handled:false};
@@ -1480,6 +1493,22 @@ async function askJarvisBrain(message){
       clearTimeout(timer);
       const lj=await lr.json().catch(()=>({}));
       if(lr.ok&&lj.ok===true){
+        if(lj.type==='plan'&&Array.isArray(lj.commands)&&lj.commands.length){
+          const outputs=[];
+          let allOk=true;
+          for(const raw of lj.commands.slice(0,4)){
+            const normalized=canonicalJarvisCommand(String(raw));
+            const result=await executeDirectLocalPcControl(normalized,{speakResult:false});
+            if(result&&result.ok===true)outputs.push(String(result.message||normalized+' tamamlandı'));
+            else{allOk=false;outputs.push(normalized+' tamamlanamadı');break}
+          }
+          const finalMessage=outputs.join('. ');
+          consoleStatus.textContent='LOCAL BRAIN PLAN · '+outputs.length+' ADIM · '+(allOk?'OK':'DURDU');
+          coreSubtitle.textContent=String(lj.reply||finalMessage).slice(0,220);
+          cmd.value='';
+          speak(finalMessage||String(lj.reply||'Plan tamamlandı.'),'tr-TR',allOk?String(lj.tone||'focused'):'warm');
+          return {handled:true,plan:true,allOk,outputs};
+        }
         if(lj.type==='command'&&lj.command){
           const normalized=canonicalJarvisCommand(String(lj.command));
           consoleStatus.textContent='LOCAL BRAIN · '+String(message)+' → '+normalized;
