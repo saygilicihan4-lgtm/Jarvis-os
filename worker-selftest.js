@@ -124,10 +124,12 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.52.0','worker version');
+    assert(hj.version==='2.53.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localBrain.vision===true,'local multimodal health');
     assert(hj.brainRuntime&&hj.brainRuntime.nativeTools===true,'native tools health');
+    assert(hj.brainRuntime.selectiveReasoning===true,'selective reasoning health');
+    assert(Number(hj.brainRuntime.context)>=4096,'adaptive context health');
     assert(hj.adaptiveTts&&hj.adaptiveTts.interruptible===true,'interruptible TTS health');
     assert(hj.adaptiveTts.offlineFallback==='windows-sapi','offline TTS fallback health');
     assert(hj.brainRuntime&&hj.brainRuntime.keepAlive,'brain runtime health');
@@ -191,6 +193,9 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(!ragj.workspaceSources.some(x=>/credentials/i.test(x)),'sensitive workspace file leaked into RAG');
     const ragRequests=seen.slice(ragSeen);
     const ragPrompt=ragRequests.map(x=>(x.messages||[]).map(m=>String(m.content||'')).join('\n')).join('\n');
+    assert(ragRequests.some(x=>x.think===true),'deep request did not enable thinking');
+    assert(ragRequests.some(x=>x.think===false),'fast draft pass missing before deep reasoning');
+    assert(ragRequests.every(x=>Number(x.options&&x.options.num_ctx||0)>=4096),'adaptive context not applied');
     assert(/safir anka 4821/i.test(ragPrompt),'workspace RAG snippet missing from prompt');
     assert(!/SHOULD_NOT_ENTER_RAG/i.test(ragPrompt),'sensitive RAG content leaked');
     assert(/müşteri dönüşümü|VAROVA için/i.test(ragj.reply),'deep refinement reply missing');
