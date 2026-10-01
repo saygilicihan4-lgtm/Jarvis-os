@@ -352,26 +352,39 @@ function canonicalJarvisCommand(input){
   if(!k)return raw;
 
   // Fast semantic repairs for the commands we intentionally allow to run
-  // without confirmation. These absorb common Turkish ASR suffix mistakes.
-  if(/(?:youtube|yutube|yutub|yutup|you tube)/.test(k))return 'youtube aç';
-  if(/(?:google|gugil|gogle)/.test(k)&&/(ac|open|gir|git)/.test(k))return 'google aç';
-  if(/(?:github|git hub|githab)/.test(k)&&/(ac|open|gir|git)/.test(k))return 'github aç';
-  if(/(?:chatgpt|chat gpt|cet gpt)/.test(k)&&/(ac|open|gir|git)/.test(k))return 'chatgpt aç';
-  if(/opera(?: gx)?/.test(k)&&/(ac|open)/.test(k))return 'opera gx aç';
-  if(/chrome|krom/.test(k)&&/(ac|open)/.test(k))return 'chrome aç';
-  if(/edge|ec/.test(k)&&/(ac|open)/.test(k))return 'edge aç';
+  // without confirmation. These absorb common Turkish ASR suffix/phonetic mistakes.
+  const wantsOpen=/(?:^|\s)(?:ac|open|gir|git|baslat|calistir)(?:\s|$)/.test(k);
+  const exactish=(re)=>re.test(k)&&(!k.includes(' ')||wantsOpen);
 
-  if(/ses/.test(k)&&/(yuksel|yukselt|artir|arttir|ac)/.test(k))return 'sesi yükselt';
-  if(/ses/.test(k)&&/(azalt|kis|dusur)/.test(k))return 'sesi azalt';
+  if(/(?:youtube|yutube|yutub|yutup|you tube|yu tub)/.test(k))return 'youtube aç';
+  if(/(?:google|gugil|gogle|googıl|gogil)/.test(k)&&(wantsOpen||/^g(?:oo|u)g/.test(k)))return 'google aç';
+  if(/(?:github|git hub|githab|gitap|git hap)/.test(k)&&(wantsOpen||/^git/.test(k)))return 'github aç';
+  if(/(?:chatgpt|chat gpt|cet gpt|cat gpt|chat cipiti|cet cipiti)/.test(k)&&(wantsOpen||/gpt/.test(k)))return 'chatgpt aç';
+  if(/(?:opera\s*(?:gx|ceks|cix|giks)?|opra\s*(?:gx|ceks|cix)?)/.test(k)&&(wantsOpen||/^op/.test(k)))return 'opera gx aç';
+  if(/(?:chrome|krom|krome|kromu)/.test(k)&&(wantsOpen||/^krom|^chrome/.test(k)))return 'chrome aç';
+  if(/(?:edge|ec|edc|micros?oft edge)/.test(k)&&(wantsOpen||/^edge|^ec$/.test(k)))return 'edge aç';
+
+  if(/(?:not defteri|not defter|notepad|not pet|notpad)/.test(k)&&(wantsOpen||/^not/.test(k)))return 'not defteri aç';
+  if(/(?:hesap makinesi|hesap makinası|hesap makinesi|calculator|kalkulator)/.test(k)&&(wantsOpen||/^hesap/.test(k)))return 'hesap makinesi aç';
+  if(/(?:dosya gezgini|dosya gezgin|file explorer|explorer)/.test(k)&&(wantsOpen||/^dosya|^file|^explorer/.test(k)))return 'dosya gezgini aç';
+  if(/(?:gorev yoneticisi|gorev yonetici|task manager|task menecer)/.test(k)&&(wantsOpen||/^gorev|^task/.test(k)))return 'görev yöneticisi aç';
+
+  if(/(?:ses ayarlari|sound settings|ses ayari)/.test(k))return 'ses ayarlarını aç';
+  if(/(?:bluetooth|blutut|blu tus|blue tooth)/.test(k)&&(wantsOpen||/ayar/.test(k)))return 'bluetooth ayarlarını aç';
+  if(/(?:wi\s*fi|wifi|vayfay|wayfay|wireless)/.test(k)&&(wantsOpen||/ayar/.test(k)))return 'wifi ayarlarını aç';
+  if(/(?:calisma alani|workspace|jarvis workspace)/.test(k)&&(wantsOpen||/^calisma|^workspace/.test(k)))return 'çalışma alanı aç';
+
+  if(/ses/.test(k)&&/(yuksel|yukselt|yukselsin|artir|arttir|arttir|ac)/.test(k))return 'sesi yükselt';
+  if(/ses/.test(k)&&/(azalt|kis|kisin|dusur|dussun)/.test(k))return 'sesi azalt';
   if(/ses/.test(k)&&/(sessiz|kapat|sustur|mute)/.test(k))return 'sessize al';
-  if(/(pil|batarya|guc)/.test(k)&&/(durum|kac|yuzde)/.test(k))return 'pil durumu';
-  if(/sistem/.test(k)&&/durum/.test(k))return 'sistem durumu';
-  if(/disk|depolama/.test(k)&&/durum/.test(k))return 'disk durumu';
-  if(/(ag|internet|network)/.test(k)&&/durum/.test(k))return 'ağ durumu';
-  if(/duraklat|pause/.test(k))return 'duraklat';
-  if(/oynat|play/.test(k))return 'oynat';
-  if(/sonraki|next/.test(k))return 'sonraki';
-  if(/onceki|previous/.test(k))return 'önceki';
+  if(/(pil|batarya|guc|battery)/.test(k)&&/(durum|kac|yuzde|status)/.test(k))return 'pil durumu';
+  if(/(?:sistem|system)/.test(k)&&/(durum|status)/.test(k))return 'sistem durumu';
+  if(/(?:disk|depolama|storage)/.test(k)&&/(durum|status|bos|dolu)/.test(k))return 'disk durumu';
+  if(/(?:ag|internet|network)/.test(k)&&/(durum|status|baglanti)/.test(k))return 'ağ durumu';
+  if(/(?:duraklat|pause|poz|beklet)/.test(k))return 'duraklat';
+  if(/(?:oynat|play|devam ettir|devam et)/.test(k))return 'oynat';
+  if(/(?:sonraki|next|ileri)/.test(k))return 'sonraki';
+  if(/(?:onceki|previous|geri)/.test(k))return 'önceki';
 
   const canon=[
     'sistem durumu','disk durumu','ağ durumu','pil durumu',
@@ -387,7 +400,7 @@ function canonicalJarvisCommand(input){
     if(ratio<bestRatio){bestRatio=ratio;best=x}
   }
   // Conservative threshold: repair only clearly close low-risk commands.
-  return best&&bestRatio<=0.24?best:raw;
+  return best&&bestRatio<=0.30?best:raw;
 }
 function recognitionCandidates(e){
   const groups=[];
