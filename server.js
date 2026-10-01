@@ -137,9 +137,9 @@ function workerIdentity(req){
 }
 function agentFor(c){
   c=String(c||'').toLowerCase();
+  if(requiredCapability(c))return'DEVELOPER';
   if(/shopify|ürün|stok|sipariş|varova/.test(c))return'COMMERCE';
   if(/video|short|reels|youtube/.test(c))return'CREATOR';
-  if(requiredCapability(c))return'DEVELOPER';
   if(/kod|uygulama|site|deploy|github|dosya|klasör|bilgisayar|pc:|proje oluştur|proje olustur|yeni proje/.test(c))return'DEVELOPER';
   if(/araştır|bul|incele/.test(c))return'RESEARCH';
   if(/reklam|büyü|satış|seo/.test(c))return'GROWTH';
@@ -161,6 +161,8 @@ function requiredCapability(command){
   if(/^(ağ durumu|ag durumu|network status|internet durumu)/.test(c))return'network_status_v1';
   if(/^(yerel ai durumu|local ai status|ai readiness)/.test(c))return'local_ai_readiness_v1';
   if(/^(sistem durumu|system status|pc durumu)/.test(c))return'system_status';
+  if(/^(?:aç|ac|open|uygulama aç|uygulama ac|program aç|program ac|site aç|site ac)\s+/.test(c)||/^.+?\s+(?:aç|ac)$/.test(c))return'desktop_launch_v1';
+  if(/^(?:creator sesi oluştur|creator sesi olustur|video sesi oluştur|video sesi olustur|shorts sesi oluştur|shorts sesi olustur)/.test(c))return'creator_tts_v1';
   if(/^(dosyaları listele|dosya listesi|list files)/.test(c))return'list_files';
   if(/^(dosya oluştur|dosya olustur|write file)/.test(c))return'write_file';
   if(/^(dosya oku|read file)/.test(c))return'read_file';
@@ -881,7 +883,8 @@ const server=http.createServer((req,res)=>{
         const previous=state.workers.devices[deviceId];
         const readOnlyCaps=new Set([
           'system_status','local_memory','process_list_v1','disk_status_v1',
-          'network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1'
+          'network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1',
+          'desktop_launch_v1'
         ]);
         const priorAllowed=previous&&Array.isArray(previous.allowedCapabilities)?previous.allowedCapabilities:[];
         const safeNew=snapshot.capabilities.filter(x=>readOnlyCaps.has(x));
