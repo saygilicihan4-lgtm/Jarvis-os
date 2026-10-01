@@ -376,7 +376,7 @@ function applyLearnedSpeechAlias(text){
   let normalized=key;
   for(const [from,to] of entries){
     if(from.length<4)continue;
-    const escaped=from.replace(/[.*+?^$()|[\]\\]/g,'\\function canonicalJarvisCommand(input){');
+    const escaped=from.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
     const re=new RegExp('(^|\\s)'+escaped+'(?=\\s|$)','i');
     if(re.test(normalized)){
       normalized=normalized.replace(re,(m,prefix)=>prefix+String(to).toLocaleLowerCase('tr-TR'));
@@ -397,6 +397,35 @@ async function loadLocalSpeechLexicon(){
     speechLexiconUpdatedAt=String(j.updatedAt||'');
     return true;
   }catch(_){return false}
+}
+async function normalizeWithWorkerSpeechLexicon(text){
+  const raw=String(text||'').replace(/\s+/g,' ').trim();
+  if(!raw||!/Windows/i.test(navigator.userAgent)||isMobileJarvis())return{raw,normalized:raw,changed:false,lexiconCount:0};
+  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),1200);
+  try{
+    const r=await fetch('http://127.0.0.1:8765/speech-normalize',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({text:raw}),
+      signal:ctl.signal
+    });
+    clearTimeout(timer);
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||j.ok!==true)return{raw,normalized:raw,changed:false,lexiconCount:0};
+    if(Number(j.lexiconCount||0)!==Object.keys(speechLexiconAliases||{}).length){
+      loadLocalSpeechLexicon().catch(()=>{});
+    }
+    return{
+      raw,
+      normalized:String(j.normalized||raw).trim()||raw,
+      changed:!!j.changed,
+      lexiconCount:Number(j.lexiconCount||0)
+    };
+  }catch(_){
+    clearTimeout(timer);
+    const local=applyLearnedSpeechAlias(raw);
+    return{raw,normalized:String(local.value||raw),changed:!!local.changed,lexiconCount:Object.keys(speechLexiconAliases||{}).length};
+  }
 }
 async function teachLocalSpeechAlias(heard,intended,source='voice-self-correction'){
   const from=String(heard||'').replace(/\s+/g,' ').trim();
@@ -677,7 +706,8 @@ async function listenWithLocalStt(source='command'){
       wakeWordMutedUntil=Date.now()+9000;
       return true;
     }
-    const normalized=canonicalJarvisCommand(heard);
+    const learned=await normalizeWithWorkerSpeechLexicon(heard);
+    const normalized=canonicalJarvisCommand(learned.normalized);
     wakeWordAwaitingCommand=false;
     wakeWordConversationUntil=0;
     wakeWordMutedUntil=Date.now()+12000;
@@ -685,7 +715,9 @@ async function listenWithLocalStt(source='command'){
     voiceConversationUntil=Date.now()+120000;
 
     if(window.voiceState)voiceState.textContent='VOICE: LOCAL STT CAPTURED';
-    if(window.consoleStatus)consoleStatus.textContent='LOCAL STT · DUYULAN: '+heard+' · YORUM: '+normalized;
+    if(window.consoleStatus)consoleStatus.textContent=learned.changed
+      ?('LOCAL STT · DUYULAN: '+heard+' · ÖĞRENİLMİŞ: '+learned.normalized+' · KOMUT: '+normalized)
+      :('LOCAL STT · DUYULAN: '+heard+' · YORUM: '+normalized);
     cmd.value=normalized;
     await send();
     return true;
@@ -827,7 +859,8 @@ if(SpeechRecognition){
           return;
         }
         // One-breath mode: "Jarvis, sistem durumu".
-        const repairedCommand=canonicalJarvisCommand(choice.repaired||wake.command);
+        const learnedWake=await normalizeWithWorkerSpeechLexicon(choice.repaired||wake.command);
+        const repairedCommand=canonicalJarvisCommand(learnedWake.normalized);
         activeLanguage=detectLanguage(repairedCommand);
         recognition.lang=activeLanguage;
         cmd.value=repairedCommand;
@@ -837,7 +870,9 @@ if(SpeechRecognition){
         voiceConversationActive=true;
         voiceConversationUntil=Date.now()+120000;
         voiceState.textContent='VOICE: JARVIS · COMMAND CAPTURED';
-        consoleStatus.textContent='JARVIS · DUYULAN: '+captured+' · KOMUT: '+repairedCommand;
+        consoleStatus.textContent=learnedWake.changed
+          ?('JARVIS · DUYULAN: '+captured+' · ÖĞRENİLMİŞ: '+learnedWake.normalized+' · KOMUT: '+repairedCommand)
+          :('JARVIS · DUYULAN: '+captured+' · KOMUT: '+repairedCommand);
         setTimeout(()=>send(),120);
         return;
       }
@@ -856,7 +891,8 @@ if(SpeechRecognition){
         return;
       }
 
-      const repairedFollowUp=canonicalJarvisCommand(choice.repaired||captured);
+      const learnedFollow=await normalizeWithWorkerSpeechLexicon(choice.repaired||captured);
+      const repairedFollowUp=canonicalJarvisCommand(learnedFollow.normalized);
       activeLanguage=detectLanguage(repairedFollowUp);
       recognition.lang=activeLanguage;
       cmd.value=repairedFollowUp;
@@ -864,7 +900,9 @@ if(SpeechRecognition){
       wakeWordConversationUntil=0;
       wakeWordMutedUntil=Date.now()+12000;
       voiceState.textContent='VOICE: '+(LANGUAGE_NAMES[activeLanguage.split('-')[0]]||activeLanguage)+' · COMMAND CAPTURED';
-      consoleStatus.textContent='JARVIS · DUYULAN: '+captured+' · KOMUT: '+repairedFollowUp;
+      consoleStatus.textContent=learnedFollow.changed
+        ?('JARVIS · DUYULAN: '+captured+' · ÖĞRENİLMİŞ: '+learnedFollow.normalized+' · KOMUT: '+repairedFollowUp)
+        :('JARVIS · DUYULAN: '+captured+' · KOMUT: '+repairedFollowUp);
       setTimeout(()=>send(),140);
     }
   };
