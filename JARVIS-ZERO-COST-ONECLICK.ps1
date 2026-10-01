@@ -26,13 +26,16 @@ function Download-RepoFile([string]$Name) {
   return $dst
 }
 
-Write-Host "[1/8] JARVIS dosyalari guncelleniyor..." -ForegroundColor Yellow
+Write-Host "[1/9] JARVIS dosyalari guncelleniyor..." -ForegroundColor Yellow
 $files = @(
   "worker.js",
   "start-worker-windows.bat",
   "jarvis-wake-hotkey.ps1",
   "jarvis-double-clap-v9.py",
   "jarvis-local-stt-v4.py",
+  "jarvis-startup.ps1",
+  "JARVIS-STARTUP-HIDDEN.vbs",
+  "install-jarvis-startup.ps1",
   "JARVIS-LIVE-ACCEPTANCE.ps1"
 )
 foreach ($f in $files) { Download-RepoFile $f | Out-Null }
@@ -43,7 +46,7 @@ try {
   if ($LASTEXITCODE -ne 0) { throw "worker.js syntax check failed" }
 } finally { Pop-Location }
 
-Write-Host "[2/8] Sistem kapasitesi olculuyor..." -ForegroundColor Yellow
+Write-Host "[2/9] Sistem kapasitesi olculuyor..." -ForegroundColor Yellow
 $ramGb = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1)
 if ($ramGb -ge 14) { $BrainModel = "qwen3.5:4b" }
 elseif ($ramGb -ge 7) { $BrainModel = "qwen3.5:2b" }
@@ -60,7 +63,7 @@ $env:JARVIS_LOCAL_BRAIN_KEEP_ALIVE = "30m"
 $env:JARVIS_STT_MODEL = $SttModel
 Write-Host ("[JARVIS] RAM: {0} GB / CPU: {1} logical -> Brain: {2} / STT: {3}" -f $ramGb,$cpuCores,$BrainModel,$SttModel)
 
-Write-Host "[3/8] Ollama kontrol ediliyor..." -ForegroundColor Yellow
+Write-Host "[3/9] Ollama kontrol ediliyor..." -ForegroundColor Yellow
 $ollama = Get-Command ollama -ErrorAction SilentlyContinue
 if (-not $ollama) {
   $candidates = @(
@@ -129,7 +132,7 @@ function Prepare-BrainModel([string]$Model) {
   return (Invoke-OllamaBench $Model $true)
 }
 
-Write-Host "[4/8] Ucretsiz yerel beyin modeli hazirlaniyor: $BrainModel" -ForegroundColor Yellow
+Write-Host "[4/9] Ucretsiz yerel beyin modeli hazirlaniyor: $BrainModel" -ForegroundColor Yellow
 try {
   $BrainLatencyMs=Prepare-BrainModel $BrainModel
 } catch {
@@ -164,7 +167,7 @@ if($BrainModel -eq "qwen3:1.7b" -and $BrainLatencyMs -gt 13000) {
 $env:JARVIS_LOCAL_BRAIN_BENCHMARK_MS=[string]$BrainLatencyMs
 Write-Host ("[JARVIS] Secilen Brain: {0} · sicak yanit: {1} ms" -f $BrainModel,$BrainLatencyMs) -ForegroundColor Green
 
-Write-Host "[5/8] Yerel Turkce STT kuruluyor..." -ForegroundColor Yellow
+Write-Host "[5/9] Yerel Turkce STT kuruluyor..." -ForegroundColor Yellow
 if (-not (Get-Command py -ErrorAction SilentlyContinue)) { throw "Python py launcher bulunamadi." }
 py -m pip install --user --disable-pip-version-check --upgrade faster-whisper sounddevice numpy edge-tts
 if ($LASTEXITCODE -ne 0) { throw "Python STT dependencies failed" }
@@ -181,7 +184,7 @@ py $tempPy
 if ($LASTEXITCODE -ne 0) { throw "STT model/microphone verification failed" }
 Remove-Item $tempPy -Force -ErrorAction SilentlyContinue
 
-Write-Host "[6/8] Eski JARVIS islemleri temizleniyor..." -ForegroundColor Yellow
+Write-Host "[6/9] Eski JARVIS islemleri temizleniyor..." -ForegroundColor Yellow
 Get-CimInstance Win32_Process |
   Where-Object {
     ($_.Name -eq "node.exe" -and $_.CommandLine -match "worker\.js") -or
@@ -190,8 +193,10 @@ Get-CimInstance Win32_Process |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Start-Sleep -Seconds 2
 
-Write-Host "[7/8] JARVIS Worker baslatiliyor..." -ForegroundColor Yellow
-Start-Process (Join-Path $JarvisDir "start-worker-windows.bat")
+Write-Host "[7/9] JARVIS Worker arka planda baslatiliyor..." -ForegroundColor Yellow
+$workerBat=Join-Path $JarvisDir "start-worker-windows.bat"
+$workerCmd='""'+$workerBat+'" --autostart --silent"'
+Start-Process -FilePath $env:ComSpec -ArgumentList @("/d","/s","/c",$workerCmd) -WindowStyle Hidden
 
 $bridge = $null
 1..30 | ForEach-Object {
@@ -213,11 +218,18 @@ $stt = $null
 }
 if (-not $stt -or -not $stt.ok) { throw "JARVIS local STT health failed" }
 
-Write-Host "[8/8] JARVIS canli kabul testleri calistiriliyor..." -ForegroundColor Yellow
+Write-Host "[8/9] JARVIS canli kabul testleri calistiriliyor..." -ForegroundColor Yellow
 $acceptance = Join-Path $JarvisDir "JARVIS-LIVE-ACCEPTANCE.ps1"
 & powershell -NoProfile -ExecutionPolicy Bypass -File $acceptance
 if ($LASTEXITCODE -ne 0) {
   throw "JARVIS live acceptance suite failed. Sistem tamamlandi sayilmadi."
+}
+
+Write-Host "[9/9] Sessiz cinematic acilis kuruluyor..." -ForegroundColor Yellow
+$startupInstaller=Join-Path $JarvisDir "install-jarvis-startup.ps1"
+& powershell -NoProfile -ExecutionPolicy Bypass -File $startupInstaller
+if ($LASTEXITCODE -ne 0) {
+  throw "JARVIS silent startup kurulumu basarisiz."
 }
 
 Write-Host ""
