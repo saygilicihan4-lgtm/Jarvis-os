@@ -21,6 +21,8 @@ jobs:
           node --check server.js
           node --check worker.js
           python -m py_compile jarvis-local-stt-v3.py
+      - name: STT adaptive lexicon selftest
+        run: python stt-lexicon-selftest.py
       - name: UI selftest
         run: node ui-selftest.js
       - name: PowerShell installer syntax
