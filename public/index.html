@@ -1337,8 +1337,20 @@ async function refreshLocalWorkerHealth(){
     if(!r.ok)return null;
     const ver=String(j.version||'');
     if(window.workerSetup)workerSetup.textContent='LOCAL v'+ver+' · CLOUD '+workerSetup.textContent;
-    if(j.localBrain&&window.coreSubtitle){
-      coreSubtitle.textContent='LOCAL BRAIN · '+String(j.localBrain.model||'configured')+' · zero-cost';
+    if(j.localBrain){
+      fetch('http://127.0.0.1:8765/brain-status',{cache:'no-store'})
+        .then(r=>r.json()).then(bs=>{
+          if(window.coreSubtitle){
+            coreSubtitle.textContent=bs&&bs.ready&&bs.installed
+              ?('LOCAL BRAIN READY · '+String(bs.model||j.localBrain.model||'configured')+' · MEMORY '+String(bs.memoryFacts||0))
+              :('LOCAL BRAIN WAITING · '+String(bs&&bs.error||'MODEL/Ollama'));
+          }
+          if(window.consoleStatus&&bs&&bs.ready&&bs.installed){
+            consoleStatus.textContent='LOCAL BRAIN READY · ZERO COST · '+String(bs.model||'');
+          }
+        }).catch(()=>{
+          if(window.coreSubtitle)coreSubtitle.textContent='LOCAL BRAIN OFFLINE · browser fallback';
+        });
     }
     if(j.localStt){
       localSttHealth().then(ok=>{
