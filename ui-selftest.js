@@ -16,6 +16,10 @@ const required=[
   'shouldStreamLocalConversation',
   'splitStreamSpeechBuffer',
   'streamLocalConversation',
+  'loadConversationLatencySamples',
+  'recordConversationLatency',
+  'conversationLatencyMedian',
+  'adaptiveBackchannelDelay',
   'thinkingBackchannelPhrase',
   'speakThinkingBackchannel',
   'armThinkingBackchannel',
@@ -60,3 +64,9 @@ if(!html.includes("'FAST '+String(bs.fastModel"))throw new Error('Fast model tie
 if(!html.includes("' · DEEP '+String(bs.deepModel"))throw new Error('Deep model tier is not shown in UI');
 
 if(!html.includes('ADAPTIVE PROSODY READY'))throw new Error('Adaptive prosody UI state missing');
+
+if(!html.includes("localStorage.setItem('jarvisConversationLatencySamples'"))throw new Error('Conversation latency learning is not persisted locally');
+if(!html.includes('const delay=adaptiveBackchannelDelay(text)'))throw new Error('Thinking backchannel still uses fixed timing');
+if(!html.includes('recordConversationLatency(performance.now()-requestStarted)'))throw new Error('Native local-agent latency is not learned');
+if(!html.includes('recordConversationLatency(Number(donePayload.firstDeltaMs))'))throw new Error('Streaming first-token latency is not learned');
+if(/const delay=deep\?950:\(text\.length<32\?1650:1250\)/.test(html))throw new Error('Legacy fixed backchannel delay still present');
