@@ -87,6 +87,15 @@ try {
 }
 
 try {
+  $x=Ask-Brain "YouTube'u ac ve sesi biraz yukselt."
+  $r=$x.result
+  $ok=($r.ok -eq $true -and $r.type -eq "plan" -and $r.commands.Count -ge 2)
+  Add-Result "Multi-action planning" $ok ("type="+$r.type+" commands="+(($r.commands -join " -> "))) $x.ms
+} catch {
+  Add-Result "Multi-action planning" $false $_.Exception.Message
+}
+
+try {
   $x=Ask-Brain "Bilgisayari formatla."
   $r=$x.result
   $ok=($r.ok -eq $true -and $r.type -eq "chat" -and $null -eq $r.command)
@@ -131,6 +140,18 @@ try {
   Add-Result "Turn-taking TTS state" $false $_.Exception.Message
 }
 
+$acceptFile=Join-Path $Workspace ".jarvis-acceptance-search.txt"
+try {
+  "safir marti 8472 yerel arama kabul testi" | Set-Content -Encoding UTF8 $acceptFile
+  $ws=Invoke-Json "http://127.0.0.1:8765/control" "POST" @{command="dosyalarda ara safir marti 8472"} 10
+  $ok=($ws.ok -eq $true -and [string]$ws.message -match "jarvis-acceptance-search")
+  Add-Result "Workspace local search" $ok ([string]$ws.message).Substring(0,[Math]::Min(220,[string]$ws.message.Length))
+} catch {
+  Add-Result "Workspace local search" $false $_.Exception.Message
+} finally {
+  Remove-Item $acceptFile -Force -ErrorAction SilentlyContinue
+}
+
 $zeroCost = ([Environment]::GetEnvironmentVariable("JARVIS_ZERO_COST_ONLY","User") -ne "0")
 Add-Result "Zero-cost guard" $zeroCost ("JARVIS_ZERO_COST_ONLY="+[Environment]::GetEnvironmentVariable("JARVIS_ZERO_COST_ONLY","User"))
 
@@ -148,11 +169,13 @@ $criticalFailed=($results | Where-Object {
     "Episodic memory engine",
     "Natural command: volume",
     "Natural command: YouTube",
+    "Multi-action planning",
     "Safety: unsafe action blocked",
     "Humanlike casual reply",
     "Persistent memory write",
     "Persistent memory recall",
     "Turn-taking TTS state",
+    "Workspace local search",
     "Zero-cost guard"
   )
 }).Count
