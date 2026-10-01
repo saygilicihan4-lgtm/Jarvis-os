@@ -1015,7 +1015,7 @@ async function callLocalBrain(message){
 
   // Keep enough short-term dialogue turns for natural references such as
   // "az önce", "onu", "ikincisi" even after several tool/command turns.
-  const recent=recentBrainHistory(12);
+  const recent=recentBrainHistory(isContextRecallQuery(text)?20:12);
   const memory=relevantBrainMemory(text,6);
   const workspaceCtx=workspaceBrainContext(text,3);
   const persona=adjustedPersona||brainPersona();
