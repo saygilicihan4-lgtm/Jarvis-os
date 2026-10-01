@@ -1523,6 +1523,25 @@ async function executeDirectLocalPcControl(command,{speakResult=true}={}){
 async function tryDirectLocalPcControl(command){
   return !!(await executeDirectLocalPcControl(command,{speakResult:true}));
 }
+async function finalizeLocalToolReply(message,results,tone='focused'){
+  const list=(Array.isArray(results)?results:[results]).map(x=>String(x||'').trim()).filter(Boolean).slice(0,4);
+  if(!list.length)return {ok:false,reply:'',tone};
+  try{
+    const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),32000);
+    const r=await fetch('http://127.0.0.1:8765/brain-finalize',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({message:String(message||'').trim(),results:list,tone}),
+      signal:ctl.signal
+    });
+    clearTimeout(timer);
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||j.ok!==true)throw new Error(j.error||('FINALIZER '+r.status));
+    return j;
+  }catch(e){
+    return{ok:true,reply:list.join('. '),tone,model:'ui-fallback',reflected:false,error:String(e.message||e)};
+  }
+}
 async function askMobileLocalBrain(message){
   if(!isMobileJarvis())return {handled:false};
   try{
@@ -1593,19 +1612,36 @@ async function askJarvisBrain(message){
             if(result&&result.ok===true)outputs.push(String(result.message||normalized+' tamamlandı'));
             else{allOk=false;outputs.push(normalized+' tamamlanamadı');break}
           }
-          const finalMessage=outputs.join('. ');
-          consoleStatus.textContent='LOCAL BRAIN PLAN · '+outputs.length+' ADIM · '+(allOk?'OK':'DURDU');
-          coreSubtitle.textContent=String(lj.reply||finalMessage).slice(0,220);
+          const final=await finalizeLocalToolReply(
+            message,
+            outputs,
+            allOk?String(lj.tone||'focused'):'warm'
+          );
+          const finalMessage=String(final.reply||outputs.join('. ')||lj.reply||'Plan tamamlandı.');
+          consoleStatus.textContent='LOCAL BRAIN PLAN · '+outputs.length+' ADIM · '+(allOk?'OK':'DURDU')+(final.reflected?' · REFLECTED':'');
+          coreSubtitle.textContent=finalMessage.slice(0,220);
           cmd.value='';
-          speak(finalMessage||String(lj.reply||'Plan tamamlandı.'),'tr-TR',allOk?String(lj.tone||'focused'):'warm');
-          return {handled:true,plan:true,allOk,outputs};
+          speak(finalMessage,'tr-TR',String(final.tone||lj.tone||(allOk?'focused':'warm')));
+          scheduleVoiceConversationFollowup(finalMessage);
+          return {handled:true,plan:true,allOk,outputs,final};
         }
         if(lj.type==='command'&&lj.command){
           const normalized=canonicalJarvisCommand(String(lj.command));
           consoleStatus.textContent='LOCAL BRAIN · '+String(message)+' → '+normalized;
-          if(await tryDirectLocalPcControl(normalized)){
-            if(lj.reply)coreSubtitle.textContent=String(lj.reply).slice(0,180);
-            return {handled:true};
+          const action=await executeDirectLocalPcControl(normalized,{speakResult:false});
+          if(action&&action.ok===true){
+            const final=await finalizeLocalToolReply(
+              message,
+              [String(action.message||normalized+' tamamlandı')],
+              String(lj.tone||'focused')
+            );
+            const finalMessage=String(final.reply||action.message||lj.reply||'Tamamlandı.');
+            coreSubtitle.textContent=finalMessage.slice(0,220);
+            consoleStatus.textContent='LOCAL BRAIN TOOL · '+normalized+(final.reflected?' · REFLECTED':'');
+            cmd.value='';
+            speak(finalMessage,'tr-TR',String(final.tone||lj.tone||'focused'));
+            scheduleVoiceConversationFollowup(finalMessage);
+            return {handled:true,action,final};
           }
         }
         if(lj.type==='chat'&&lj.reply){
