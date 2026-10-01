@@ -430,7 +430,7 @@ function applyLearnedSpeechAlias(text){
   let normalized=key;
   for(const [from,to] of entries){
     if(from.length<4)continue;
-    const escaped=from.replace(/[.*+?^$()|[\]\\]/g,'\\const escaped=from.replace(/[.*+?^$()|[\]\\]/g,'\\function canonicalJarvisCommand(input){');');
+    const escaped=from.replace(/[.*+?^$()|[\]\\]/g,'\\$&');
     const re=new RegExp('(^|\\s)'+escaped+'(?=\\s|$)','i');
     if(re.test(normalized)){
       normalized=normalized.replace(re,(m,prefix)=>prefix+String(to).toLocaleLowerCase('tr-TR'));
