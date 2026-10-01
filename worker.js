@@ -1760,17 +1760,41 @@ async function serviceMobileBrain(){
       let result=await callLocalBrain(q.message);
       if(!result||result.ok!==true)throw new Error(result&&result.error||'local brain failed');
 
-      if(result.type==='command'&&result.command){
+      if(result.type==='plan'&&Array.isArray(result.commands)&&result.commands.length){
+        const actionResults=[];
+        let allOk=true;
+        for(const command of result.commands.slice(0,4)){
+          if(!isLocalSafeControlCommand(command)){allOk=false;actionResults.push({ok:false,message:'Güvenli olmayan adım engellendi: '+command});break}
+          const action=await execute({command});
+          actionResults.push(action||{ok:false,message:command+' sonucu alınamadı'});
+          if(!action||!action.ok){allOk=false;break}
+        }
+        const summary=actionResults.map(x=>String(x&&x.message||'')).filter(Boolean).join('. ');
+        result={
+          ok:true,
+          type:'chat',
+          reply:summary||String(result.reply||'Plan işlendi.'),
+          command:null,
+          commands:result.commands.slice(0,4),
+          executed:allOk,
+          actionResults,
+          model:result.model,
+          tone:allOk?String(result.tone||'focused'):'warm',
+          memoryHits:result.memoryHits||0,
+          personaVersion:result.personaVersion||2
+        };
+      }else if(result.type==='command'&&result.command){
         const action=await execute({command:result.command});
         result={
           ok:true,
           type:'chat',
           reply:String(action&&action.message||result.reply||'Komut işlendi.'),
           command:result.command,
+          commands:[],
           executed:!!(action&&action.ok),
           actionResult:action||null,
           model:result.model,
-          tone:action&&action.ok?'focused':'warm',
+          tone:action&&action.ok?String(result.tone||'focused'):'warm',
           memoryHits:result.memoryHits||0,
           personaVersion:result.personaVersion||2
         };
