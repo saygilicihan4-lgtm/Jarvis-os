@@ -143,7 +143,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.59.0','worker version');
+    assert(hj.version==='2.60.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localStt&&hj.localStt.adaptiveDecode===true,'adaptive STT decode health');
     assert(hj.localStt&&hj.localStt.dynamicEndpointing===true,'dynamic STT endpointing health');
@@ -153,6 +153,9 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.brainRuntime.streamingChat===true,'streaming chat health');
     assert(Array.isArray(hj.capabilities)&&hj.capabilities.includes('natural_barge_in_v1'),'natural barge-in capability health');
     assert(hj.capabilities.includes('spoken_followup_interrupt_v1'),'spoken follow-up interrupt capability health');
+    assert(hj.capabilities.includes('conversation_repair_v1'),'conversation repair capability health');
+    assert(hj.capabilities.includes('misunderstanding_recovery_v1'),'misunderstanding recovery capability health');
+    assert(hj.brainRuntime.conversationRepair===true,'conversation repair runtime health');
     assert(hj.brainRuntime.sentenceStreamTts===true,'sentence stream TTS health');
     assert(Number(hj.brainRuntime.context)>=4096,'adaptive context health');
     assert(hj.brainRuntime.screenVisionExplicitOnly===true,'screen vision consent health');
@@ -231,6 +234,42 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(cj.ok===true&&cj.type==='chat','chat routing');
     assert(/gırgır|fikir|devam/i.test(cj.reply),'humanlike chat reply');
     assert(['playful','casual','balanced'].includes(cj.tone),'chat tone missing');
+
+    const repairSeed=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Bana sade bir uygulama fikri ver.'});
+    assert(repairSeed.status===200,'repair seed status');
+    const repairSeen=seen.length;
+    const repair=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Hayır, beni yanlış anladın; komik bir uygulama fikri istemiştim.'});
+    assert(repair.status===200,'conversation repair status');
+    const repairj=JSON.parse(repair.body);
+    assert(repairj.ok===true&&repairj.type==='chat'&&repairj.repairMode===true,'conversation repair mode missing');
+    const repairReqs=seen.slice(repairSeen);
+    const repairPrompt=repairReqs.map(x=>(x.messages||[]).map(m=>String(m.content||'')).join('\n')).join('\n');
+    assert(/KONUŞMA ONARIM MODU/i.test(repairPrompt),'conversation repair system prompt missing');
+    assert(/Bana sade bir uygulama fikri ver/i.test(repairPrompt),'previous user turn missing from repair context');
+    assert(/komik bir uygulama fikri/i.test(repairPrompt),'current correction missing from repair context');
+
+    const nativeRepairSeen=seen.length;
+    const nativeRepair=await post('http://127.0.0.1:'+BRIDGE_PORT+'/agent',{message:'Hayır, beni yanlış anladın; daha komik olsun.',maxRounds:1});
+    assert(nativeRepair.status===200,'native repair status');
+    const nativeRepairJ=JSON.parse(nativeRepair.body);
+    assert(nativeRepairJ.ok===true&&nativeRepairJ.repairMode===true,'native repair metadata missing');
+    const nativeRepairPrompt=seen.slice(nativeRepairSeen).map(x=>(x.messages||[]).map(m=>String(m.content||'')).join('\n')).join('\n');
+    assert(/KONUŞMA ONARIM MODU/i.test(nativeRepairPrompt),'native agent repair prompt missing');
+
+    const streamRepairSeed=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Bana ciddi bir slogan fikri ver.'});
+    assert(streamRepairSeed.status===200,'stream repair seed status');
+    const streamRepairSeen=seen.length;
+    const streamRepair=await post('http://127.0.0.1:'+BRIDGE_PORT+'/chat-stream',{message:'Hayır, beni yanlış anladın; komik slogan istemiştim.'});
+    assert(streamRepair.status===200,'stream repair status');
+    const streamRepairEvents=streamRepair.body.split(/\r?\n/).filter(Boolean).map(x=>JSON.parse(x));
+    const streamRepairMeta=streamRepairEvents.find(x=>x.type==='meta');
+    const streamRepairDone=streamRepairEvents.find(x=>x.type==='done');
+    assert(streamRepairMeta&&streamRepairMeta.repairMode===true,'stream repair meta missing');
+    assert(streamRepairDone&&streamRepairDone.repairMode===true,'stream repair done metadata missing');
+    const streamRepairReq=seen.slice(streamRepairSeen).find(x=>x.stream===true);
+    const streamRepairPrompt=(streamRepairReq.messages||[]).map(m=>String(m.content||'')).join('\n');
+    assert(/KONUŞMA ONARIM MODU/i.test(streamRepairPrompt),'stream repair prompt missing');
+    assert(/Bana ciddi bir slogan fikri ver/i.test(streamRepairPrompt),'stream repair previous turn missing');
 
     const personaPath=path.join(workspace,'.jarvis-memory','brain-persona.json');
     assert(fs.existsSync(personaPath),'persona file missing');
