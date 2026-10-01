@@ -27,8 +27,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.50.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1'];
+const WORKER_VERSION='2.51.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1'];
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -48,7 +48,7 @@ const CREATOR_TTS_VOLUME='+14%';
 // Zero-cost local conversational brain. No paid API is used.
 // Default model is intentionally small enough for older Windows laptops.
 const LOCAL_BRAIN_URL=String(process.env.JARVIS_LOCAL_BRAIN_URL||'http://127.0.0.1:11434').replace(/\/$/,'');
-let LOCAL_BRAIN_MODEL=String(process.env.JARVIS_LOCAL_BRAIN_MODEL||'qwen3:1.7b').trim();
+let LOCAL_BRAIN_MODEL=String(process.env.JARVIS_LOCAL_BRAIN_MODEL||'qwen3.5:2b').trim();
 const LOCAL_BRAIN_KEEP_ALIVE=String(process.env.JARVIS_LOCAL_BRAIN_KEEP_ALIVE||'30m').trim();
 const LOCAL_BRAIN_HISTORY_FILE=path.join(MEMORY_DIR,'brain-history.jsonl');
 const LOCAL_BRAIN_FACTS_FILE=path.join(MEMORY_DIR,'brain-facts.jsonl');
@@ -725,15 +725,22 @@ async function localBrainStatus(){
 
     if(!process.env.JARVIS_LOCAL_BRAIN_MODEL){
       const ramGb=os.totalmem()/1073741824;
-      const candidates=ramGb>=14?['qwen3:4b','qwen3:1.7b','qwen3:0.6b','qwen2.5:1.5b']
-        :ramGb>=7?['qwen3:1.7b','qwen3:0.6b','qwen2.5:1.5b']
-        :['qwen3:0.6b','qwen2.5:0.5b','qwen3:1.7b'];
+      const candidates=ramGb>=14?['qwen3.5:4b','qwen3.5:2b','qwen3.5:0.8b','qwen3:4b','qwen3:1.7b','qwen3:0.6b']
+        :ramGb>=7?['qwen3.5:2b','qwen3.5:0.8b','qwen3:1.7b','qwen3:0.6b']
+        :['qwen3.5:0.8b','qwen3:0.6b','qwen3.5:2b','qwen3:1.7b'];
       const found=candidates.find(has);
       if(found)LOCAL_BRAIN_MODEL=found;
     }
 
     const installed=has(LOCAL_BRAIN_MODEL);
-    return{ready:true,installed,model:LOCAL_BRAIN_MODEL,models:models.slice(0,12),ramGb:Number((os.totalmem()/1073741824).toFixed(1))};
+    return{
+      ready:true,
+      installed,
+      model:LOCAL_BRAIN_MODEL,
+      models:models.slice(0,12),
+      ramGb:Number((os.totalmem()/1073741824).toFixed(1)),
+      vision:/^qwen3\.5(?::|$)/i.test(LOCAL_BRAIN_MODEL)
+    };
   }catch(e){
     clearTimeout(timer);
     return{ready:false,installed:false,model:LOCAL_BRAIN_MODEL,error:String(e.message||e)};
@@ -1013,6 +1020,86 @@ async function callLocalBrain(message){
   }
 }
 
+function isLocalVisionModel(model=LOCAL_BRAIN_MODEL){
+  return /^qwen3\.5(?::|$)/i.test(String(model||''));
+}
+function cleanImageBase64(value){
+  let s=String(value||'').trim();
+  s=s.replace(/^data:image\/(?:jpeg|jpg|png|webp);base64,/i,'');
+  if(!s||s.length>4200000)return null;
+  if(!/^[A-Za-z0-9+/=\r\n]+$/.test(s))return null;
+  return s.replace(/\s+/g,'');
+}
+async function analyzeLocalImage(imageBase64,question='Bu görüntüde ne görüyorsun?'){
+  const image=cleanImageBase64(imageBase64);
+  const q=String(question||'Bu görüntüde ne görüyorsun?').replace(/\s+/g,' ').trim().slice(0,900);
+  if(!image)return{ok:false,error:'INVALID_IMAGE'};
+  const status=await localBrainStatus();
+  if(!status.ready)return{ok:false,error:'OLLAMA_OFFLINE',model:LOCAL_BRAIN_MODEL};
+  if(!status.installed)return{ok:false,error:'MODEL_NOT_INSTALLED',model:LOCAL_BRAIN_MODEL};
+  if(!isLocalVisionModel(status.model))return{ok:false,error:'VISION_MODEL_REQUIRED',model:status.model};
+
+  const allowedTones=['balanced','casual','playful','warm','focused','work','serious','excited','gentle'];
+  const schema={
+    type:'object',
+    properties:{
+      reply:{type:'string'},
+      tone:{type:'string',enum:allowedTones},
+      observations:{type:'array',items:{type:'string'},maxItems:6}
+    },
+    required:['reply','tone','observations'],
+    additionalProperties:false
+  };
+  const system=[
+    'Sen JARVIS yerel görsel analiz modülüsün.',
+    'Görüntü cihazdan yalnızca bu bilgisayardaki yerel modele gönderildi; buluta gönderilmedi.',
+    'Türkçe, doğal ve kısa cevap ver.',
+    'Yalnızca görüntüde makul biçimde görülebilen şeyleri söyle; emin olmadığın ayrıntıları kesinmiş gibi yazma.',
+    'Gerçek kişilerin kimliğini tahmin etme veya isim verme. Hassas özellik çıkarımı yapma.',
+    'Metin görünüyorsa okunabilen kısmı aktarabilirsin; okunmuyorsa uydurma.',
+    'Kullanıcının sorusuna doğrudan cevap ver ve SADECE JSON şemasına uy.'
+  ].join(' ');
+
+  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),60000);
+  const started=Date.now();
+  try{
+    const r=await fetch(LOCAL_BRAIN_URL+'/api/chat',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({
+        model:LOCAL_BRAIN_MODEL,
+        stream:false,
+        think:false,
+        format:schema,
+        keep_alive:LOCAL_BRAIN_KEEP_ALIVE,
+        options:{temperature:0.28,top_p:0.86,repeat_penalty:1.06,num_ctx:4096,num_predict:260},
+        messages:[
+          {role:'system',content:system},
+          {role:'user',content:q,images:[image]}
+        ]
+      }),
+      signal:ctl.signal
+    });
+    clearTimeout(timer);
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.error||('OLLAMA '+r.status));
+    const parsed=extractLocalBrainJson(j&&j.message&&j.message.content);
+    if(!parsed||!parsed.reply)throw new Error('VISION_BAD_JSON');
+    const reply=normalizeBrainReply(parsed.reply);
+    const tone=allowedTones.includes(String(parsed.tone||''))?String(parsed.tone):'focused';
+    const observations=Array.isArray(parsed.observations)
+      ? parsed.observations.map(x=>String(x||'').trim()).filter(Boolean).slice(0,6)
+      : [];
+    appendLocalBrainHistory('user','[Yerel görüntü sorusu] '+q);
+    appendLocalBrainHistory('assistant',reply);
+    remember({kind:'local_vision',model:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-started,observations:observations.length});
+    return{ok:true,reply,tone,observations,model:LOCAL_BRAIN_MODEL,localOnly:true,latencyMs:Date.now()-started};
+  }catch(e){
+    clearTimeout(timer);
+    remember({kind:'local_vision_error',model:LOCAL_BRAIN_MODEL,error:String(e.message||e).slice(0,220)});
+    return{ok:false,error:String(e.message||e),model:LOCAL_BRAIN_MODEL};
+  }
+}
 function shouldReflectToolResult(command,message,resultCount=1){
   const c=String(command||'').toLocaleLowerCase('tr-TR');
   const m=String(message||'');
@@ -1123,10 +1210,10 @@ function startLocalTtsBridge(){
       return res.end(JSON.stringify({
         ok:true,voice:TTS_VOICE,version:WORKER_VERSION,
         capabilities:CAPS,
-        localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2'},
+        localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2',vision:isLocalVisionModel()},
         localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper'},
         adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',interruptible:true,offlineFallback:'windows-sapi',profiles:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']},
-        brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,toolReflection:true},
+        brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,toolReflection:true,multimodal:isLocalVisionModel()},
         mobileRelay:{brain:true,tts:true,pollMs:650}
       }));
     }
@@ -1185,6 +1272,24 @@ function startLocalTtsBridge(){
       res.writeHead(200,{'content-type':'application/json'});
       return res.end(JSON.stringify({ok:true,wake:localWakeCounter}));
     }
+    if(req.method==='POST'&&req.url==='/vision'){
+      let body='',tooLarge=false;
+      req.on('data',chunk=>{body+=chunk;if(body.length>4500000){tooLarge=true;req.destroy()}});
+      req.on('end',async()=>{
+        if(tooLarge){res.writeHead(413,{'content-type':'application/json'});return res.end(JSON.stringify({ok:false,error:'image too large'}))}
+        try{
+          const d=JSON.parse(body||'{}');
+          const result=await analyzeLocalImage(d.image,d.question);
+          res.writeHead(result.ok?200:(result.error==='VISION_MODEL_REQUIRED'?409:503),{'content-type':'application/json'});
+          return res.end(JSON.stringify(result));
+        }catch(e){
+          res.writeHead(500,{'content-type':'application/json'});
+          return res.end(JSON.stringify({ok:false,error:String(e.message||e)}));
+        }
+      });
+      return;
+    }
+
     if(req.method==='POST'&&req.url==='/brain'){
       let body='',tooLarge=false;
       req.on('data',chunk=>{body+=chunk;if(body.length>65536){tooLarge=true;req.destroy()}});
