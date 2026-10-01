@@ -353,6 +353,14 @@ function canonicalJarvisCommand(input){
 
   // Fast semantic repairs for the commands we intentionally allow to run
   // without confirmation. These absorb common Turkish ASR suffix mistakes.
+  if(/(?:youtube|yutube|yutub|yutup|you tube)/.test(k))return 'youtube aç';
+  if(/(?:google|gugil|gogle)/.test(k)&&/(ac|open|gir|git)/.test(k))return 'google aç';
+  if(/(?:github|git hub|githab)/.test(k)&&/(ac|open|gir|git)/.test(k))return 'github aç';
+  if(/(?:chatgpt|chat gpt|cet gpt)/.test(k)&&/(ac|open|gir|git)/.test(k))return 'chatgpt aç';
+  if(/opera(?: gx)?/.test(k)&&/(ac|open)/.test(k))return 'opera gx aç';
+  if(/chrome|krom/.test(k)&&/(ac|open)/.test(k))return 'chrome aç';
+  if(/edge|ec/.test(k)&&/(ac|open)/.test(k))return 'edge aç';
+
   if(/ses/.test(k)&&/(yuksel|yukselt|artir|arttir|ac)/.test(k))return 'sesi yükselt';
   if(/ses/.test(k)&&/(azalt|kis|dusur)/.test(k))return 'sesi azalt';
   if(/ses/.test(k)&&/(sessiz|kapat|sustur|mute)/.test(k))return 'sessize al';
@@ -1220,6 +1228,24 @@ function isDirectLocalPcCommand(command){
     || /^(?:aç|ac|open|uygulama aç|uygulama ac|program aç|program ac|site aç|site ac)\s+.+$/i.test(c)
     || /^.+?\s+(?:aç|ac)$/i.test(c);
 }
+async function refreshLocalWorkerHealth(){
+  if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis())return null;
+  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),1800);
+  try{
+    const r=await fetch('http://127.0.0.1:8765/health',{signal:ctl.signal,cache:'no-store'});
+    clearTimeout(timer);
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)return null;
+    const ver=String(j.version||'');
+    if(window.workerSetup)workerSetup.textContent='LOCAL v'+ver+' · CLOUD '+workerSetup.textContent;
+    if(ver&&/^2\.(?:3[8-9]|[4-9]\d|[1-9]\d{2,})\./.test(ver)){
+      if(window.consoleStatus&&/NEEDS_TOOL|UPDATE REQUIRED/i.test(consoleStatus.textContent||'')){
+        consoleStatus.textContent='LOCAL PC BRIDGE READY · v'+ver;
+      }
+    }
+    return ver;
+  }catch(_){clearTimeout(timer);return null}
+}
 async function tryDirectLocalPcControl(command){
   if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis()||!isDirectLocalPcCommand(command))return false;
   const ctl=new AbortController();
@@ -1355,6 +1381,7 @@ async function load(){
   audit.innerHTML=(d.audit||[]).slice(-18).reverse().map(x=>'<div class="log"><small>'+esc(x.at)+' · '+esc(x.type)+'</small><br>'+esc(x.message)+'</div>').join('')||'<div class="log"><small>No system events.</small></div>';
   setAuthenticated(true);
   if(desktopWakeWordEnabled)scheduleDesktopWakeWord(900);
+  refreshLocalWorkerHealth().catch(()=>{});
   if(/Windows/i.test(navigator.userAgent)){
     clapState.textContent=' · DOUBLE CLAP: LOCAL WORKER';
   }else if(isMobileJarvis()){
