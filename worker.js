@@ -260,6 +260,50 @@ function appendBrainFact(text,kind='explicit_preference'){
     fs.appendFileSync(LOCAL_BRAIN_FACTS_FILE,JSON.stringify({at:new Date().toISOString(),kind,text:clean})+'\n','utf8');
   }catch(_){}
 }
+function rewriteBrainFacts(rows){
+  try{
+    fs.mkdirSync(MEMORY_DIR,{recursive:true});
+    const data=(rows||[]).map(x=>JSON.stringify(x)).join('\n');
+    fs.writeFileSync(LOCAL_BRAIN_FACTS_FILE,data+(data?'\n':''),'utf8');
+    return true;
+  }catch(_){return false}
+}
+function removeBrainFactsMatching(query){
+  const q=String(query||'').replace(/\s+/g,' ').trim();
+  if(!q)return 0;
+  const rows=readBrainFacts(200);
+  const kept=[],removed=[];
+  for(const x of rows){
+    const text=String(x.text||'');
+    const same=text.toLocaleLowerCase('tr-TR').includes(q.toLocaleLowerCase('tr-TR'))
+      || q.toLocaleLowerCase('tr-TR').includes(text.toLocaleLowerCase('tr-TR'))
+      || brainSimilarity(q,text)>=0.48;
+    (same?removed:kept).push(x);
+  }
+  if(removed.length)rewriteBrainFacts(kept);
+  return removed.length;
+}
+function handleBrainMemoryDirective(text){
+  const raw=String(text||'').replace(/\s+/g,' ').trim();
+  const plain=raw.replace(/[?.!,;:]+$/g,'').trim();
+  let m=plain.match(/^(?:jarvis\s+)?(?:şunu|sunu|bunu)?\s*(?:hatırla|hatirla|aklında tut|aklinda tut)\s*[:,-]?\s*(.+)$/i);
+  if(m&&m[1]){
+    appendBrainFact(m[1].trim(),'explicit_memory');
+    return{handled:true,reply:'Tamam. Bunu yerel hafızama aldım.',command:null,type:'chat'};
+  }
+  m=plain.match(/^(?:jarvis\s+)?(?:şunu|sunu|bunu)?\s*(?:unut|unut gitsin)\s*[:,-]?\s*(.+)$/i);
+  if(m&&m[1]){
+    const n=removeBrainFactsMatching(m[1].trim());
+    return{handled:true,reply:n?('Tamam, '+n+' hafıza kaydını çıkardım.'):'Bu ifadeyle eşleşen kalıcı bir hafıza kaydı bulamadım.',command:null,type:'chat'};
+  }
+  if(/^(?:jarvis\s+)?(?:benimle ilgili )?(?:ne hatırlıyorsun|ne hatirliyorsun|neleri hatırlıyorsun|neleri hatirliyorsun)$/i.test(plain)){
+    const facts=readBrainFacts(12).slice(-8);
+    if(!facts.length)return{handled:true,reply:'Kalıcı yerel hafızamda henüz açık bir tercih kaydı yok.',command:null,type:'chat'};
+    const summary=facts.map(x=>String(x.text||'')).filter(Boolean).join(' · ');
+    return{handled:true,reply:'Şu an aklımda kalanlar: '+summary.slice(0,850),command:null,type:'chat'};
+  }
+  return{handled:false};
+}
 function maybeRememberExplicitPreference(text){
   const clean=String(text||'').replace(/\s+/g,' ').trim();
   if(!clean||clean.length>500)return;
@@ -296,6 +340,25 @@ function relevantBrainMemory(query,limit=5){
 function recentBrainHistory(limit=6){
   const all=readLocalBrainHistory(Math.max(limit,6));
   return all.slice(-limit);
+}
+function inferBrainTurnStyle(text,persona){
+  const s=String(text||'').toLocaleLowerCase('tr-TR');
+  let mode='balanced',temperature=0.68;
+  let instruction='Doğal ve akıcı konuş.';
+  if(/\b(?:acil|hemen|hızlı|hizli|uzatma|direkt)\b/.test(s)){
+    mode='focused';temperature=0.38;instruction='Bu tur hızlı ve net ol; espriyi minimumda tut.';
+  }else if(/\b(?:ahah|haha|hehe|gırgır|girgir|şaka|saka|komik|eğlen|eglen)\b/.test(s)||/[😂🤣😄😅]/u.test(s)){
+    mode='playful';temperature=0.82;instruction='Bu tur biraz daha oyunbaz ve esprili ol; yine de cevabı işe yarar tut.';
+  }else if(/\b(?:canım sıkkın|canim sikkin|moralim bozuk|keyfim yok|yoruldum)\b/.test(s)){
+    mode='warm';temperature=0.62;instruction='Bu tur sıcak ve anlayışlı ol; klişe teselli cümleleri kurma, doğal konuş.';
+  }else if(/\b(?:iş|is|kod|hata|debug|proje|deploy|rapor|analiz)\b/.test(s)){
+    mode='work';temperature=0.48;instruction='Bu tur çözüm odaklı ve teknik olarak net ol; gereksiz şamata yapma.';
+  }else if(/^(?:naber|ne haber|napıyorsun|napion|nasılsın|nasilsin|selam|merhaba)\b/.test(s)){
+    mode='casual';temperature=0.78;instruction='Gündelik sohbet tonu kullan; kısa, samimi ve hafif eğlenceli cevap ver.';
+  }
+  const humor=Number(persona&&persona.humor||0.68);
+  if(mode==='balanced')temperature=Math.max(0.48,Math.min(0.82,0.56+humor*0.18));
+  return{mode,temperature,instruction};
 }
 function brainResponseLooksWeak(reply,previous=[]){
   const s=String(reply||'').trim();
@@ -367,6 +430,13 @@ async function callLocalBrain(message){
   const text=String(message||'').replace(/\s+/g,' ').trim().slice(0,1800);
   if(!text)return{ok:true,type:'chat',reply:'Sizi dinliyorum Cihan Bey.',command:null};
 
+  const memoryDirective=handleBrainMemoryDirective(text);
+  if(memoryDirective.handled){
+    appendLocalBrainHistory('user',text);
+    appendLocalBrainHistory('assistant',memoryDirective.reply);
+    return{ok:true,...memoryDirective,model:'local-memory',memoryHits:0,personaVersion:brainPersona().version};
+  }
+
   maybeRememberExplicitPreference(text);
   const adjustedPersona=updateBrainPersonaFromUserText(text);
 
@@ -377,6 +447,7 @@ async function callLocalBrain(message){
   const recent=recentBrainHistory(6);
   const memory=relevantBrainMemory(text,5);
   const persona=adjustedPersona||brainPersona();
+  const turnStyle=inferBrainTurnStyle(text,persona);
   const memoryText=memory.length
     ? memory.map(x=>'- '+(x.role==='memory'?'Hatırlanan tercih':'Önceki konuşma')+': '+x.text).join('\n')
     : '- İlgili eski kayıt yok.';
@@ -397,6 +468,7 @@ async function callLocalBrain(message){
     'Belirsizse tek kısa soru sor. Gereksiz teyit isteme.',
     'Kullanıcının açık tercihlerini hatırla ancak hassas özellikler hakkında çıkarım yapma.',
     'Kişilik ayarları: sıcaklık '+persona.warmth+', mizah '+persona.humor+', doğrudanlık '+persona.directness+', oyunbazlık '+persona.playfulness+'.',
+    'Bu tur konuşma modu: '+turnStyle.mode+'. '+turnStyle.instruction,
     'İlgili yerel hafıza:\n'+memoryText,
     'SADECE verilen JSON şemasına uygun cevap üret.'
   ].join(' ');
@@ -418,11 +490,11 @@ async function callLocalBrain(message){
     format:schema,
     keep_alive:'10m',
     options:{
-      temperature:repairNote?0.25:0.68,
+      temperature:repairNote?0.25:turnStyle.temperature,
       top_p:0.9,
-      repeat_penalty:1.08,
+      repeat_penalty:1.10,
       num_ctx:4096,
-      num_predict:240
+      num_predict:Math.round(140+Math.max(0,Math.min(1,Number(persona.verbosity||0.42)))*220)
     },
     messages:[
       {role:'system',content:system+(repairNote?' DÜZELTME: '+repairNote:'')},
@@ -472,7 +544,7 @@ async function callLocalBrain(message){
     remember({
       kind:'local_brain_v2',
       type,command:command||null,model:LOCAL_BRAIN_MODEL,
-      memoryHits:memory.length
+      memoryHits:memory.length,mode:turnStyle.mode
     });
     return{ok:true,type,reply,command,model:LOCAL_BRAIN_MODEL,memoryHits:memory.length,personaVersion:persona.version};
   }catch(e){

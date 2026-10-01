@@ -50,24 +50,36 @@ def rms(np, block):
     return float(np.sqrt(np.mean(np.square(block), dtype=np.float64)))
 
 
-def record_utterance(max_seconds=8.0, wait_seconds=4.0):
+def _resample_linear(np, audio, src_rate, dst_rate=16000):
+    if src_rate == dst_rate or audio.size == 0:
+        return audio.astype("float32", copy=False)
+    duration = float(audio.size) / float(src_rate)
+    dst_n = max(1, int(round(duration * dst_rate)))
+    src_x = np.linspace(0.0, 1.0, num=audio.size, endpoint=False)
+    dst_x = np.linspace(0.0, 1.0, num=dst_n, endpoint=False)
+    return np.interp(dst_x, src_x, audio).astype("float32", copy=False)
+
+
+def record_utterance(max_seconds=10.0, wait_seconds=6.0):
     np, sd, _ = load_deps()
-    rate = 16000
+    device = sd.query_devices(kind="input")
+    native_rate = int(round(float(device.get("default_samplerate", 16000) or 16000)))
+    native_rate = max(8000, min(96000, native_rate))
     block_seconds = 0.10
-    block_size = int(rate * block_seconds)
-    calibration_blocks = 4
+    block_size = max(256, int(native_rate * block_seconds))
+    calibration_blocks = 3
     noise = []
     frames = []
     started = False
     speech_blocks = 0
     silence_blocks = 0
-    required_silence = max(5, int(0.75 / block_seconds))
+    required_silence = max(5, int(0.80 / block_seconds))
     min_speech_blocks = max(3, int(0.35 / block_seconds))
     max_blocks = int(max_seconds / block_seconds)
     wait_blocks = int(wait_seconds / block_seconds)
 
     with sd.InputStream(
-        samplerate=rate,
+        samplerate=native_rate,
         channels=1,
         dtype="float32",
         blocksize=block_size,
@@ -78,8 +90,10 @@ def record_utterance(max_seconds=8.0, wait_seconds=4.0):
             noise.append(rms(np, block[:, 0]))
 
         base = max(0.0025, float(np.median(noise)) if noise else 0.0025)
-        threshold = min(0.08, max(0.008, base * 3.2))
-        log("listening threshold=%.4f noise=%.4f" % (threshold, base))
+        threshold = min(0.08, max(0.007, base * 3.0))
+        log("listening device=%s rate=%s threshold=%.4f noise=%.4f" % (
+            device.get("name", "default"), native_rate, threshold, base
+        ))
 
         for i in range(max_blocks):
             block, _overflowed = stream.read(block_size)
@@ -97,7 +111,7 @@ def record_utterance(max_seconds=8.0, wait_seconds=4.0):
                 continue
 
             frames.append(mono)
-            if level >= threshold * 0.72:
+            if level >= threshold * 0.70:
                 speech_blocks += 1
                 silence_blocks = 0
             else:
@@ -107,18 +121,30 @@ def record_utterance(max_seconds=8.0, wait_seconds=4.0):
                 break
 
     if not frames or speech_blocks < min_speech_blocks:
-        return None, {"reason": "no_speech", "threshold": threshold, "noise": base}
+        return None, {
+            "reason": "no_speech",
+            "threshold": threshold,
+            "noise": base,
+            "device": device.get("name", "default"),
+            "native_rate": native_rate,
+        }
 
-    audio = np.concatenate(frames).astype("float32", copy=False)
-    # trim final silence while leaving a short tail
-    tail = int(rate * 0.20)
-    if audio.size > tail:
-        audio = audio[: max(tail, audio.size - int(rate * max(0, silence_blocks * block_seconds - 0.20)))]
+    audio_native = np.concatenate(frames).astype("float32", copy=False)
+    tail = int(native_rate * 0.20)
+    if audio_native.size > tail:
+        audio_native = audio_native[: max(
+            tail,
+            audio_native.size - int(native_rate * max(0, silence_blocks * block_seconds - 0.20))
+        )]
 
+    audio = _resample_linear(np, audio_native, native_rate, 16000)
     return audio, {
         "threshold": threshold,
         "noise": base,
-        "seconds": round(float(audio.size) / rate, 2),
+        "seconds": round(float(audio.size) / 16000.0, 2),
+        "device": device.get("name", "default"),
+        "native_rate": native_rate,
+        "transcribe_rate": 16000,
     }
 
 
@@ -178,6 +204,15 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(403, {"ok": False, "error": "forbidden"})
         if urlparse(self.path).path == "/health":
             ready = _model is not None
+            mic = None
+            native_rate = None
+            try:
+                _np, sd, _WhisperModel = load_deps()
+                d = sd.query_devices(kind="input")
+                mic = d.get("name", "default")
+                native_rate = int(round(float(d.get("default_samplerate", 0) or 0))) or None
+            except Exception:
+                pass
             return self._json(200, {
                 "ok": True,
                 "model": MODEL_NAME,
@@ -185,6 +220,8 @@ class Handler(BaseHTTPRequestHandler):
                 "loaded": ready,
                 "engine": "faster-whisper",
                 "cost": 0,
+                "microphone": mic,
+                "native_rate": native_rate,
             })
         return self._json(404, {"ok": False, "error": "not found"})
 
@@ -193,6 +230,15 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(403, {"ok": False, "error": "forbidden"})
         if urlparse(self.path).path != "/listen":
             return self._json(404, {"ok": False, "error": "not found"})
+
+        try:
+            length = int(self.headers.get("Content-Length", "0") or "0")
+        except Exception:
+            length = 0
+        if length > 65536:
+            return self._json(413, {"ok": False, "error": "too_large"})
+        if length:
+            self.rfile.read(length)
 
         if not _listen_lock.acquire(blocking=False):
             return self._json(409, {"ok": False, "error": "busy"})
