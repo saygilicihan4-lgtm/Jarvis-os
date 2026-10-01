@@ -20,7 +20,7 @@ jobs:
         run: |
           node --check server.js
           node --check worker.js
-          python -m py_compile jarvis-local-stt-v2.py
+          python -m py_compile jarvis-local-stt-v3.py
       - name: UI selftest
         run: node ui-selftest.js
       - name: PowerShell installer syntax
