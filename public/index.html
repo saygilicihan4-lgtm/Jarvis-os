@@ -1087,7 +1087,7 @@ function primeMobileSpeech(){
     mobileSpeechPrimed=true;
   }catch(e){}
 }
-async function playJarvisMobileRelay(text){
+async function playJarvisMobileRelay(text,tone='balanced'){
   // iOS lowers media playback when a live microphone/WebAudio capture session
   // is active. Phone clap detection is unnecessary because double-clap wake
   // already runs on the PC Worker, so release any legacy mobile clap stream.
@@ -1096,7 +1096,7 @@ async function playJarvisMobileRelay(text){
     method:'POST',
     headers:{'content-type':'application/json'},
     credentials:'same-origin',
-    body:JSON.stringify({text:String(text||'').trim()})
+    body:JSON.stringify({text:String(text||'').trim(),tone})
   });
   const cj=await create.json().catch(()=>({}));
   if(!create.ok||!cj.id)throw new Error(cj.error||'mobile tts unavailable');
@@ -1142,7 +1142,7 @@ function speak(text,lang=activeLanguage,tone='balanced'){
   const spoken=String(text).trim();
   if(!spoken)return;
   if(isMobileJarvis()){
-    playJarvisMobileRelay(spoken).catch(err=>{
+    playJarvisMobileRelay(spoken,tone).catch(err=>{
       if(window.voiceState)voiceState.textContent='VOICE: JARVIS RELAY FAILED';
       consoleStatus.textContent='MOBILE JARVIS VOICE ERROR · '+String(err&&err.message||err).slice(0,80);
     });
@@ -1419,7 +1419,54 @@ async function tryDirectLocalPcControl(command){
     return false;
   }
 }
+async function askMobileLocalBrain(message){
+  if(!isMobileJarvis())return {handled:false};
+  try{
+    consoleStatus.textContent='PHONE → LOCAL BRAIN · QUEUED';
+    const create=await fetch('/api/mobile-brain',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      credentials:'same-origin',
+      body:JSON.stringify({message:String(message||'').trim()})
+    });
+    const cj=await create.json().catch(()=>({}));
+    if(!create.ok||!cj.id)throw new Error(cj.error||'mobile brain unavailable');
+
+    const deadline=Date.now()+55000;
+    while(Date.now()<deadline){
+      await new Promise(r=>setTimeout(r,450));
+      const rr=await fetch('/api/mobile-brain/'+encodeURIComponent(cj.id),{
+        credentials:'same-origin',
+        cache:'no-store'
+      });
+      const j=await rr.json().catch(()=>({}));
+      if(!rr.ok)throw new Error(j.error||'mobile brain status failed');
+      if(j.status==='failed')throw new Error(j.error||'mobile brain failed');
+      if(j.status==='ready'&&j.result){
+        const r=j.result;
+        const reply=String(r.reply||'').trim();
+        consoleStatus.textContent='PHONE · LOCAL BRAIN · '+String(r.model||'READY');
+        if(reply){
+          coreSubtitle.textContent=reply.slice(0,220);
+          cmd.value='';
+          speak(reply,'tr-TR',String(r.tone||'balanced'));
+        }
+        return {handled:true,result:r};
+      }
+    }
+    throw new Error('mobile brain timeout');
+  }catch(e){
+    consoleStatus.textContent='PHONE LOCAL BRAIN FALLBACK · '+String(e.message||e).slice(0,90);
+    return {handled:false,error:e};
+  }
+}
 async function askJarvisBrain(message){
+  // Phone uses the signed PC Worker as its zero-cost local brain.
+  if(isMobileJarvis()){
+    const mobile=await askMobileLocalBrain(message);
+    if(mobile.handled)return mobile;
+  }
+
   // PC first: use the zero-cost local Ollama brain through the Worker bridge.
   if(/Windows/i.test(navigator.userAgent)&&!isMobileJarvis()){
     try{

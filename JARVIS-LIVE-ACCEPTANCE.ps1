@@ -42,6 +42,8 @@ try {
   Add-Result "Worker bridge" ($h.ok -eq $true) ("v"+$h.version)
   $adaptiveOk=($null -ne $h.adaptiveTts -and $h.adaptiveTts.engine -eq "edge-neural" -and $h.adaptiveTts.profiles.Count -ge 4)
   Add-Result "Adaptive voice profiles" $adaptiveOk (($h.adaptiveTts.voice)+" · "+(($h.adaptiveTts.profiles -join ",")))
+  $mobileRelayOk=($null -ne $h.mobileRelay -and $h.mobileRelay.brain -eq $true -and $h.mobileRelay.tts -eq $true)
+  Add-Result "Phone local brain relay" $mobileRelayOk ("brain="+$h.mobileRelay.brain+" tts="+$h.mobileRelay.tts+" poll="+$h.mobileRelay.pollMs+"ms")
 } catch {
   Add-Result "Worker bridge" $false $_.Exception.Message
 }
@@ -138,6 +140,7 @@ $criticalFailed=($results | Where-Object {
   -not $_.ok -and $_.name -in @(
     "Worker bridge",
     "Adaptive voice profiles",
+    "Phone local brain relay",
     "Local brain ready",
     "Qwen3 conversational engine",
     "Local Turkish STT",

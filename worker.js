@@ -27,8 +27,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.42.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1'];
+const WORKER_VERSION='2.43.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2'];
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -143,13 +143,22 @@ async function speakJarvisNow(text,tone='balanced'){
     setTtsLock(false);
   }
 }
-async function renderJarvisMp3Base64(text){
+async function renderJarvisMp3Base64(text,tone='balanced'){
   if(!TTS_ENABLED)throw new Error('local TTS disabled');
-  const clean=String(text||'').replace(/\s+/g,' ').trim().slice(0,700);
+  const clean=prepareJarvisSpeechText(text,tone).slice(0,700);
   if(!clean)throw new Error('text required');
+  const profile=ttsProfileForTone(tone,clean);
   const mp3=path.join(os.tmpdir(),'jarvis-mobile-tts-'+process.pid+'-'+Date.now()+'-'+crypto.randomBytes(3).toString('hex')+'.mp3');
   try{
-    await runHidden('py',['-m','edge_tts','--voice',TTS_VOICE,'--rate='+TTS_RATE,'--pitch='+TTS_PITCH,'--volume='+MOBILE_TTS_VOLUME,'--text',clean,'--write-media',mp3],45000);
+    await runHidden('py',[
+      '-m','edge_tts',
+      '--voice',TTS_VOICE,
+      '--rate='+profile.rate,
+      '--pitch='+profile.pitch,
+      '--volume='+MOBILE_TTS_VOLUME,
+      '--text',clean,
+      '--write-media',mp3
+    ],45000);
     const buf=fs.readFileSync(mp3);
     if(!buf.length)throw new Error('empty tts audio');
     return buf.toString('base64');
@@ -728,9 +737,11 @@ function startLocalTtsBridge(){
       res.writeHead(200,{'content-type':'application/json'});
       return res.end(JSON.stringify({
         ok:true,voice:TTS_VOICE,version:WORKER_VERSION,
+        capabilities:CAPS,
         localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2'},
         localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper'},
-        adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',profiles:['balanced','casual','playful','warm','focused','work']}
+        adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',profiles:['balanced','casual','playful','warm','focused','work']},
+        mobileRelay:{brain:true,tts:true,pollMs:650}
       }));
     }
     if(req.method==='GET'&&req.url==='/tts-state'){
@@ -1605,23 +1616,86 @@ let lastStateSync=0;
 let restoreAttempted=false;
 let lastAuthRecovery=0;
 let phoneSessionCodeShown=false;
+let mobileTtsBusy=false;
+let mobileBrainBusy=false;
 async function serviceMobileTts(){
+  if(mobileTtsBusy)return false;
+  mobileTtsBusy=true;
   try{
     const r=await api('/api/worker/mobile-tts-next');
     if(!r||!r.request)return false;
     const q=r.request;
     try{
-      const audio=await renderJarvisMp3Base64(q.text);
-      await api('/api/worker/mobile-tts-result',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:q.id,ok:true,audio})});
-      console.log('[JARVIS] MOBILE TTS READY: '+q.id);
+      const audio=await renderJarvisMp3Base64(q.text,q.tone||'balanced');
+      await api('/api/worker/mobile-tts-result',{
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body:JSON.stringify({id:q.id,ok:true,audio})
+      });
+      console.log('[JARVIS] MOBILE TTS READY: '+q.id+' tone='+(q.tone||'balanced'));
     }catch(e){
-      await api('/api/worker/mobile-tts-result',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:q.id,ok:false,error:String(e.message||e)})}).catch(()=>{});
+      await api('/api/worker/mobile-tts-result',{
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body:JSON.stringify({id:q.id,ok:false,error:String(e.message||e)})
+      }).catch(()=>{});
       console.error('[JARVIS] MOBILE TTS:',e.message);
     }
     return true;
   }catch(e){
     if(!/404|not found/i.test(String(e.message||'')))console.error('[JARVIS] MOBILE TTS POLL:',e.message);
     return false;
+  }finally{
+    mobileTtsBusy=false;
+  }
+}
+async function serviceMobileBrain(){
+  if(mobileBrainBusy)return false;
+  mobileBrainBusy=true;
+  try{
+    const r=await api('/api/worker/mobile-brain-next');
+    if(!r||!r.request)return false;
+    const q=r.request;
+    try{
+      let result=await callLocalBrain(q.message);
+      if(!result||result.ok!==true)throw new Error(result&&result.error||'local brain failed');
+
+      if(result.type==='command'&&result.command){
+        const action=await execute({command:result.command});
+        result={
+          ok:true,
+          type:'chat',
+          reply:String(action&&action.message||result.reply||'Komut işlendi.'),
+          command:result.command,
+          executed:!!(action&&action.ok),
+          actionResult:action||null,
+          model:result.model,
+          tone:action&&action.ok?'focused':'warm',
+          memoryHits:result.memoryHits||0,
+          personaVersion:result.personaVersion||2
+        };
+      }
+
+      await api('/api/worker/mobile-brain-result',{
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body:JSON.stringify({id:q.id,ok:true,result})
+      });
+      console.log('[JARVIS] MOBILE BRAIN READY: '+q.id+' type='+result.type);
+    }catch(e){
+      await api('/api/worker/mobile-brain-result',{
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body:JSON.stringify({id:q.id,ok:false,error:String(e.message||e)})
+      }).catch(()=>{});
+      console.error('[JARVIS] MOBILE BRAIN:',e.message);
+    }
+    return true;
+  }catch(e){
+    if(!/404|not found/i.test(String(e.message||'')))console.error('[JARVIS] MOBILE BRAIN POLL:',e.message);
+    return false;
+  }finally{
+    mobileBrainBusy=false;
   }
 }
 async function poll(){
@@ -1646,6 +1720,7 @@ async function poll(){
       console.log('[JARVIS] TELEFON SESSION CODE: '+p.code+' (5 dakika, tek kullanim)');
     }
     await serviceMobileTts();
+    await serviceMobileBrain();
     if(Date.now()-lastStateSync>30000){
       await recoverTransactionJournals();
       await rehydrateCheckpoints();
@@ -1676,6 +1751,10 @@ console.log('Workspace:',WORKSPACE);
 if(!TEST_MODE){
   poll();
   setInterval(poll,3000);
+  // Phone conversation relay runs faster than the general task poll so
+  // speech feels conversational instead of waiting up to three seconds.
+  setInterval(()=>serviceMobileBrain().catch(()=>{}),650);
+  setInterval(()=>serviceMobileTts().catch(()=>{}),650);
 }else{
   console.log('[JARVIS] TEST MODE: cloud polling and Windows helpers disabled');
 }
