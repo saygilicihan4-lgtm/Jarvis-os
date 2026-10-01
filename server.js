@@ -161,6 +161,8 @@ function requiredCapability(command){
   if(/^(ağ durumu|ag durumu|network status|internet durumu)/.test(c))return'network_status_v1';
   if(/^(yerel ai durumu|local ai status|ai readiness)/.test(c))return'local_ai_readiness_v1';
   if(/^(sistem durumu|system status|pc durumu)/.test(c))return'system_status';
+  if(/^(?:sesi yükselt|sesi yukselt|ses yükselt|ses yukselt|sesi artır|sesi arttır|ses artır|volume up|sesi azalt|ses azalt|sesi kıs|sesi kis|ses kıs|ses kis|volume down|sessize al|sesi kapat|sesi sustur|mute|sesi aç|sesi ac|unmute|oynat|duraklat|devam ettir|oynat duraklat|play pause|play|pause|sonraki|sonraki şarkı|sonraki sarki|sonraki medya|next track|önceki|onceki|önceki şarkı|onceki sarki|previous track|medyayı durdur|medyayi durdur|stop media)$/.test(c))return'media_control_v1';
+  if(/^(?:pil durumu|batarya durumu|güç durumu|guc durumu|power status)$/.test(c))return'power_status_v1';
   if(/^(?:aç|ac|open|uygulama aç|uygulama ac|program aç|program ac|site aç|site ac)\s+/.test(c)||/^.+?\s+(?:aç|ac)$/.test(c))return'desktop_launch_v1';
   if(/^(?:creator sesi oluştur|creator sesi olustur|video sesi oluştur|video sesi olustur|shorts sesi oluştur|shorts sesi olustur)/.test(c))return'creator_tts_v1';
   if(/^(dosyaları listele|dosya listesi|list files)/.test(c))return'list_files';
@@ -884,7 +886,7 @@ const server=http.createServer((req,res)=>{
         const readOnlyCaps=new Set([
           'system_status','local_memory','process_list_v1','disk_status_v1',
           'network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1',
-          'desktop_launch_v1'
+          'desktop_launch_v1','media_control_v1','power_status_v1'
         ]);
         const priorAllowed=previous&&Array.isArray(previous.allowedCapabilities)?previous.allowedCapabilities:[];
         const safeNew=snapshot.capabilities.filter(x=>readOnlyCaps.has(x));
