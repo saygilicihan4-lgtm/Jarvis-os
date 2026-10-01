@@ -143,6 +143,7 @@ let listening=false;
 let privacyMode=false;
 let desktopWakeWordEnabled=!/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 let wakeWordConversationUntil=0;
+let wakeWordAwaitingCommand=false;
 let wakeWordMutedUntil=0;
 let wakeWordRestartTimer=null;
 let clapStream=null,clapCtx=null,clapRAF=null,lastClap=0,clapArmed=false,clapCooldown=0;
@@ -264,31 +265,39 @@ setInterval(checkLocalReminders,30000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkLocalReminders()});
 
 const LANGUAGE_NAMES={tr:'Türkçe',en:'English',de:'Deutsch',fr:'Français',es:'Español',it:'Italiano',pt:'Português',ru:'Русский',ar:'العربية',ja:'日本語',ko:'한국어',zh:'中文',nl:'Nederlands',pl:'Polski'};
-function jarvisWakePhrase(text){
-  const s=String(text||'')
+function normalizeJarvisSpeech(text){
+  return String(text||'')
     .toLocaleLowerCase('tr-TR')
     .replace(/[.,!?;:]+/g,' ')
     .replace(/\s+/g,' ')
     .trim();
-  if(!s)return false;
+}
+function jarvisAlias(word){
+  const w=String(word||'')
+    .replace(/ı/g,'i').replace(/ş/g,'s').replace(/ç/g,'c')
+    .replace(/ğ/g,'g').replace(/ö/g,'o').replace(/ü/g,'u');
+  return new Set(['jarvis','carvis','jervis','jarves','jarviz','jarvisin']).has(w);
+}
+function parseJarvisWake(text){
+  let s=normalizeJarvisSpeech(text);
+  if(!s)return {wake:false,command:''};
+  s=s.replace(/^hey\s+/,'').trim();
+  const parts=s.split(' ');
+  if(!jarvisAlias(parts[0]))return {wake:false,command:''};
 
-  const compact=s.replace(/^hey\s+/,'').trim();
-  const parts=compact.split(' ');
-  const first=(parts[0]||'')
-    .replace(/ı/g,'i')
-    .replace(/ş/g,'s')
-    .replace(/ç/g,'c')
-    .replace(/ğ/g,'g')
-    .replace(/ö/g,'o')
-    .replace(/ü/g,'u');
+  const rest=parts.slice(1).join(' ').trim();
+  if(!rest)return {wake:true,command:''};
 
-  // Browsers using Turkish speech recognition can transcribe the English
-  // name Jarvis as Carvis/Jervis/Jarves. Accept only short wake utterances
-  // to keep false positives low.
-  const aliases=new Set(['jarvis','carvis','jervis','jarves','jarviz','jarvıs','jarvisin']);
-  if(parts.length<=4&&aliases.has(first))return true;
-
-  return /^(?:jarvis|carvis|jervis|jarves|jarviz)\s+(?:beni\s+dinle|uyan|burada\s+mısın|orada\s+mısın)$/.test(compact);
+  // These remain pure wake phrases. Anything else after "Jarvis" is treated
+  // as the command, enabling "Jarvis, sistem durumu" in a single utterance.
+  if(/^(?:beni\s+dinle|uyan|burada\s+mısın|orada\s+mısın|dinliyor\s+musun)$/.test(rest)){
+    return {wake:true,command:''};
+  }
+  return {wake:true,command:rest};
+}
+function jarvisWakePhrase(text){
+  const p=parseJarvisWake(text);
+  return p.wake&&!p.command;
 }
 function scheduleDesktopWakeWord(delay=700){
   if(!desktopWakeWordEnabled||!recognition||privacyMode||document.hidden)return;
@@ -304,8 +313,9 @@ function scheduleDesktopWakeWord(delay=700){
   },wait);
 }
 function answerJarvisWakeWord(){
-  wakeWordMutedUntil=Date.now()+5000;
-  wakeWordConversationUntil=Date.now()+15000;
+  wakeWordMutedUntil=Date.now()+3800;
+  wakeWordConversationUntil=Date.now()+18000;
+  wakeWordAwaitingCommand=true;
   try{if(recognition&&listening)recognition.stop()}catch(_){}
   if(window.voiceState)voiceState.textContent='VOICE: JARVIS WAKE DETECTED';
   if(window.coreSubtitle)coreSubtitle.textContent='JARVIS seslenişi algılandı · cevap veriliyor';
@@ -313,9 +323,19 @@ function answerJarvisWakeWord(){
   speak('Buradayım Cihan Bey. Sizi dinliyorum.');
   if(desktopWakeWordEnabled){
     setTimeout(()=>{
-      wakeWordMutedUntil=Date.now()+250;
+      wakeWordMutedUntil=Date.now()+200;
+      if(window.voiceState)voiceState.textContent='VOICE: COMMAND WINDOW OPEN';
+      if(window.consoleStatus)consoleStatus.textContent='JARVIS · KOMUTUNUZU DİNLİYOR';
       scheduleDesktopWakeWord(0);
-    },4300);
+      setTimeout(()=>{
+        if(wakeWordAwaitingCommand&&Date.now()>wakeWordConversationUntil){
+          wakeWordAwaitingCommand=false;
+          if(window.voiceState)voiceState.textContent='VOICE: JARVIS WAKE WORD ARMED';
+          if(window.consoleStatus)consoleStatus.textContent='SECURE CHANNEL ACTIVE';
+        }
+      },15000);
+      // JARVIS_COMMAND_WINDOW_GUARD
+    },3500);
   }
 }
 const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -346,14 +366,30 @@ if(SpeechRecognition){
       }
       if(privacyMode)return;
 
-      if(jarvisWakePhrase(captured)){
-        answerJarvisWakeWord();
+      const wake=parseJarvisWake(captured);
+      if(wake.wake){
+        if(!wake.command){
+          answerJarvisWakeWord();
+          return;
+        }
+        // One-breath mode: "Jarvis, sistem durumu".
+        activeLanguage=detectLanguage(wake.command);
+        recognition.lang=activeLanguage;
+        cmd.value=wake.command;
+        wakeWordAwaitingCommand=false;
+        wakeWordConversationUntil=0;
+        wakeWordMutedUntil=Date.now()+12000;
+        voiceState.textContent='VOICE: JARVIS · COMMAND CAPTURED';
+        consoleStatus.textContent='JARVIS · TEK NEFESTE KOMUT ALGILANDI';
+        setTimeout(()=>send(),120);
         return;
       }
 
       // Desktop stays in low-attention wake-word mode until "Jarvis" is heard.
-      // This prevents nearby conversation from becoming a command.
+      // During the short follow-up window, the next final utterance is routed
+      // directly as the command without another wake word or button press.
       if(desktopWakeWordEnabled&&Date.now()>wakeWordConversationUntil){
+        wakeWordAwaitingCommand=false;
         voiceState.textContent='VOICE: JARVIS WAKE WORD ARMED';
         return;
       }
@@ -361,10 +397,12 @@ if(SpeechRecognition){
       activeLanguage=detectLanguage(captured);
       recognition.lang=activeLanguage;
       cmd.value=captured;
+      wakeWordAwaitingCommand=false;
       wakeWordConversationUntil=0;
       wakeWordMutedUntil=Date.now()+12000;
       voiceState.textContent='VOICE: '+(LANGUAGE_NAMES[activeLanguage.split('-')[0]]||activeLanguage)+' · COMMAND CAPTURED';
-      setTimeout(()=>send(),180);
+      consoleStatus.textContent='JARVIS · KOMUT ALGILANDI';
+      setTimeout(()=>send(),140);
     }
   };
 }
