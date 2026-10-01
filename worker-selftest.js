@@ -99,8 +99,10 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.45.0','worker version');
+    assert(hj.version==='2.46.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
+    assert(hj.adaptiveTts&&hj.adaptiveTts.interruptible===true,'interruptible TTS health');
+    assert(hj.brainRuntime&&hj.brainRuntime.keepAlive,'brain runtime health');
 
     const chat=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Bugün biraz sohbet edelim; böyle konuşmanı istiyorum, biraz da gırgır olsun.'});
     assert(chat.status===200,'chat status');
@@ -164,6 +166,18 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(ttsState.status===200,'tts-state status');
     const ts=JSON.parse(ttsState.body);
     assert(ts.ok===true&&typeof ts.active==='boolean','tts-state payload');
+    assert(ts.interruptible===true&&Number.isFinite(Number(ts.generation)),'tts interrupt metadata');
+
+    const warm=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain-warm',{});
+    assert(warm.status===200,'brain warm endpoint');
+    const warmj=JSON.parse(warm.body);
+    assert(warmj.ok===true&&warmj.status==='ready','brain warm state');
+    assert(Number(warmj.latencyMs)>=0,'brain warm latency');
+
+    const stop=await post('http://127.0.0.1:'+BRIDGE_PORT+'/tts-stop',{reason:'selftest'});
+    assert(stop.status===200,'tts-stop status');
+    const stopj=JSON.parse(stop.body);
+    assert(stopj.ok===true&&stopj.stopped===true,'tts-stop result');
 
     const speechPreview=await post('http://127.0.0.1:'+BRIDGE_PORT+'/speak',{
       text:'PC güç durumu · pil %75 · RAM 3.5 / 8 GB boş',

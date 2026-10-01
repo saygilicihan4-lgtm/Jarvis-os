@@ -151,6 +151,8 @@ let localSttAvailable=null;
 let voiceConversationActive=false;
 let voiceConversationUntil=0;
 let conversationFollowupTimer=null;
+let bargeInMode=false;
+let bargeInRestartTimer=null;
 let clapStream=null,clapCtx=null,clapRAF=null,lastClap=0,clapArmed=false,clapCooldown=0;
 let cameraStream=null;
 let capturedFrameUrl='';
@@ -449,6 +451,68 @@ function chooseRecognitionCandidate(e){
   return candidates.map(scoreRecognitionCandidate).sort((a,b)=>b.score-a.score)[0];
 }
 
+function isJarvisBargeInPhrase(text){
+  const p=parseJarvisWake(text);
+  if(!p.wake||!p.command)return false;
+  const k=speechKey(p.command);
+  return /^(?:sus|dur|bekle|yeter|konusmayi kes|konusmayi durdur|sesini kes|cevabi kes|cevabı kes)$/.test(k);
+}
+async function localTtsState(){
+  if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis())return null;
+  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),900);
+  try{
+    const r=await fetch('http://127.0.0.1:8765/tts-state',{signal:ctl.signal,cache:'no-store'});
+    clearTimeout(timer);
+    if(!r.ok)return null;
+    return await r.json().catch(()=>null);
+  }catch(_){clearTimeout(timer);return null}
+}
+async function stopJarvisSpeech(reason='voice-interrupt'){
+  bargeInMode=false;
+  clearTimeout(bargeInRestartTimer);
+  try{
+    if(recognition&&listening)recognition.stop();
+  }catch(_){}
+  try{
+    const r=await fetch('http://127.0.0.1:8765/tts-stop',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({reason})
+    });
+    if(!r.ok)throw new Error('TTS_STOP_'+r.status);
+    document.body.classList.remove('speaking');
+    if(window.voiceState)voiceState.textContent='VOICE: JARVIS INTERRUPTED';
+    if(window.consoleStatus)consoleStatus.textContent='JARVIS · SÖZ KESİLDİ · SİZİ DİNLİYOR';
+    voiceConversationActive=true;
+    voiceConversationUntil=Date.now()+120000;
+    setTimeout(()=>listenWithLocalStt('after-interrupt').catch(()=>{}),250);
+    return true;
+  }catch(e){
+    if(window.consoleStatus)consoleStatus.textContent='JARVIS INTERRUPT FAILED · '+String(e.message||e).slice(0,70);
+    return false;
+  }
+}
+function armBargeInRecognition(delay=450){
+  if(!desktopWakeWordEnabled||!recognition||privacyMode||document.hidden||localSttListening)return;
+  bargeInMode=true;
+  clearTimeout(bargeInRestartTimer);
+  const launch=()=>{
+    if(!bargeInMode||privacyMode||document.hidden||localSttListening)return;
+    if(listening){
+      try{recognition.stop()}catch(_){}
+      bargeInRestartTimer=setTimeout(launch,220);
+      return;
+    }
+    try{
+      recognition.lang='tr-TR';
+      recognition.start();
+      if(window.voiceState)voiceState.textContent='VOICE: JARVIS SPEAKING · "JARVIS SUS" TO INTERRUPT';
+    }catch(_){
+      bargeInRestartTimer=setTimeout(launch,300);
+    }
+  };
+  bargeInRestartTimer=setTimeout(launch,delay);
+}
 function scheduleDesktopWakeWord(delay=700){
   if(!desktopWakeWordEnabled||!recognition||privacyMode||document.hidden||localSttListening)return;
   clearTimeout(wakeWordRestartTimer);
@@ -558,6 +622,9 @@ function scheduleVoiceConversationFollowup(spokenText){
     if(!voiceConversationActive||privacyMode||document.hidden)return;
     if(window.voiceState)voiceState.textContent='VOICE: WAITING FOR JARVIS';
     await waitForLocalTtsIdle(32000);
+    bargeInMode=false;
+    clearTimeout(bargeInRestartTimer);
+    try{if(recognition&&listening)recognition.stop()}catch(_){}
     if(!voiceConversationActive||privacyMode||document.hidden)return;
     await new Promise(r=>setTimeout(r,260));
     const ok=await listenWithLocalStt('conversation-followup');
@@ -608,6 +675,17 @@ if(SpeechRecognition){
   recognition.onstart=()=>setVoiceMode(true);
   recognition.onend=()=>{
     setVoiceMode(false);
+    if(bargeInMode){
+      setTimeout(async()=>{
+        const state=await localTtsState();
+        if(bargeInMode&&state&&state.active)armBargeInRecognition(120);
+        else{
+          bargeInMode=false;
+          if(desktopWakeWordEnabled&&!localSttListening)scheduleDesktopWakeWord(300);
+        }
+      },120);
+      return;
+    }
     if(desktopWakeWordEnabled&&!localSttListening)scheduleDesktopWakeWord(700);
   };
   recognition.onerror=e=>{
@@ -615,12 +693,22 @@ if(SpeechRecognition){
     const err=String(e.error||'ERROR');
     if(/not-allowed|service-not-allowed/i.test(err))desktopWakeWordEnabled=false;
     voiceState.textContent='VOICE: '+err.toUpperCase();
+    if(bargeInMode&&!/not-allowed|service-not-allowed/i.test(err)){
+      bargeInRestartTimer=setTimeout(()=>armBargeInRecognition(0),350);
+      return;
+    }
     if(desktopWakeWordEnabled)scheduleDesktopWakeWord(1200);
   };
   recognition.onresult=e=>{
     const choice=chooseRecognitionCandidate(e);
     const captured=String(choice.text||'').trim();
     if(e.results[e.results.length-1].isFinal){
+      if(bargeInMode){
+        if(isJarvisBargeInPhrase(captured)){
+          stopJarvisSpeech('voice-barge-in').catch(()=>{});
+        }
+        return;
+      }
       if(/jarvis.*(bu konuşmayı|bu konusmayi).*dinleme|dinlemeyi (durdur|kapat)|gizlilik modu/i.test(captured)){
         enterPrivacyMode();return;
       }
@@ -963,7 +1051,9 @@ async function scanTextLocal(){
 function enterPrivacyMode(){
   privacyMode=true;
   voiceConversationActive=false;
+  bargeInMode=false;
   clearTimeout(conversationFollowupTimer);
+  clearTimeout(bargeInRestartTimer);
   stopCamera();
   clearCapturedFrame();
   try{if(recognition&&listening)recognition.abort()}catch(e){}
@@ -1159,6 +1249,7 @@ function speak(text,lang=activeLanguage,tone='balanced'){
     clearTimeout(timer);
     if(!r.ok)throw new Error('LOCAL_TTS_'+r.status);
     document.body.classList.add('speaking');
+    armBargeInRecognition(500);
     setTimeout(()=>document.body.classList.remove('speaking'),Math.min(30000,1200+spoken.length*70));
   }).catch(()=>{
     clearTimeout(timer);

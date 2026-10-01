@@ -13,6 +13,9 @@ const required=[
   'askJarvisBrain',
   'askMobileLocalBrain',
   'playJarvisMobileRelay',
+  'isJarvisBargeInPhrase',
+  'stopJarvisSpeech',
+  'armBargeInRecognition',
   'executeDirectLocalPcControl',
   'tryDirectLocalPcControl'
 ];
