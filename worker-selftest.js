@@ -356,6 +356,8 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const bj=JSON.parse(blocked.body);
     assert(bj.type==='chat'&&bj.command===null,'unsafe command must be blocked');
 
+    const contextSeed=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Bağlam testi: turuncu martı 731.'});
+    assert(contextSeed.status===200,'context seed status');
     const followSeen=seen.length;
     const follow=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Az önce ne söyledim?'});
     assert(follow.status===200,'follow-up status');
@@ -363,7 +365,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(fj.type==='chat','follow-up chat');
     const followReqs=seen.slice(followSeen);
     const msgText=followReqs.map(r=>(r.messages||[]).map(x=>String(x.content||'')).join('\n')).join('\n');
-    assert(/Bugün biraz sohbet edelim/i.test(msgText),'recent conversation context missing');
+    assert(/turuncu martı 731/i.test(msgText),'recent conversation context missing');
 
     const facts=path.join(workspace,'.jarvis-memory','brain-facts.jsonl');
     assert(fs.existsSync(facts),'explicit preference memory file missing');
