@@ -2012,31 +2012,46 @@ async function serviceMobileBrain(){
           if(!action||!action.ok){allOk=false;break}
         }
         const summary=actionResults.map(x=>String(x&&x.message||'')).filter(Boolean).join('. ');
+        const final=await finalizeToolReply(
+          q.message,
+          actionResults.map(x=>String(x&&x.message||'')).filter(Boolean),
+          allOk?String(result.tone||'focused'):'warm'
+        );
         result={
           ok:true,
           type:'chat',
-          reply:summary||String(result.reply||'Plan işlendi.'),
+          reply:String(final&&final.reply||summary||result.reply||'Plan işlendi.'),
           command:null,
           commands:result.commands.slice(0,4),
           executed:allOk,
           actionResults,
           model:result.model,
-          tone:allOk?String(result.tone||'focused'):'warm',
+          finalizerModel:final&&final.model||null,
+          reflected:!!(final&&final.reflected),
+          tone:String(final&&final.tone||(allOk?result.tone||'focused':'warm')),
           memoryHits:result.memoryHits||0,
           personaVersion:result.personaVersion||2
         };
       }else if(result.type==='command'&&result.command){
         const action=await execute({command:result.command});
+        const raw=String(action&&action.message||result.reply||'Komut işlendi.');
+        const final=await finalizeToolReply(
+          q.message,
+          [raw],
+          action&&action.ok?String(result.tone||'focused'):'warm'
+        );
         result={
           ok:true,
           type:'chat',
-          reply:String(action&&action.message||result.reply||'Komut işlendi.'),
+          reply:String(final&&final.reply||raw),
           command:result.command,
           commands:[],
           executed:!!(action&&action.ok),
           actionResult:action||null,
           model:result.model,
-          tone:action&&action.ok?String(result.tone||'focused'):'warm',
+          finalizerModel:final&&final.model||null,
+          reflected:!!(final&&final.reflected),
+          tone:String(final&&final.tone||(action&&action.ok?result.tone||'focused':'warm')),
           memoryHits:result.memoryHits||0,
           personaVersion:result.personaVersion||2
         };
