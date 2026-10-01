@@ -53,8 +53,10 @@ if ($ramGb -ge 12 -and $cpuCores -ge 4) { $SttModel = "small" }
 elseif ($ramGb -ge 6) { $SttModel = "base" }
 else { $SttModel = "tiny" }
 [Environment]::SetEnvironmentVariable("JARVIS_LOCAL_BRAIN_MODEL",$BrainModel,"User")
+[Environment]::SetEnvironmentVariable("JARVIS_LOCAL_BRAIN_KEEP_ALIVE","30m","User")
 [Environment]::SetEnvironmentVariable("JARVIS_STT_MODEL",$SttModel,"User")
 $env:JARVIS_LOCAL_BRAIN_MODEL = $BrainModel
+$env:JARVIS_LOCAL_BRAIN_KEEP_ALIVE = "30m"
 $env:JARVIS_STT_MODEL = $SttModel
 Write-Host ("[JARVIS] RAM: {0} GB / CPU: {1} logical -> Brain: {2} / STT: {3}" -f $ramGb,$cpuCores,$BrainModel,$SttModel)
 
@@ -89,9 +91,56 @@ if (-not $ollamaReady) {
 }
 if (-not $ollamaReady) { throw "Ollama local API baslatilamadi." }
 
+function Set-JarvisBrainModel([string]$Model) {
+  $script:BrainModel = $Model
+  [Environment]::SetEnvironmentVariable("JARVIS_LOCAL_BRAIN_MODEL",$Model,"User")
+  $env:JARVIS_LOCAL_BRAIN_MODEL = $Model
+}
+function Invoke-OllamaBench([string]$Model,[bool]$Measure=$true) {
+  $body=@{
+    model=$Model
+    stream=$false
+    think=$false
+    keep_alive="30m"
+    options=@{temperature=0.1;num_ctx=1024;num_predict=28}
+    messages=@(
+      @{role="system";content="Turkce, dogal ve cok kisa cevap ver."},
+      @{role="user";content="Naber Jarvis? Tek cumle cevap ver."}
+    )
+  }
+  $sw=[Diagnostics.Stopwatch]::StartNew()
+  $null=Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/chat" -Method Post -ContentType "application/json" -Body ($body|ConvertTo-Json -Depth 6 -Compress) -TimeoutSec 90
+  $sw.Stop()
+  if($Measure){ return [math]::Round($sw.Elapsed.TotalMilliseconds,0) }
+  return 0
+}
+function Prepare-BrainModel([string]$Model) {
+  Write-Host ("[JARVIS] Model hazirlaniyor: {0}" -f $Model) -ForegroundColor Yellow
+  & $OllamaExe pull $Model
+  if ($LASTEXITCODE -ne 0) { throw ("Ollama model pull failed: "+$Model) }
+  # First call loads the model into RAM; second call measures conversational latency.
+  $null=Invoke-OllamaBench $Model $false
+  return (Invoke-OllamaBench $Model $true)
+}
+
 Write-Host "[4/8] Ucretsiz yerel beyin modeli hazirlaniyor: $BrainModel" -ForegroundColor Yellow
-& $OllamaExe pull $BrainModel
-if ($LASTEXITCODE -ne 0) { throw "Ollama model pull failed" }
+$BrainLatencyMs=Prepare-BrainModel $BrainModel
+Write-Host ("[JARVIS] {0} sicak yanit testi: {1} ms" -f $BrainModel,$BrainLatencyMs)
+
+if($BrainModel -eq "qwen3:4b" -and $BrainLatencyMs -gt 9000) {
+  Write-Host "[JARVIS] 4B kaliteli ama bu PC'de sohbet icin yavas. 1.7B'ye otomatik geciliyor..." -ForegroundColor Yellow
+  Set-JarvisBrainModel "qwen3:1.7b"
+  $BrainLatencyMs=Prepare-BrainModel $BrainModel
+}
+if($BrainModel -eq "qwen3:1.7b" -and $BrainLatencyMs -gt 13000) {
+  Write-Host "[JARVIS] 1.7B bu PC'de gecikmeli. Akicilik icin 0.6B'ye otomatik geciliyor..." -ForegroundColor Yellow
+  Set-JarvisBrainModel "qwen3:0.6b"
+  $BrainLatencyMs=Prepare-BrainModel $BrainModel
+}
+
+[Environment]::SetEnvironmentVariable("JARVIS_LOCAL_BRAIN_BENCHMARK_MS",[string]$BrainLatencyMs,"User")
+$env:JARVIS_LOCAL_BRAIN_BENCHMARK_MS=[string]$BrainLatencyMs
+Write-Host ("[JARVIS] Secilen Brain: {0} · sicak yanit: {1} ms" -f $BrainModel,$BrainLatencyMs) -ForegroundColor Green
 
 Write-Host "[5/8] Yerel Turkce STT kuruluyor..." -ForegroundColor Yellow
 if (-not (Get-Command py -ErrorAction SilentlyContinue)) { throw "Python py launcher bulunamadi." }
