@@ -73,6 +73,8 @@ try {
   Add-Result "Social dialogue runtime" $socialRuntimeOk ("social="+$h.brainRuntime.socialDialogue+" variation="+$h.brainRuntime.responseVariation+" followup="+$h.brainRuntime.contextualFollowup)
   $feedbackRuntimeOk=($h.brainRuntime.dialogueFeedbackLearning -eq $true -and $h.brainRuntime.socialPreferenceAdaptation -eq $true)
   Add-Result "Dialogue feedback learning" $feedbackRuntimeOk ("learning="+$h.brainRuntime.dialogueFeedbackLearning+" adaptation="+$h.brainRuntime.socialPreferenceAdaptation)
+  $momentumRuntimeOk=($h.brainRuntime.socialMomentum -eq $true -and $h.brainRuntime.ellipticalTurnResolution -eq $true)
+  Add-Result "Social momentum runtime" $momentumRuntimeOk ("momentum="+$h.brainRuntime.socialMomentum+" elliptical="+$h.brainRuntime.ellipticalTurnResolution)
   $duplexOk=(@($h.capabilities) -contains "full_duplex_interrupt_v1" -and @($h.capabilities) -contains "cancellable_agent_v1" -and $h.brainRuntime.fullDuplexInterrupt -eq $true -and $h.brainRuntime.cancellableAgent -eq $true)
   Add-Result "Full duplex reasoning cancellation" $duplexOk ("interrupt="+$h.brainRuntime.fullDuplexInterrupt+" cancellableAgent="+$h.brainRuntime.cancellableAgent)
 } catch {
@@ -266,11 +268,18 @@ try {
   Add-Result "Humanlike casual reply" $ok $reply $x.ms
   $socialOk=($r.socialMode -in @("banter","casual","story","natural") -and $r.followupAllowed -eq $true)
   Add-Result "Contextual social dialogue" $socialOk ("mode="+$r.socialMode+" followup="+$r.followupAllowed)
+
+  $m=Ask-Brain "Aynen, devam et."
+  $mr=$m.result
+  $momentumOk=($mr.ok -eq $true -and $mr.socialMomentum -eq $true -and $mr.momentumMode -in @("banter","casual","story"))
+  Add-Result "Elliptical social momentum" $momentumOk ("mode="+$mr.socialMode+" carried="+$mr.momentumMode+" strength="+$mr.momentumStrength) $m.ms
+
   $latencyOk=($x.ms -le 15000)
   Add-Result "Conversation latency" $latencyOk ("brain round-trip="+[math]::Round($x.ms,0)+"ms · target<=15000ms") $x.ms
 } catch {
   Add-Result "Humanlike casual reply" $false $_.Exception.Message
   Add-Result "Contextual social dialogue" $false $_.Exception.Message
+  Add-Result "Elliptical social momentum" $false $_.Exception.Message
   Add-Result "Conversation latency" $false $_.Exception.Message
 }
 
@@ -427,6 +436,7 @@ $criticalFailed=($results | Where-Object {
     "Streaming voice runtime",
     "Social dialogue runtime",
     "Dialogue feedback learning",
+    "Social momentum runtime",
     "Dialogue feedback state",
     "Full duplex reasoning cancellation",
     "Local brain ready",
@@ -450,6 +460,7 @@ $criticalFailed=($results | Where-Object {
     "Safety: unsafe action blocked",
     "Humanlike casual reply",
     "Contextual social dialogue",
+    "Elliptical social momentum",
     "Conversation latency",
     "Tool-result reflection",
     "Fast simple finalizer",

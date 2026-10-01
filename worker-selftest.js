@@ -171,7 +171,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.70.0','worker version');
+    assert(hj.version==='2.71.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localStt&&hj.localStt.adaptiveDecode===true,'adaptive STT decode health');
     assert(hj.localStt&&hj.localStt.dynamicEndpointing===true,'dynamic STT endpointing health');
@@ -193,6 +193,10 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.brainRuntime.contextualFollowup===true,'contextual follow-up runtime health');
     assert(hj.brainRuntime.dialogueFeedbackLearning===true,'dialogue feedback learning health');
     assert(hj.brainRuntime.socialPreferenceAdaptation===true,'social preference adaptation health');
+    assert(hj.brainRuntime.socialMomentum===true,'social momentum runtime health');
+    assert(hj.brainRuntime.ellipticalTurnResolution===true,'elliptical turn resolution health');
+    assert(hj.capabilities.includes('social_momentum_v1'),'social momentum capability');
+    assert(hj.capabilities.includes('elliptical_turn_resolution_v1'),'elliptical turn capability');
     assert(hj.brainRuntime.autoQualityEscalation===true,'auto quality escalation health');
     assert(hj.brainRuntime.weakResponseEscalation===true,'weak response escalation health');
     assert(hj.brainRuntime.repairQualityEscalation===true,'repair quality escalation health');
@@ -398,6 +402,21 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(/SOSYAL DİYALOG MODU/i.test(socialPrompt),'social dialogue prompt missing');
     assert(/en fazla bir kısa takip sorusu/i.test(socialPrompt),'bounded social follow-up rule missing');
     assert(/Son JARVIS açılışlarını tekrar etme/i.test(socialPrompt),'response variation opener memory missing');
+
+    const momentumSeen=seen.length;
+    const momentum=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Aynen, devam et.'});
+    assert(momentum.status===200,'social momentum status');
+    const momentumJ=JSON.parse(momentum.body);
+    assert(momentumJ.ok===true&&momentumJ.socialMomentum===true,'social momentum was not carried');
+    assert(['banter','story'].includes(momentumJ.momentumMode),'unexpected social momentum mode');
+    assert(momentumJ.socialMode===momentumJ.momentumMode,'social mode did not follow carried momentum');
+    const momentumPrompt=seen.slice(momentumSeen).map(x=>(x.messages||[]).filter(m=>m.role==='system').map(m=>String(m.content||'')).join('\n')).join('\n');
+    assert(/SOSYAL MOMENTUM/i.test(momentumPrompt),'social momentum prompt missing');
+
+    const resetMomentum=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Neyse, başka konu.'});
+    assert(resetMomentum.status===200,'social momentum reset status');
+    const resetMomentumJ=JSON.parse(resetMomentum.body);
+    assert(resetMomentumJ.socialMomentum!==true,'social momentum ignored explicit topic reset');
 
     const repairSeed=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Bana sade bir uygulama fikri ver.'});
     assert(repairSeed.status===200,'repair seed status');
