@@ -9,6 +9,7 @@ const BRIDGE_PORT=18765;
 const workspace=fs.mkdtempSync(path.join(os.tmpdir(),'jarvis-brain-test-'));
 const seen=[];
 let cancelUpstreamClosed=false;
+let streamUpstreamClosed=false;
 
 function json(res,code,obj){
   res.writeHead(code,{'content-type':'application/json'});
@@ -27,7 +28,17 @@ const mock=http.createServer(async(req,res)=>{
     const body=await readJson(req);
     seen.push(body);
     if(body.stream===true){
+      const streamLast=(body.messages||[]).filter(x=>x.role==='user').slice(-1)[0];
+      const streamText=String(streamLast&&streamLast.content||'');
       res.writeHead(200,{'content-type':'application/x-ndjson'});
+      if(/kesinti devam testi/i.test(streamText)){
+        res.on('close',()=>{streamUpstreamClosed=true});
+        res.write(JSON.stringify({message:{role:'assistant',content:'İlk kısmı söylüyorum. '},done:false})+'\n');
+        await new Promise(r=>setTimeout(r,1200));
+        if(res.destroyed||res.writableEnded)return;
+        res.end(JSON.stringify({message:{role:'assistant',content:'İkinci kısım burada.'},done:true})+'\n');
+        return;
+      }
       const deltas=['Olur. ','Biraz gırgır, ','biraz fikir; akıcı devam ederiz.'];
       for(const delta of deltas){
         res.write(JSON.stringify({message:{role:'assistant',content:delta},done:false})+'\n');
@@ -171,7 +182,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.72.0','worker version');
+    assert(hj.version==='2.73.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localStt&&hj.localStt.adaptiveDecode===true,'adaptive STT decode health');
     assert(hj.localStt&&hj.localStt.dynamicEndpointing===true,'dynamic STT endpointing health');
@@ -198,6 +209,12 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.brainRuntime.conversationCadence===true,'conversation cadence runtime health');
     assert(hj.brainRuntime.brevityMirroring===true,'brevity mirroring runtime health');
     assert(hj.brainRuntime.adaptiveResponseLength===true,'adaptive response length health');
+    assert(hj.brainRuntime.interruptionContinuity===true,'interruption continuity runtime health');
+    assert(hj.brainRuntime.spokenResume===true,'spoken resume runtime health');
+    assert(hj.brainRuntime.partialStreamResume===true,'partial stream resume runtime health');
+    assert(hj.capabilities.includes('interruption_continuity_v1'),'interruption continuity capability');
+    assert(hj.capabilities.includes('spoken_resume_v1'),'spoken resume capability');
+    assert(hj.capabilities.includes('partial_stream_resume_v1'),'partial stream resume capability');
     assert(hj.capabilities.includes('conversation_cadence_v1'),'conversation cadence capability');
     assert(hj.capabilities.includes('brevity_mirroring_v1'),'brevity mirroring capability');
     assert(hj.capabilities.includes('adaptive_response_length_v1'),'adaptive response length capability');
@@ -303,6 +320,34 @@ function assert(x,msg){if(!x)throw new Error(msg)}
 
     const noStreamAction=await post('http://127.0.0.1:'+BRIDGE_PORT+'/chat-stream',{message:"YouTube'u açar mısın?"});
     assert(noStreamAction.status===409,'PC action must be rejected by chat streaming');
+
+    const initialInterruptState=JSON.parse((await get('http://127.0.0.1:'+BRIDGE_PORT+'/interruption-state')).body);
+    assert(initialInterruptState.ok===true&&initialInterruptState.available===false,'initial interruption state');
+
+    streamUpstreamClosed=false;
+    const streamAborted=await postAndAbort('http://127.0.0.1:'+BRIDGE_PORT+'/chat-stream',{message:'kesinti devam testi'},140);
+    assert(streamAborted===true,'stream client abort helper did not abort');
+    for(let i=0;i<30&&!streamUpstreamClosed;i++)await new Promise(r=>setTimeout(r,50));
+    assert(streamUpstreamClosed===true,'stream abort did not cancel upstream Ollama request');
+    let interruptState=null;
+    for(let i=0;i<30;i++){
+      interruptState=JSON.parse((await get('http://127.0.0.1:'+BRIDGE_PORT+'/interruption-state')).body);
+      if(interruptState.available)break;
+      await new Promise(r=>setTimeout(r,50));
+    }
+    assert(interruptState&&interruptState.available===true&&interruptState.kind==='stream','interrupted stream state not captured');
+    assert(Number(interruptState.partialChars)>0,'interrupted stream partial text missing');
+
+    const resumeSeen=seen.length;
+    const resumed=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'devam et'});
+    assert(resumed.status===200,'interrupted conversation resume status');
+    const resumedJ=JSON.parse(resumed.body);
+    assert(resumedJ.ok===true&&resumedJ.resumed===true&&resumedJ.resumeSource==='stream','interrupted stream did not resume');
+    const resumePrompt=seen.slice(resumeSeen).map(x=>(x.messages||[]).map(m=>String(m.content||'')).join('\n')).join('\n');
+    assert(/KESİLEN KONUŞMA DEVAMI/i.test(resumePrompt),'interrupted stream resume context missing');
+    assert(/İlk kısmı söylüyorum/i.test(resumePrompt),'interrupted partial answer missing from resume prompt');
+    const clearedInterruptState=JSON.parse((await get('http://127.0.0.1:'+BRIDGE_PORT+'/interruption-state')).body);
+    assert(clearedInterruptState.available===false,'interruption state not cleared after resume');
 
     const clientAborted=await postAndAbort('http://127.0.0.1:'+BRIDGE_PORT+'/agent',{message:'iptal ajan testi',maxRounds:4},120);
     assert(clientAborted===true,'client abort helper did not abort');
