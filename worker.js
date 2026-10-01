@@ -1998,7 +1998,6 @@ async function streamLocalConversationHttp(message,res){
       firstDeltaMs:firstDeltaAt?firstDeltaAt-started:null,
       latencyMs:Date.now()-started,
       chars:final.length,
-      repairMode:cfg.repairMode===true,
       doneSeen
     });
     write({
@@ -2007,6 +2006,7 @@ async function streamLocalConversationHttp(message,res){
       reply:final,
       tone:cfg.tone,
       model:LOCAL_BRAIN_MODEL,
+      repairMode:cfg.repairMode===true,
       firstDeltaMs:firstDeltaAt?firstDeltaAt-started:null,
       latencyMs:Date.now()-started
     });
