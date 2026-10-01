@@ -143,6 +143,35 @@ try {
   Add-Result "Conversation latency" $false $_.Exception.Message
 }
 
+try {
+  $sw=[Diagnostics.Stopwatch]::StartNew()
+  $rf=Invoke-Json "http://127.0.0.1:8765/brain-finalize" "POST" @{
+    message="Pil durumunu dogal sekilde soyle."
+    results=@("PC guc durumu · pil %82 · RAM 5.4 / 8 GB bos")
+    tone="focused"
+  } 45
+  $sw.Stop()
+  $reply=[string]$rf.reply
+  $ok=($rf.ok -eq $true -and $rf.reflected -eq $true -and ($reply -match "82|seksen iki"))
+  Add-Result "Tool-result reflection" $ok $reply $sw.Elapsed.TotalMilliseconds
+} catch {
+  Add-Result "Tool-result reflection" $false $_.Exception.Message
+}
+
+try {
+  $sw=[Diagnostics.Stopwatch]::StartNew()
+  $sf=Invoke-Json "http://127.0.0.1:8765/brain-finalize" "POST" @{
+    message="YouTube'u ac"
+    results=@("youtube acildi")
+    tone="focused"
+  } 10
+  $sw.Stop()
+  $ok=($sf.ok -eq $true -and $sf.reflected -eq $false -and [string]$sf.reply -match "youtube")
+  Add-Result "Fast simple finalizer" $ok ([string]$sf.reply) $sw.Elapsed.TotalMilliseconds
+} catch {
+  Add-Result "Fast simple finalizer" $false $_.Exception.Message
+}
+
 $memoryPhrase = "Test tercihim: videolarda sinematik ama komik bir ton."
 try {
   $r=(Ask-Brain ("Hatirla: "+$memoryPhrase)).result
@@ -209,6 +238,8 @@ $criticalFailed=($results | Where-Object {
     "Safety: unsafe action blocked",
     "Humanlike casual reply",
     "Conversation latency",
+    "Tool-result reflection",
+    "Fast simple finalizer",
     "Persistent memory write",
     "Persistent memory recall",
     "Turn-taking TTS state",
