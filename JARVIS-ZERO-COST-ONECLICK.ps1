@@ -45,9 +45,9 @@ try {
 
 Write-Host "[2/8] Sistem kapasitesi olculuyor..." -ForegroundColor Yellow
 $ramGb = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1)
-if ($ramGb -ge 14) { $BrainModel = "qwen3:4b" }
-elseif ($ramGb -ge 7) { $BrainModel = "qwen3:1.7b" }
-else { $BrainModel = "qwen3:0.6b" }
+if ($ramGb -ge 14) { $BrainModel = "qwen3.5:4b" }
+elseif ($ramGb -ge 7) { $BrainModel = "qwen3.5:2b" }
+else { $BrainModel = "qwen3.5:0.8b" }
 $cpuCores = [Environment]::ProcessorCount
 if ($ramGb -ge 12 -and $cpuCores -ge 4) { $SttModel = "small" }
 elseif ($ramGb -ge 6) { $SttModel = "base" }
@@ -79,6 +79,12 @@ if (-not $ollama) {
 if (-not $ollama) { throw "Ollama kurulumu dogrulanamadi." }
 $OllamaExe = $ollama.Source
 if (-not $OllamaExe) { $OllamaExe = $ollama.FullName }
+
+if (Get-Command winget -ErrorAction SilentlyContinue) {
+  try {
+    winget upgrade --id Ollama.Ollama -e --accept-package-agreements --accept-source-agreements --silent | Out-Null
+  } catch {}
+}
 
 $ollamaReady = $false
 try { Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -TimeoutSec 2 | Out-Null; $ollamaReady = $true } catch {}
@@ -124,16 +130,32 @@ function Prepare-BrainModel([string]$Model) {
 }
 
 Write-Host "[4/8] Ucretsiz yerel beyin modeli hazirlaniyor: $BrainModel" -ForegroundColor Yellow
-$BrainLatencyMs=Prepare-BrainModel $BrainModel
+try {
+  $BrainLatencyMs=Prepare-BrainModel $BrainModel
+} catch {
+  Write-Host ("[JARVIS] Qwen3.5 hazirlanamadi: {0}" -f $_.Exception.Message) -ForegroundColor Yellow
+  $fallback = if($ramGb -ge 14){"qwen3:4b"} elseif($ramGb -ge 7){"qwen3:1.7b"} else {"qwen3:0.6b"}
+  Write-Host ("[JARVIS] Konusma icin Qwen3 fallback: {0}" -f $fallback) -ForegroundColor Yellow
+  Set-JarvisBrainModel $fallback
+  $BrainLatencyMs=Prepare-BrainModel $BrainModel
+}
 Write-Host ("[JARVIS] {0} sicak yanit testi: {1} ms" -f $BrainModel,$BrainLatencyMs)
 
+if($BrainModel -eq "qwen3.5:4b" -and $BrainLatencyMs -gt 9000) {
+  Write-Host "[JARVIS] Qwen3.5 4B kaliteli ama bu PC'de sohbet icin yavas. 2B'ye geciliyor..." -ForegroundColor Yellow
+  Set-JarvisBrainModel "qwen3.5:2b"
+  $BrainLatencyMs=Prepare-BrainModel $BrainModel
+}
+if($BrainModel -eq "qwen3.5:2b" -and $BrainLatencyMs -gt 13000) {
+  Write-Host "[JARVIS] Qwen3.5 2B bu PC'de gecikmeli. Akicilik icin 0.8B'ye geciliyor..." -ForegroundColor Yellow
+  Set-JarvisBrainModel "qwen3.5:0.8b"
+  $BrainLatencyMs=Prepare-BrainModel $BrainModel
+}
 if($BrainModel -eq "qwen3:4b" -and $BrainLatencyMs -gt 9000) {
-  Write-Host "[JARVIS] 4B kaliteli ama bu PC'de sohbet icin yavas. 1.7B'ye otomatik geciliyor..." -ForegroundColor Yellow
   Set-JarvisBrainModel "qwen3:1.7b"
   $BrainLatencyMs=Prepare-BrainModel $BrainModel
 }
 if($BrainModel -eq "qwen3:1.7b" -and $BrainLatencyMs -gt 13000) {
-  Write-Host "[JARVIS] 1.7B bu PC'de gecikmeli. Akicilik icin 0.6B'ye otomatik geciliyor..." -ForegroundColor Yellow
   Set-JarvisBrainModel "qwen3:0.6b"
   $BrainLatencyMs=Prepare-BrainModel $BrainModel
 }
