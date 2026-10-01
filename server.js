@@ -20,6 +20,7 @@ const VAPID_SUBJECT=String(process.env.JARVIS_VAPID_SUBJECT||'mailto:jarvis@loca
 const DATABASE_URL=String(process.env.DATABASE_URL||'').trim();
 const OPENAI_API_KEY=String(process.env.OPENAI_API_KEY||'').trim();
 const JARVIS_BRAIN_MODEL=String(process.env.JARVIS_BRAIN_MODEL||'gpt-5.6-luna').trim();
+const ZERO_COST_ONLY=String(process.env.JARVIS_ZERO_COST_ONLY||'1').trim()!=='0';
 const db=DATABASE_URL?new Pool({connectionString:DATABASE_URL,ssl:DATABASE_URL.includes('localhost')?false:{rejectUnauthorized:false}}):null;
 let dbReady=false;
 async function initDurableMemory(){
@@ -112,6 +113,9 @@ function trimBrainHistory(){
   if(state.brainHistory.length>24)state.brainHistory=state.brainHistory.slice(-24);
 }
 async function callJarvisBrain(message){
+  // Zero-cost is the default invariant. Paid OpenAI API calls are blocked
+  // unless JARVIS_ZERO_COST_ONLY=0 is explicitly configured later.
+  if(ZERO_COST_ONLY)return{enabled:false,reason:'zero-cost mode'};
   if(!OPENAI_API_KEY)return{enabled:false,reason:'OPENAI_API_KEY missing'};
   const userText=String(message||'').replace(/\s+/g,' ').trim().slice(0,1800);
   if(!userText)return{enabled:true,type:'chat',reply:'Sizi dinliyorum Cihan Bey.',command:null};
@@ -442,7 +446,7 @@ function publicState(){
     audit:state.audit,
     remoteControl:{pcOnline:pcOnline(),queued:state.tasks.filter(x=>x.status==='waiting_worker').length,running:state.tasks.filter(x=>x.status==='claimed').length},
     assistant:{pushConfigured:!!process.env.JARVIS_VAPID_PUBLIC_KEY,pushSubscriptions:Object.keys(state.pushSubscriptions).length,reminders:state.reminders.length},
-    brain:{enabled:!!OPENAI_API_KEY,provider:OPENAI_API_KEY?'openai':'deterministic',model:OPENAI_API_KEY?JARVIS_BRAIN_MODEL:null,history:state.brainHistory.length},
+    brain:{enabled:!ZERO_COST_ONLY&&!!OPENAI_API_KEY,zeroCostOnly:ZERO_COST_ONLY,provider:ZERO_COST_ONLY?'local-only':(OPENAI_API_KEY?'openai':'deterministic'),model:(!ZERO_COST_ONLY&&OPENAI_API_KEY)?JARVIS_BRAIN_MODEL:null,history:state.brainHistory.length},
     workers:{
       pc:{
         name:pc.name,
