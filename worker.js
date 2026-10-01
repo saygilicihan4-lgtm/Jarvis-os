@@ -1779,7 +1779,8 @@ async function runNativeAgent(message,{maxRounds=4,signal=null}={}){
 
   for(let round=0;round<Math.max(1,Math.min(6,Number(maxRounds)||4));round++){
     if(signal&&signal.aborted)return cancelledResult(actions,round);
-    const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),45000);
+    let timedOut=false;
+    const ctl=new AbortController(),timer=setTimeout(()=>{timedOut=true;ctl.abort()},45000);
     const externalAbort=()=>{try{ctl.abort()}catch(_){}};
     if(signal)signal.addEventListener('abort',externalAbort,{once:true});
     let j;
@@ -1811,9 +1812,12 @@ async function runNativeAgent(message,{maxRounds=4,signal=null}={}){
     }catch(e){
       clearTimeout(timer);
       if(signal)signal.removeEventListener('abort',externalAbort);
-      if((signal&&signal.aborted)||e.name==='AbortError'){
+      if(signal&&signal.aborted){
         remember({kind:'native_agent_cancelled',actions:actions.length,round:round+1});
         return cancelledResult(actions,round+1);
+      }
+      if(timedOut&&e.name==='AbortError'){
+        remember({kind:'native_agent_timeout',actions:actions.length,round:round+1});
       }
       if(actions.length){
         const summaries=actions.map(x=>(x.ok?'OK ':'FAIL ')+x.tool+': '+x.result).slice(-6);
