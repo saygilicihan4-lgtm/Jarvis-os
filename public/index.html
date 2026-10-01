@@ -146,6 +146,9 @@ let wakeWordConversationUntil=0;
 let wakeWordAwaitingCommand=false;
 let wakeWordMutedUntil=0;
 let wakeWordRestartTimer=null;
+let wakeAckCursor=Number(sessionStorage.getItem('jarvisWakeAckCursor')||'0')||0;
+let wakeAckGeneration=0;
+let lastWakeAcknowledgement='';
 let localSttListening=false;
 let localSttAvailable=null;
 let localSttHealthState={};
@@ -811,9 +814,9 @@ async function listenWithLocalStt(source='command'){
     return false;
   }
 }
-async function waitForLocalTtsIdle(maxMs=30000){
+async function waitForLocalTtsIdle(maxMs=30000,idleGraceMs=1800){
   if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis()){
-    await new Promise(r=>setTimeout(r,700));
+    await new Promise(r=>setTimeout(r,Math.min(700,Math.max(220,idleGraceMs))));
     return true;
   }
   const started=Date.now();
@@ -827,10 +830,10 @@ async function waitForLocalTtsIdle(maxMs=30000){
       if(r.ok&&j.ok){
         if(j.active)sawActive=true;
         if(sawActive&&!j.active)return true;
-        if(!sawActive&&Date.now()-started>1800&&!j.active)return true;
+        if(!sawActive&&Date.now()-started>idleGraceMs&&!j.active)return true;
       }
     }catch(_){}
-    await new Promise(r=>setTimeout(r,220));
+    await new Promise(r=>setTimeout(r,160));
   }
   return false;
 }
@@ -855,35 +858,61 @@ function scheduleVoiceConversationFollowup(spokenText){
     }
   },350);
 }
-function answerJarvisWakeWord(){
-  wakeWordMutedUntil=Date.now()+3800;
+function nextWakeAcknowledgement(){
+  const pool=[
+    'Buradayım.',
+    'Dinliyorum.',
+    'Buyurun.',
+    'Söyleyin.',
+    'Buradayım Cihan Bey.'
+  ];
+  let idx=Math.abs(Number(wakeAckCursor)||0)%pool.length;
+  let phrase=pool[idx];
+  if(phrase===lastWakeAcknowledgement){
+    idx=(idx+1)%pool.length;
+    phrase=pool[idx];
+  }
+  lastWakeAcknowledgement=phrase;
+  wakeAckCursor=(idx+1)%pool.length;
+  try{sessionStorage.setItem('jarvisWakeAckCursor',String(wakeAckCursor))}catch(_){}
+  return phrase;
+}
+async function answerJarvisWakeWord(){
+  const generation=++wakeAckGeneration;
+  wakeWordMutedUntil=Date.now()+2200;
   wakeWordConversationUntil=Date.now()+18000;
   wakeWordAwaitingCommand=true;
   try{if(recognition&&listening)recognition.stop()}catch(_){}
+  const acknowledgement=nextWakeAcknowledgement();
   if(window.voiceState)voiceState.textContent='VOICE: JARVIS WAKE DETECTED';
-  if(window.coreSubtitle)coreSubtitle.textContent='JARVIS seslenişi algılandı · cevap veriliyor';
-  if(window.consoleStatus)consoleStatus.textContent='JARVIS WAKE WORD · RESPONSE · SES GÖNDERİLİYOR';
-  speak('Buradayım Cihan Bey. Sizi dinliyorum.','tr-TR','warm');
+  if(window.coreSubtitle)coreSubtitle.textContent='JARVIS seslenişi algılandı · '+acknowledgement;
+  if(window.consoleStatus)consoleStatus.textContent='JARVIS WAKE · '+acknowledgement+' · SES TAMAMLANIYOR';
+  speak(acknowledgement,'tr-TR','warm');
   voiceConversationActive=true;
   voiceConversationUntil=Date.now()+120000;
-  if(desktopWakeWordEnabled){
-    setTimeout(async()=>{
-      wakeWordMutedUntil=Date.now()+200;
-      if(window.voiceState)voiceState.textContent='VOICE: COMMAND WINDOW OPEN';
-      if(window.consoleStatus)consoleStatus.textContent='JARVIS · KOMUTUNUZU DİNLİYOR';
-      const localOk=await listenWithLocalStt('wake-followup');
-      if(!localOk)scheduleDesktopWakeWord(0);
-      setTimeout(()=>{
-        if(wakeWordAwaitingCommand&&Date.now()>wakeWordConversationUntil){
-          wakeWordAwaitingCommand=false;
-          voiceConversationActive=false;
-          if(window.voiceState)voiceState.textContent='VOICE: JARVIS WAKE WORD ARMED';
-          if(window.consoleStatus)consoleStatus.textContent='SECURE CHANNEL ACTIVE';
-        }
-      },15000);
-      // JARVIS_COMMAND_WINDOW_GUARD
-    },3000);
-  }
+  if(!desktopWakeWordEnabled)return;
+
+  await new Promise(r=>setTimeout(r,90));
+  await waitForLocalTtsIdle(9000,650);
+  if(generation!==wakeAckGeneration||!wakeWordAwaitingCommand||privacyMode||document.hidden)return;
+
+  wakeWordMutedUntil=Date.now()+140;
+  await new Promise(r=>setTimeout(r,140));
+  if(generation!==wakeAckGeneration||!wakeWordAwaitingCommand)return;
+
+  if(window.voiceState)voiceState.textContent='VOICE: COMMAND WINDOW OPEN';
+  if(window.consoleStatus)consoleStatus.textContent='JARVIS · KOMUTUNUZU DİNLİYOR';
+  const localOk=await listenWithLocalStt('wake-followup');
+  if(!localOk)scheduleDesktopWakeWord(0);
+  setTimeout(()=>{
+    if(wakeWordAwaitingCommand&&Date.now()>wakeWordConversationUntil){
+      wakeWordAwaitingCommand=false;
+      voiceConversationActive=false;
+      if(window.voiceState)voiceState.textContent='VOICE: JARVIS WAKE WORD ARMED';
+      if(window.consoleStatus)consoleStatus.textContent='SECURE CHANNEL ACTIVE';
+    }
+  },15000);
+  // JARVIS_COMMAND_WINDOW_GUARD
 }
 const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
 if(SpeechRecognition){
