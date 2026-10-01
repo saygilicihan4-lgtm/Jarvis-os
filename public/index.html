@@ -2323,7 +2323,10 @@ async function askJarvisBrainCore(message){
         }
         if(lj.type==='chat'&&lj.reply){
           const reply=String(lj.reply).trim();
-          consoleStatus.textContent='LOCAL BRAIN · '+String(lj.model||'READY');
+          const quality=lj.qualityEscalated
+            ?(' · QUALITY ↑ '+String(lj.qualityEscalationModel||'DEEP')+' · '+String(lj.qualityEscalationReason||'AUTO').toUpperCase())
+            :'';
+          consoleStatus.textContent='LOCAL BRAIN · '+String(lj.model||'READY')+quality;
           coreSubtitle.textContent=reply.slice(0,220);
           cmd.value='';
           speak(reply,'tr-TR',String(lj.tone||'balanced'));
