@@ -58,3 +58,5 @@ if(!html.includes("bare-stop")||!html.includes("wake-command"))throw new Error('
 if(!html.includes('bs.adaptiveModelRouter'))throw new Error('Adaptive local model router is not surfaced in UI');
 if(!html.includes("'FAST '+String(bs.fastModel"))throw new Error('Fast model tier is not shown in UI');
 if(!html.includes("' · DEEP '+String(bs.deepModel"))throw new Error('Deep model tier is not shown in UI');
+
+if(!html.includes('ADAPTIVE PROSODY READY'))throw new Error('Adaptive prosody UI state missing');
