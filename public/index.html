@@ -282,23 +282,40 @@ function parseJarvisWake(text){
   let s=normalizeJarvisSpeech(text);
   if(!s)return {wake:false,command:''};
   s=s.replace(/^hey\s+/,'').trim();
-  let parts=s.split(' ');
+
+  const aliases=['jarvis','carvis','jervis','jarves','jarviz'];
+  const isAlias=t=>jarvisAlias(t)||aliases.includes(String(t||''));
+
+  let parts=s.split(' ').filter(Boolean);
   let rest='';
 
-  if(jarvisAlias(parts[0])){
-    rest=parts.slice(1).join(' ').trim();
+  // Some recognizers split the wake word into two chunks such as "jar vis".
+  if(parts.length>=2&&['jar','car','jer'].includes(parts[0])&&['vis','ves','viz'].includes(parts[1])){
+    parts=[parts[0]+parts[1],...parts.slice(2)];
+  }
+
+  if(isAlias(parts[0])){
+    // Chromium can occasionally duplicate the wake word in one final result
+    // ("Jarvis Jarvis"). Consume repeated leading aliases before extracting
+    // the actual command so a plain wake call still gets a spoken reply.
+    let i=0;
+    while(i<parts.length&&isAlias(parts[i]))i++;
+    rest=parts.slice(i).join(' ').trim();
   }else{
-    // Some Chromium recognizers glue adjacent result chunks, e.g.
-    // "jarvissistem durumu". Split only a known Jarvis alias prefix.
-    const aliases=['jarvis','carvis','jervis','jarves','jarviz'];
+    // Recover glued transcripts such as "jarvissistem durumu".
     const glued=aliases.find(a=>s.startsWith(a)&&s.length>a.length);
     if(!glued)return {wake:false,command:''};
     rest=s.slice(glued.length).trim();
+
+    // Also collapse a second duplicated glued alias: "jarvisjarvis".
+    for(const a of aliases){
+      if(rest===a){rest='';break}
+      if(rest.startsWith(a+' ')){rest=rest.slice(a.length).trim();break}
+    }
   }
+
   if(!rest)return {wake:true,command:''};
 
-  // These remain pure wake phrases. Anything else after "Jarvis" is treated
-  // as the command, enabling "Jarvis, sistem durumu" in a single utterance.
   if(/^(?:beni\s+dinle|uyan|burada\s+mısın|orada\s+mısın|dinliyor\s+musun)$/.test(rest)){
     return {wake:true,command:''};
   }
@@ -335,7 +352,7 @@ function answerJarvisWakeWord(){
   try{if(recognition&&listening)recognition.stop()}catch(_){}
   if(window.voiceState)voiceState.textContent='VOICE: JARVIS WAKE DETECTED';
   if(window.coreSubtitle)coreSubtitle.textContent='JARVIS seslenişi algılandı · cevap veriliyor';
-  if(window.consoleStatus)consoleStatus.textContent='JARVIS WAKE WORD · RESPONSE';
+  if(window.consoleStatus)consoleStatus.textContent='JARVIS WAKE WORD · RESPONSE · SES GÖNDERİLİYOR';
   speak('Buradayım Cihan Bey. Sizi dinliyorum.');
   if(desktopWakeWordEnabled){
     setTimeout(()=>{
