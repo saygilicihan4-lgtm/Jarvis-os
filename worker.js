@@ -27,8 +27,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.43.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2'];
+const WORKER_VERSION='2.44.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1'];
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -96,7 +96,10 @@ function ttsProfileForTone(tone='balanced',text=''){
     playful:{rate:'-9%',pitch:'-7Hz',volume:'+3%'},
     warm:{rate:'-21%',pitch:'-11Hz',volume:'+2%'},
     focused:{rate:'-14%',pitch:'-13Hz',volume:'+0%'},
-    work:{rate:'-14%',pitch:'-13Hz',volume:'+0%'}
+    work:{rate:'-14%',pitch:'-13Hz',volume:'+0%'},
+    serious:{rate:'-19%',pitch:'-14Hz',volume:'+0%'},
+    excited:{rate:'-6%',pitch:'-5Hz',volume:'+3%'},
+    gentle:{rate:'-24%',pitch:'-10Hz',volume:'+2%'}
   };
   const p={...(profiles[t]||profiles.balanced)};
   const clean=String(text||'');
@@ -108,9 +111,21 @@ function ttsProfileForTone(tone='balanced',text=''){
 }
 function prepareJarvisSpeechText(text,tone='balanced'){
   let s=String(text||'').replace(/\s+/g,' ').trim();
-  // Edge neural voices react better to human punctuation than raw UI text.
-  s=s.replace(/\s*·\s*/g,', ').replace(/\s*—\s*/g,', ');
-  if(tone==='playful')s=s.replace(/\.{3,}/g,'…');
+  // Convert UI/technical notation into phrases a Turkish neural voice says naturally.
+  s=s
+    .replace(/\s*·\s*/g,', ')
+    .replace(/\s*—\s*/g,', ')
+    .replace(/\bPC\b/gi,'bilgisayar')
+    .replace(/\bCPU\b/gi,'işlemci')
+    .replace(/\bRAM\b/gi,'ram')
+    .replace(/\b(\d+(?:[.,]\d+)?)\s*GB\b/gi,'$1 gigabayt')
+    .replace(/%(\s*\d+)/g,'yüzde $1')
+    .replace(/\bWi[- ]?Fi\b/gi,'vay fay')
+    .replace(/\bv(\d+)\.(\d+)\.(\d+)\b/gi,'sürüm $1 nokta $2 nokta $3')
+    .replace(/https?:\/\//gi,'')
+    .replace(/\s*\/\s*/g,' bölü ');
+  if(tone==='playful'||tone==='excited')s=s.replace(/\.{3,}/g,'…');
+  if(tone==='gentle')s=s.replace(/!+/g,'.');
   return s.slice(0,900);
 }
 async function speakJarvisNow(text,tone='balanced'){
@@ -635,6 +650,7 @@ async function callLocalBrain(message){
     'Kullanıcının açık tercihlerini hatırla ancak hassas özellikler hakkında çıkarım yapma.',
     'Kişilik ayarları: sıcaklık '+persona.warmth+', mizah '+persona.humor+', doğrudanlık '+persona.directness+', oyunbazlık '+persona.playfulness+'.',
     'Bu tur konuşma modu: '+turnStyle.mode+'. '+turnStyle.instruction,
+    'tone alanı seslendirme duygusudur. balanced/casual/playful/warm/focused/work/serious/excited/gentle seçeneklerinden cevabın anlamına en uygun olanı seç.',
     'İlgili yerel hafıza:\n'+memoryText,
     'SADECE verilen JSON şemasına uygun cevap üret.'
   ].join(' ');
@@ -644,9 +660,10 @@ async function callLocalBrain(message){
     properties:{
       type:{type:'string',enum:['chat','command']},
       reply:{type:'string'},
-      command:{anyOf:[{type:'string'},{type:'null'}]}
+      command:{anyOf:[{type:'string'},{type:'null'}]},
+      tone:{type:'string',enum:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']}
     },
-    required:['type','reply','command'],
+    required:['type','reply','command','tone'],
     additionalProperties:false
   };
 
@@ -695,6 +712,8 @@ async function callLocalBrain(message){
     let type=parsed.type==='command'?'command':'chat';
     let reply=normalizeBrainReply(parsed.reply);
     let command=parsed.command==null?null:String(parsed.command).trim();
+    const allowedTones=new Set(['balanced','casual','playful','warm','focused','work','serious','excited','gentle']);
+    let tone=allowedTones.has(String(parsed.tone||''))?String(parsed.tone):turnStyle.mode;
 
     if(type==='command'&&!isLocalSafeControlCommand(command)){
       type='chat';command=null;
@@ -703,7 +722,10 @@ async function callLocalBrain(message){
 
     if(type==='chat'&&brainResponseLooksWeak(reply,recent)){
       const repaired=await ask(makeBody('Yanıt fazla kalıp, tekrarlı veya cansız. Aynı anlamı daha doğal, insan gibi ve kısa biçimde yeniden yaz.'));
-      if(repaired&&repaired.reply)reply=normalizeBrainReply(repaired.reply);
+      if(repaired&&repaired.reply){
+        reply=normalizeBrainReply(repaired.reply);
+        if(allowedTones.has(String(repaired.tone||'')))tone=String(repaired.tone);
+      }
     }
 
     appendLocalBrainHistory('user',text);
@@ -713,7 +735,7 @@ async function callLocalBrain(message){
       type,command:command||null,model:LOCAL_BRAIN_MODEL,
       memoryHits:memory.length,mode:turnStyle.mode
     });
-    return{ok:true,type,reply,command,model:LOCAL_BRAIN_MODEL,memoryHits:memory.length,personaVersion:persona.version,tone:turnStyle.mode};
+    return{ok:true,type,reply,command,model:LOCAL_BRAIN_MODEL,memoryHits:memory.length,personaVersion:persona.version,tone};
   }catch(e){
     return{ok:false,error:String(e.message||e),model:LOCAL_BRAIN_MODEL};
   }
@@ -740,7 +762,7 @@ function startLocalTtsBridge(){
         capabilities:CAPS,
         localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2'},
         localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper'},
-        adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',profiles:['balanced','casual','playful','warm','focused','work']},
+        adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',profiles:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']},
         mobileRelay:{brain:true,tts:true,pollMs:650}
       }));
     }
@@ -856,7 +878,7 @@ function startLocalTtsBridge(){
         try{
           const d=JSON.parse(body||'{}'),text=String(d.text||'').trim();
           if(!text){res.writeHead(400);return res.end('text required')}
-          const tone=['balanced','casual','playful','warm','focused','work'].includes(String(d.tone||''))?String(d.tone):'balanced';
+          const tone=['balanced','casual','playful','warm','focused','work','serious','excited','gentle'].includes(String(d.tone||''))?String(d.tone):'balanced';
           queueJarvisSpeech(text,tone);
           res.writeHead(202,{'content-type':'application/json'});
           return res.end(JSON.stringify({ok:true,queued:true,tone,profile:ttsProfileForTone(tone,text)}));
