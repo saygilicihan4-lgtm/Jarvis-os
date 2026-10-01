@@ -173,6 +173,29 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const lexj=JSON.parse(lex.body);
     assert(lexj.ok===true&&lexj.aliases['yutup ac']==='youtube aç','speech lexicon persisted alias');
 
+    const normalizedExact=await post('http://127.0.0.1:'+BRIDGE_PORT+'/speech-normalize',{text:'yutup ac'});
+    assert(normalizedExact.status===200,'speech normalize exact status');
+    const nej=JSON.parse(normalizedExact.body);
+    assert(nej.ok===true&&nej.changed===true&&nej.normalized==='youtube aç','speech normalize exact alias');
+
+    const phraseLearn=await post('http://127.0.0.1:'+BRIDGE_PORT+'/speech-lexicon',{
+      heard:'mavi motor',
+      intended:'google',
+      source:'selftest-phrase'
+    });
+    assert(phraseLearn.status===200,'speech phrase learn status');
+    const normalizedPhrase=await post('http://127.0.0.1:'+BRIDGE_PORT+'/speech-normalize',{text:'jarvis mavi motor ac'});
+    assert(normalizedPhrase.status===200,'speech normalize phrase status');
+    const npj=JSON.parse(normalizedPhrase.body);
+    assert(npj.ok===true&&npj.changed===true,'speech normalize phrase not changed');
+    assert(/jarvis google ac/i.test(npj.normalized),'speech phrase replacement failed');
+
+    const phraseForget=await post('http://127.0.0.1:'+BRIDGE_PORT+'/speech-lexicon',{
+      action:'forget',
+      heard:'mavi motor'
+    });
+    assert(phraseForget.status===200,'speech phrase forget status');
+
     const learnedCmd=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'yutup ac'});
     assert(learnedCmd.status===200,'learned command brain status');
     const lcj=JSON.parse(learnedCmd.body);
