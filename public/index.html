@@ -151,6 +151,8 @@ let localSttAvailable=null;
 let voiceConversationActive=false;
 let voiceConversationUntil=0;
 let conversationFollowupTimer=null;
+let mobileConversationListenPending=false;
+let mobileSpeechPromise=Promise.resolve(true);
 let clapStream=null,clapCtx=null,clapRAF=null,lastClap=0,clapArmed=false,clapCooldown=0;
 let cameraStream=null;
 let capturedFrameUrl='';
@@ -528,7 +530,16 @@ async function listenWithLocalStt(source='command'){
   }
 }
 async function waitForLocalTtsIdle(maxMs=30000){
-  if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis()){
+  if(isMobileJarvis()){
+    try{
+      await Promise.race([
+        mobileSpeechPromise,
+        new Promise(resolve=>setTimeout(()=>resolve(false),maxMs))
+      ]);
+    }catch(_){}
+    return true;
+  }
+  if(!/Windows/i.test(navigator.userAgent)){
     await new Promise(r=>setTimeout(r,700));
     return true;
   }
@@ -550,6 +561,26 @@ async function waitForLocalTtsIdle(maxMs=30000){
   }
   return false;
 }
+function startMobileBrowserFollowup(){
+  if(!isMobileJarvis()||!recognition||privacyMode||document.hidden)return false;
+  if(mobileConversationListenPending||listening)return true;
+  if(Date.now()>voiceConversationUntil){voiceConversationActive=false;return false}
+
+  mobileConversationListenPending=true;
+  wakeWordAwaitingCommand=true;
+  wakeWordConversationUntil=Date.now()+18000;
+  try{
+    recognition.lang='tr-TR';
+    recognition.start();
+    if(window.voiceState)voiceState.textContent='VOICE: CONVERSATION LISTENING';
+    if(window.consoleStatus)consoleStatus.textContent='JARVIS · SOHBET DEVAM EDİYOR · DİNLİYOR';
+    return true;
+  }catch(e){
+    mobileConversationListenPending=false;
+    if(window.consoleStatus)consoleStatus.textContent='MOBILE VOICE FOLLOW-UP · '+String(e.message||e).slice(0,80);
+    return false;
+  }
+}
 function scheduleVoiceConversationFollowup(spokenText){
   clearTimeout(conversationFollowupTimer);
   if(!voiceConversationActive||privacyMode||document.hidden)return;
@@ -559,7 +590,17 @@ function scheduleVoiceConversationFollowup(spokenText){
     if(window.voiceState)voiceState.textContent='VOICE: WAITING FOR JARVIS';
     await waitForLocalTtsIdle(32000);
     if(!voiceConversationActive||privacyMode||document.hidden)return;
-    await new Promise(r=>setTimeout(r,260));
+    await new Promise(r=>setTimeout(r,isMobileJarvis()?420:260));
+
+    if(isMobileJarvis()){
+      const ok=startMobileBrowserFollowup();
+      if(!ok){
+        voiceConversationActive=false;
+        if(window.voiceState)voiceState.textContent='VOICE: TAP TO CONTINUE';
+      }
+      return;
+    }
+
     const ok=await listenWithLocalStt('conversation-followup');
     if(!ok){
       voiceConversationActive=false;
@@ -605,15 +646,27 @@ if(SpeechRecognition){
   recognition.interimResults=true;
   recognition.maxAlternatives=5;
   recognition.continuous=false;
-  recognition.onstart=()=>setVoiceMode(true);
+  recognition.onstart=()=>{
+    setVoiceMode(true);
+    if(isMobileJarvis()&&voiceConversationActive)mobileConversationListenPending=true;
+  };
   recognition.onend=()=>{
     setVoiceMode(false);
+    if(isMobileJarvis())mobileConversationListenPending=false;
     if(desktopWakeWordEnabled&&!localSttListening)scheduleDesktopWakeWord(700);
   };
   recognition.onerror=e=>{
     setVoiceMode(false);
     const err=String(e.error||'ERROR');
     if(/not-allowed|service-not-allowed/i.test(err))desktopWakeWordEnabled=false;
+    if(isMobileJarvis()){
+      mobileConversationListenPending=false;
+      if(/no-speech|aborted/i.test(err)&&voiceConversationActive){
+        voiceConversationActive=false;
+        voiceState.textContent='VOICE: TAP TO CONTINUE';
+        return;
+      }
+    }
     voiceState.textContent='VOICE: '+err.toUpperCase();
     if(desktopWakeWordEnabled)scheduleDesktopWakeWord(1200);
   };
@@ -669,6 +722,9 @@ if(SpeechRecognition){
       wakeWordAwaitingCommand=false;
       wakeWordConversationUntil=0;
       wakeWordMutedUntil=Date.now()+12000;
+      voiceConversationActive=true;
+      voiceConversationUntil=Date.now()+120000;
+      mobileConversationListenPending=false;
       voiceState.textContent='VOICE: '+(LANGUAGE_NAMES[activeLanguage.split('-')[0]]||activeLanguage)+' · COMMAND CAPTURED';
       consoleStatus.textContent='JARVIS · DUYULAN: '+captured+' · KOMUT: '+repairedFollowUp;
       setTimeout(()=>send(),140);
@@ -963,6 +1019,7 @@ async function scanTextLocal(){
 function enterPrivacyMode(){
   privacyMode=true;
   voiceConversationActive=false;
+  mobileConversationListenPending=false;
   clearTimeout(conversationFollowupTimer);
   stopCamera();
   clearCapturedFrame();
@@ -1142,9 +1199,10 @@ function speak(text,lang=activeLanguage,tone='balanced'){
   const spoken=String(text).trim();
   if(!spoken)return;
   if(isMobileJarvis()){
-    playJarvisMobileRelay(spoken,tone).catch(err=>{
+    mobileSpeechPromise=playJarvisMobileRelay(spoken,tone).catch(err=>{
       if(window.voiceState)voiceState.textContent='VOICE: JARVIS RELAY FAILED';
       consoleStatus.textContent='MOBILE JARVIS VOICE ERROR · '+String(err&&err.message||err).slice(0,80);
+      return false;
     });
     return;
   }
