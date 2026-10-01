@@ -413,7 +413,7 @@ function forgetSpeechAlias(heard){
 }
 function escapeRegexLiteral(s){
   const specials='\\.^$*+?()[]{}|';
-  return [...String(s||'')].map(ch=>specials.includes(ch)?'\\\\'+ch:ch).join('');
+  return String(s||'').replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 }
 function applySpeechLexicon(text){
   const raw=String(text||'').replace(/\s+/g,' ').trim();
