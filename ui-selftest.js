@@ -12,6 +12,10 @@ const required=[
   'listenWithLocalStt',
   'scheduleVoiceConversationFollowup',
   'askJarvisBrain',
+  'askJarvisBrainCore',
+  'thinkingBackchannelPhrase',
+  'speakThinkingBackchannel',
+  'armThinkingBackchannel',
   'askNativeLocalAgent',
   'askMobileLocalBrain',
   'armMobileConversationFollowup',
@@ -32,3 +36,5 @@ if(!html.includes('SCREEN VISION: LOCAL READY · EXPLICIT ONLY'))throw new Error
 console.log('UI SELFTEST PASS · '+scripts.length+' script block(s)');
 
 if(!html.includes('decode_mode'))throw new Error('Adaptive STT decode mode is not shown in UI');
+
+if(!html.includes('const cancelThinkingBackchannel=armThinkingBackchannel(message)'))throw new Error('Thinking backchannel wrapper missing');

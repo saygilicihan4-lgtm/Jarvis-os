@@ -44,6 +44,8 @@ try {
   Add-Result "Adaptive voice profiles" $adaptiveOk (($h.adaptiveTts.voice)+" · "+(($h.adaptiveTts.profiles -join ",")))
   $pipelineOk=($h.adaptiveTts.chunkedPipeline -eq $true -and $h.adaptiveTts.prefetch -eq $true -and $h.adaptiveTts.safeCache -eq $true)
   Add-Result "Chunked voice pipeline" $pipelineOk ("chunked="+$h.adaptiveTts.chunkedPipeline+" prefetch="+$h.adaptiveTts.prefetch+" cache="+$h.adaptiveTts.safeCache)
+  $backchannelOk=($h.adaptiveTts.backchannelPrewarm -eq $true -and $null -ne $h.adaptiveTts.backchannelState)
+  Add-Result "Thinking backchannel runtime" $backchannelOk ("prewarm="+$h.adaptiveTts.backchannelPrewarm+" state="+$h.adaptiveTts.backchannelState.status+" cached="+$h.adaptiveTts.backchannelState.count+"/"+$h.adaptiveTts.backchannelState.total)
   Add-Result "Offline voice fallback" ([string]$h.adaptiveTts.offlineFallback -eq "windows-sapi") ([string]$h.adaptiveTts.offlineFallback)
   $mobileRelayOk=($null -ne $h.mobileRelay -and $h.mobileRelay.brain -eq $true -and $h.mobileRelay.tts -eq $true)
   Add-Result "Phone local brain relay" $mobileRelayOk ("brain="+$h.mobileRelay.brain+" tts="+$h.mobileRelay.tts+" poll="+$h.mobileRelay.pollMs+"ms")
@@ -323,6 +325,7 @@ $criticalFailed=($results | Where-Object {
     "Worker bridge",
     "Adaptive voice profiles",
     "Chunked voice pipeline",
+    "Thinking backchannel runtime",
     "Ahmet neural voice render",
     "Offline voice fallback",
     "Phone local brain relay",

@@ -155,6 +155,7 @@ let lastVoiceTranscript='';
 let voiceConversationActive=false;
 let voiceConversationUntil=0;
 let conversationFollowupTimer=null;
+let lastThinkingBackchannel='';
 let bargeInMode=false;
 let bargeInRestartTimer=null;
 let clapStream=null,clapCtx=null,clapRAF=null,lastClap=0,clapArmed=false,clapCooldown=0;
@@ -1757,6 +1758,68 @@ function armMobileConversationFollowup(delay=350){
   },Math.max(150,delay));
   return true;
 }
+function stableTextHash(text){
+  let h=2166136261;
+  const s=String(text||'');
+  for(let i=0;i<s.length;i++){
+    h^=s.charCodeAt(i);
+    h=Math.imul(h,16777619);
+  }
+  return h>>>0;
+}
+function thinkingBackchannelPhrase(message){
+  const k=speechKey(message);
+  let pool;
+  if(/(?:kapsamli|analiz|incele|neden|strateji|hata|debug|proje|dosya|ekran)/.test(k)){
+    pool=['Bakıyorum.','Hemen inceliyorum.','Bir saniye, kontrol ediyorum.'];
+  }else if(/(?:haha|ahah|girgir|saka|komik|eglence)/.test(k)){
+    pool=['Hımm, bir bakalım.','Tamam, bakıyorum.','Bir düşüneyim.'];
+  }else{
+    pool=['Bakıyorum.','Bir bakalım.','Hımm, düşünüyorum.','Tamam, bakıyorum.'];
+  }
+  const available=pool.filter(x=>x!==lastThinkingBackchannel);
+  const choices=available.length?available:pool;
+  const phrase=choices[stableTextHash(message)%choices.length];
+  lastThinkingBackchannel=phrase;
+  return phrase;
+}
+function speakThinkingBackchannel(text){
+  if(!text||isMobileJarvis())return false;
+  const spoken=String(text).trim();
+  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),1200);
+  fetch('http://127.0.0.1:8765/speak',{
+    method:'POST',
+    headers:{'content-type':'application/json'},
+    body:JSON.stringify({text:spoken,tone:'balanced'}),
+    signal:ctl.signal
+  }).then(r=>{
+    clearTimeout(timer);
+    if(!r.ok)throw new Error('LOCAL_TTS_'+r.status);
+    document.body.classList.add('speaking');
+    setTimeout(()=>document.body.classList.remove('speaking'),Math.min(5500,700+spoken.length*70));
+  }).catch(()=>{
+    clearTimeout(timer);
+    browserSpeak(spoken,'tr-TR');
+  });
+  return true;
+}
+function armThinkingBackchannel(message){
+  if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis()||privacyMode||document.hidden)return()=>{};
+  if(!voiceConversationActive||Date.now()>voiceConversationUntil)return()=>{};
+  const text=String(message||'').trim();
+  if(!text)return()=>{};
+  const k=speechKey(text);
+  const deep=/(?:kapsamli|analiz|incele|strateji|neden|debug|karsilastir)/.test(k);
+  const delay=deep?950:(text.length<32?1650:1250);
+  let cancelled=false;
+  const timer=setTimeout(()=>{
+    if(cancelled||privacyMode||document.hidden||!voiceConversationActive||Date.now()>voiceConversationUntil)return;
+    const phrase=thinkingBackchannelPhrase(text);
+    if(window.consoleStatus)consoleStatus.textContent='JARVIS · DÜŞÜNÜYOR · '+phrase;
+    speakThinkingBackchannel(phrase);
+  },delay);
+  return()=>{cancelled=true;clearTimeout(timer)};
+}
 async function askNativeLocalAgent(message){
   if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis())return {handled:false};
   const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),65000);
@@ -1835,7 +1898,7 @@ async function askMobileLocalBrain(message){
     return {handled:false,error:e};
   }
 }
-async function askJarvisBrain(message){
+async function askJarvisBrainCore(message){
   // Phone uses the signed PC Worker as its zero-cost local brain.
   if(isMobileJarvis()){
     const mobile=await askMobileLocalBrain(message);
@@ -1964,6 +2027,14 @@ async function askJarvisBrain(message){
     consoleStatus.textContent='JARVIS BRAIN FALLBACK · '+String(e.message||e).slice(0,80);
   }
   return {handled:false};
+}
+async function askJarvisBrain(message){
+  const cancelThinkingBackchannel=armThinkingBackchannel(message);
+  try{
+    return await askJarvisBrainCore(message);
+  }finally{
+    cancelThinkingBackchannel();
+  }
 }
 async function send(){
   primeMobileSpeech();
