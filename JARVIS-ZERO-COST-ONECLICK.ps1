@@ -32,7 +32,7 @@ $files = @(
   "start-worker-windows.bat",
   "jarvis-wake-hotkey.ps1",
   "jarvis-double-clap-v9.py",
-  "jarvis-local-stt-v2.py",
+  "jarvis-local-stt-v3.py",
   "JARVIS-LIVE-ACCEPTANCE.ps1"
 )
 foreach ($f in $files) { Download-RepoFile $f | Out-Null }
@@ -185,7 +185,7 @@ Write-Host "[6/8] Eski JARVIS islemleri temizleniyor..." -ForegroundColor Yellow
 Get-CimInstance Win32_Process |
   Where-Object {
     ($_.Name -eq "node.exe" -and $_.CommandLine -match "worker\.js") -or
-    ($_.Name -match "python|py.exe" -and $_.CommandLine -match "jarvis-local-stt-v1\.py")
+    ($_.Name -match "python|py.exe" -and $_.CommandLine -match "jarvis-local-stt-v\d+\.py")
   } |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Start-Sleep -Seconds 2
