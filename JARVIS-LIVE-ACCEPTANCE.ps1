@@ -50,6 +50,8 @@ try {
   Add-Result "Adaptive voice profiles" $adaptiveOk (($h.adaptiveTts.voice)+" · "+(($h.adaptiveTts.profiles -join ",")))
   $pipelineOk=($h.adaptiveTts.chunkedPipeline -eq $true -and $h.adaptiveTts.prefetch -eq $true -and $h.adaptiveTts.safeCache -eq $true)
   Add-Result "Chunked voice pipeline" $pipelineOk ("chunked="+$h.adaptiveTts.chunkedPipeline+" prefetch="+$h.adaptiveTts.prefetch+" cache="+$h.adaptiveTts.safeCache)
+  $prosodyRuntimeOk=($h.adaptiveTts.dynamicChunkProsody -eq $true -and $h.adaptiveTts.naturalPauseTiming -eq $true)
+  Add-Result "Dynamic sentence prosody runtime" $prosodyRuntimeOk ("prosody="+$h.adaptiveTts.dynamicChunkProsody+" pauses="+$h.adaptiveTts.naturalPauseTiming)
   $backchannelOk=($h.adaptiveTts.backchannelPrewarm -eq $true -and $null -ne $h.adaptiveTts.backchannelState)
   Add-Result "Thinking backchannel runtime" $backchannelOk ("prewarm="+$h.adaptiveTts.backchannelPrewarm+" state="+$h.adaptiveTts.backchannelState.status+" cached="+$h.adaptiveTts.backchannelState.count+"/"+$h.adaptiveTts.backchannelState.total)
   Add-Result "Offline voice fallback" ([string]$h.adaptiveTts.offlineFallback -eq "windows-sapi") ([string]$h.adaptiveTts.offlineFallback)
@@ -59,6 +61,15 @@ try {
   Add-Result "Streaming voice runtime" $streamRuntimeOk ("chat="+$h.brainRuntime.streamingChat+" sentenceTts="+$h.brainRuntime.sentenceStreamTts)
 } catch {
   Add-Result "Worker bridge" $false $_.Exception.Message
+}
+
+try {
+  $pp=Invoke-Json "http://127.0.0.1:8765/prosody-preview" "POST" @{text="Tamam. Gercekten mi? Dikkat, hata var.";tone="balanced"} 8
+  $chunks=@($pp.chunks)
+  $prosodyOk=($pp.ok -eq $true -and $chunks.Count -eq 3 -and [int]$chunks[0].pauseMs -gt 0 -and [int]$chunks[1].pauseMs -gt 0 -and [int]$chunks[2].pauseMs -eq 0 -and [string]$chunks[1].profile.pitch -ne [string]$chunks[0].profile.pitch)
+  Add-Result "Dynamic sentence prosody behavior" $prosodyOk ("chunks="+$chunks.Count+" qPitch="+$chunks[1].profile.pitch+" basePitch="+$chunks[0].profile.pitch)
+} catch {
+  Add-Result "Dynamic sentence prosody behavior" $false $_.Exception.Message
 }
 
 $voiceTmp=Join-Path $env:TEMP ("jarvis-ahmet-accept-"+[guid]::NewGuid().ToString("N")+".mp3")
@@ -366,6 +377,8 @@ $criticalFailed=($results | Where-Object {
     "Adaptive local model router",
     "Adaptive voice profiles",
     "Chunked voice pipeline",
+    "Dynamic sentence prosody runtime",
+    "Dynamic sentence prosody behavior",
     "Thinking backchannel runtime",
     "Ahmet neural voice render",
     "Offline voice fallback",
