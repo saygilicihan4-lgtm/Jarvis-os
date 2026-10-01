@@ -41,6 +41,10 @@ try {
   $stt=Invoke-Json "http://127.0.0.1:8768/health"
   $sttOk=($stt.ok -eq $true -and $stt.adaptive_lexicon -eq $true -and [int]$stt.lexicon_count -ge 1)
   Add-Result "Dynamic STT hotwords" $sttOk ("model="+$stt.model+" aliases="+$stt.lexicon_count)
+  $adaptiveOk=($stt.adaptive_decode -eq $true -and [int]$stt.retry_beam -ge [int]$stt.fast_beam)
+  Add-Result "Adaptive STT decode" $adaptiveOk ("fast="+$stt.fast_beam+" retry="+$stt.retry_beam)
+  $endpointOk=($null -ne $stt.endpointing -and [int]$stt.endpointing.short_silence_ms -le 550 -and [int]$stt.endpointing.long_silence_ms -le 750)
+  Add-Result "Dynamic endpointing" $endpointOk ("short="+$stt.endpointing.short_silence_ms+"ms long="+$stt.endpointing.long_silence_ms+"ms")
 
   $forget=Invoke-Json "http://127.0.0.1:8765/speech-lexicon" "POST" @{action="forget";heard=$heard}
   Add-Result "Forget correction" ($forget.ok -eq $true) ([string]$forget.heard)
@@ -53,7 +57,7 @@ try {
 
 $passed=@($results|Where-Object {$_.ok}).Count
 $total=$results.Count
-$success=($total -ge 7 -and $passed -eq $total)
+$success=($total -ge 9 -and $passed -eq $total)
 [pscustomobject]@{
   at=(Get-Date).ToString("o")
   passed=$passed
