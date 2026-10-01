@@ -1312,6 +1312,19 @@ async function runNativeAgent(message,{maxRounds=4}={}){
       if(!r.ok)throw new Error(j.error||('OLLAMA '+r.status));
     }catch(e){
       clearTimeout(timer);
+      if(actions.length){
+        const summaries=actions.map(x=>(x.ok?'OK ':'FAIL ')+x.tool+': '+x.result).slice(-6);
+        appendLocalBrainHistory('user',text);
+        const final=await finalizeToolReply(text,summaries,actions.some(x=>!x.ok)?'warm':'focused');
+        remember({kind:'native_agent_post_tool_recovery',actions:actions.length,error:String(e.message||e).slice(0,180)});
+        return{
+          ok:true,type:'chat',
+          reply:String(final&&final.reply||summaries.join('. ')),
+          tone:String(final&&final.tone||(actions.some(x=>!x.ok)?'warm':'focused')),
+          model:LOCAL_BRAIN_MODEL,actions,rounds:round+1,nativeTools:true,recovered:true,
+          latencyMs:Date.now()-started
+        };
+      }
       return{ok:false,error:String(e.message||e),model:LOCAL_BRAIN_MODEL,actions};
     }
 
