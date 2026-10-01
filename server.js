@@ -192,11 +192,21 @@ function deterministicPlan(command){
     ]
   };
 }
+const SAFE_AUTO_CAPS=new Set([
+  'system_status','local_memory','process_list_v1','disk_status_v1',
+  'network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1',
+  'desktop_launch_v1','media_control_v1','power_status_v1'
+]);
 function deviceAllows(w,agent,need){
   if(!w||!w.approved||!workerOnline(w))return false;
   const roles=Array.isArray(w.roles)&&w.roles.length?w.roles:['DEVELOPER'];
   const allowed=Array.isArray(w.allowedCapabilities)&&w.allowedCapabilities.length?w.allowedCapabilities:w.capabilities;
-  return roles.includes(agent)&&w.capabilities.includes(need)&&allowed.includes(need);
+  const advertised=Array.isArray(w.capabilities)&&w.capabilities.includes(need);
+  // Safe local capabilities are self-authorizing once an approved signed
+  // Worker advertises them. This prevents stale persisted allow-lists from
+  // incorrectly producing NEEDS_TOOL after a Worker upgrade.
+  const capabilityAllowed=SAFE_AUTO_CAPS.has(need)?advertised:(advertised&&allowed.includes(need));
+  return roles.includes(agent)&&capabilityAllowed;
 }
 function workerSupports(command,deviceId=null,agent='DEVELOPER'){
   const need=requiredCapability(command);
@@ -883,13 +893,8 @@ const server=http.createServer((req,res)=>{
       const deviceId=d.deviceId?String(d.deviceId).replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80):null;
       if(deviceId){
         const previous=state.workers.devices[deviceId];
-        const readOnlyCaps=new Set([
-          'system_status','local_memory','process_list_v1','disk_status_v1',
-          'network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1',
-          'desktop_launch_v1','media_control_v1','power_status_v1'
-        ]);
         const priorAllowed=previous&&Array.isArray(previous.allowedCapabilities)?previous.allowedCapabilities:[];
-        const safeNew=snapshot.capabilities.filter(x=>readOnlyCaps.has(x));
+        const safeNew=snapshot.capabilities.filter(x=>SAFE_AUTO_CAPS.has(x));
         const allowedCapabilities=[...new Set([...priorAllowed,...safeNew])].filter(x=>snapshot.capabilities.includes(x));
         state.workers.devices[deviceId]={
           ...snapshot,
