@@ -82,18 +82,23 @@ const state={
   reminders:[],
   webauthnChallenges:{registration:new Map(),authentication:new Map()},
   mobileTtsRequests:new Map(),
+  mobileBrainRequests:new Map(),
   brainHistory:[],
   stateRevision:0,
   workers:{pc:{name:null,version:null,lastSeen:null,capabilities:[],memory:null},devices:{}}
 };
 
-function cleanupMobileTtsRequests(){
-  const cutoff=Date.now()-2*60*1000;
+function cleanupMobileRelayRequests(){
+  const ttsCutoff=Date.now()-2*60*1000;
   for(const [id,r] of state.mobileTtsRequests){
-    if(!r||Number(r.createdAtMs||0)<cutoff)state.mobileTtsRequests.delete(id);
+    if(!r||Number(r.createdAtMs||0)<ttsCutoff)state.mobileTtsRequests.delete(id);
+  }
+  const brainCutoff=Date.now()-5*60*1000;
+  for(const [id,r] of state.mobileBrainRequests){
+    if(!r||Number(r.createdAtMs||0)<brainCutoff)state.mobileBrainRequests.delete(id);
   }
 }
-setInterval(cleanupMobileTtsRequests,30000);
+setInterval(cleanupMobileRelayRequests,30000);
 function openAIResponseText(payload){
   const out=Array.isArray(payload&&payload.output)?payload.output:[];
   const parts=[];
@@ -669,8 +674,9 @@ const server=http.createServer((req,res)=>{
       const text=String(d.text||'').replace(/\s+/g,' ').trim().slice(0,700);
       if(!text)return json(res,400,{error:'text required'});
       if(!pcOnline())return json(res,409,{error:'PC Worker offline'});
+      const tone=['balanced','casual','playful','warm','focused','work'].includes(String(d.tone||''))?String(d.tone):'balanced';
       const id=crypto.randomUUID();
-      state.mobileTtsRequests.set(id,{id,text,status:'queued',createdAtMs:Date.now(),claimedBy:null,audio:null,error:null});
+      state.mobileTtsRequests.set(id,{id,text,tone,status:'queued',createdAtMs:Date.now(),claimedBy:null,audio:null,error:null});
       return json(res,202,{ok:true,id,status:'queued'});
     });
   }
@@ -681,6 +687,30 @@ const server=http.createServer((req,res)=>{
     if(!r)return json(res,404,{error:'tts request not found'});
     if(r.status==='ready')return json(res,200,{ok:true,status:'ready',mime:'audio/mpeg',audio:r.audio});
     if(r.status==='failed')return json(res,200,{ok:false,status:'failed',error:r.error||'tts failed'});
+    return json(res,200,{ok:true,status:r.status});
+  }
+
+  if(pathname==='/api/mobile-brain'&&req.method==='POST'){
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      const message=String(d.message||'').replace(/\s+/g,' ').trim().slice(0,1800);
+      if(!message)return json(res,400,{error:'message required'});
+      if(!pcOnline())return json(res,409,{error:'PC Worker offline'});
+      const id=crypto.randomUUID();
+      state.mobileBrainRequests.set(id,{
+        id,message,status:'queued',createdAtMs:Date.now(),claimedBy:null,result:null,error:null
+      });
+      touchState();
+      return json(res,202,{ok:true,id,status:'queued'});
+    });
+  }
+
+  const mobileBrainGet=pathname.match(/^\/api\/mobile-brain\/([0-9a-f-]+)$/i);
+  if(mobileBrainGet&&req.method==='GET'){
+    const r=state.mobileBrainRequests.get(mobileBrainGet[1]);
+    if(!r)return json(res,404,{error:'brain request not found'});
+    if(r.status==='ready')return json(res,200,{ok:true,status:'ready',result:r.result});
+    if(r.status==='failed')return json(res,200,{ok:false,status:'failed',error:r.error||'brain failed'});
     return json(res,200,{ok:true,status:r.status});
   }
 
@@ -957,7 +987,7 @@ const server=http.createServer((req,res)=>{
     const next=[...state.mobileTtsRequests.values()].find(r=>r.status==='queued');
     if(!next)return json(res,200,{ok:true,request:null});
     next.status='claimed';next.claimedBy=deviceId;next.claimedAtMs=Date.now();
-    return json(res,200,{ok:true,request:{id:next.id,text:next.text}});
+    return json(res,200,{ok:true,request:{id:next.id,text:next.text,tone:next.tone||'balanced'}});
   }
 
   if(pathname==='/api/worker/mobile-tts-result'&&req.method==='POST'){
@@ -971,6 +1001,29 @@ const server=http.createServer((req,res)=>{
       }else{
         r.status='failed';r.error=String(d.error||'tts generation failed').slice(0,240);r.readyAtMs=Date.now();
       }
+      return json(res,200,{ok:true,status:r.status});
+    });
+  }
+
+  if(pathname==='/api/worker/mobile-brain-next'&&req.method==='GET'){
+    const deviceId=String(req.headers['x-jarvis-device-id']||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80)||'pc';
+    const next=[...state.mobileBrainRequests.values()].find(r=>r.status==='queued');
+    if(!next)return json(res,200,{ok:true,request:null});
+    next.status='claimed';next.claimedBy=deviceId;next.claimedAtMs=Date.now();
+    return json(res,200,{ok:true,request:{id:next.id,message:next.message}});
+  }
+
+  if(pathname==='/api/worker/mobile-brain-result'&&req.method==='POST'){
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      const id=String(d.id||''),r=state.mobileBrainRequests.get(id);
+      if(!r)return json(res,404,{error:'brain request not found'});
+      if(d.ok&&d.result&&typeof d.result==='object'){
+        r.status='ready';r.result=d.result;r.error=null;r.readyAtMs=Date.now();
+      }else{
+        r.status='failed';r.error=String(d.error||'brain processing failed').slice(0,300);r.readyAtMs=Date.now();
+      }
+      touchState();
       return json(res,200,{ok:true,status:r.status});
     });
   }
