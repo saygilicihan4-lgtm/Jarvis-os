@@ -554,6 +554,41 @@ function chooseRecognitionCandidate(e){
   return candidates.map(scoreRecognitionCandidate).sort((a,b)=>b.score-a.score)[0];
 }
 
+function parseNaturalBargeIn(text){
+  const raw=String(text||'').replace(/\s+/g,' ').trim();
+  if(!raw)return{interrupt:false,hardStop:false,followup:''};
+
+  const wake=parseJarvisWake(raw);
+  if(wake.wake){
+    const command=String(wake.command||'').trim();
+    if(!command)return{interrupt:true,hardStop:true,followup:''};
+    const k=speechKey(command);
+    if(/^(?:sus|dur|bekle|yeter|konusmayi kes|konusmayi durdur|sesini kes|cevabi kes)$/.test(k)){
+      return{interrupt:true,hardStop:true,followup:''};
+    }
+    return{interrupt:true,hardStop:false,followup:canonicalJarvisCommand(command)};
+  }
+
+  const k=speechKey(raw);
+  if(/^(?:dur|bekle|bir dakika|bi dakika|yeter|sus)$/.test(k)){
+    return{interrupt:true,hardStop:true,followup:''};
+  }
+
+  const prefixes=[
+    /^(?:dur|bekle|bir dakika|bi dakika)[, ]+(.+)$/i,
+    /^(?:hayır|hayir|yok)[, ]+(.+)$/i,
+    /^(?:yanlış anladın|yanlis anladin)[, ]+(.+)$/i,
+    /^(?:onu demedim|öyle demedim|oyle demedim)[, ]+(.+)$/i
+  ];
+  for(const re of prefixes){
+    const m=raw.match(re);
+    if(m&&m[1]&&m[1].trim().length>=2){
+      return{interrupt:true,hardStop:false,followup:canonicalJarvisCommand(m[1].trim())};
+    }
+  }
+
+  return{interrupt:false,hardStop:false,followup:''};
+}
 function isJarvisBargeInPhrase(text){
   const p=parseJarvisWake(text);
   if(!p.wake||!p.command)return false;
@@ -570,7 +605,7 @@ async function localTtsState(){
     return await r.json().catch(()=>null);
   }catch(_){clearTimeout(timer);return null}
 }
-async function stopJarvisSpeech(reason='voice-interrupt'){
+async function stopJarvisSpeech(reason='voice-interrupt',{listenAfter=true}={}){
   bargeInMode=false;
   clearTimeout(bargeInRestartTimer);
   if(currentChatStreamController){
@@ -592,12 +627,40 @@ async function stopJarvisSpeech(reason='voice-interrupt'){
     if(window.consoleStatus)consoleStatus.textContent='JARVIS · SÖZ KESİLDİ · SİZİ DİNLİYOR';
     voiceConversationActive=true;
     voiceConversationUntil=Date.now()+120000;
-    setTimeout(()=>listenWithLocalStt('after-interrupt').catch(()=>{}),250);
+    if(listenAfter)setTimeout(()=>listenWithLocalStt('after-interrupt').catch(()=>{}),250);
     return true;
   }catch(e){
     if(window.consoleStatus)consoleStatus.textContent='JARVIS INTERRUPT FAILED · '+String(e.message||e).slice(0,70);
     return false;
   }
+}
+async function routeNaturalBargeIn(captured){
+  const parsed=parseNaturalBargeIn(captured);
+  if(!parsed.interrupt)return false;
+
+  if(parsed.hardStop){
+    await stopJarvisSpeech('voice-barge-in',{listenAfter:true});
+    return true;
+  }
+
+  const followup=String(parsed.followup||'').trim();
+  if(!followup)return false;
+
+  await stopJarvisSpeech('voice-barge-in-followup',{listenAfter:false});
+
+  if(await maybeLearnVoiceCorrection(captured))return true;
+
+  await new Promise(r=>setTimeout(r,120));
+  cmd.value=followup;
+  wakeWordAwaitingCommand=false;
+  wakeWordConversationUntil=0;
+  wakeWordMutedUntil=Date.now()+12000;
+  voiceConversationActive=true;
+  voiceConversationUntil=Date.now()+120000;
+  if(window.voiceState)voiceState.textContent='VOICE: INTERRUPT FOLLOW-UP CAPTURED';
+  if(window.consoleStatus)consoleStatus.textContent='JARVIS · SÖZ KESİLDİ · YENİ İSTEK: '+followup;
+  setTimeout(()=>send(),80);
+  return true;
 }
 function armBargeInRecognition(delay=450){
   if(!desktopWakeWordEnabled||!recognition||privacyMode||document.hidden||localSttListening)return;
@@ -819,9 +882,7 @@ if(SpeechRecognition){
     const captured=String(choice.text||'').trim();
     if(e.results[e.results.length-1].isFinal){
       if(bargeInMode){
-        if(isJarvisBargeInPhrase(captured)){
-          stopJarvisSpeech('voice-barge-in').catch(()=>{});
-        }
+        await routeNaturalBargeIn(captured);
         return;
       }
       if(await maybeLearnVoiceCorrection(captured))return;
