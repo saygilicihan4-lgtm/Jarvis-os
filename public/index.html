@@ -1549,6 +1549,9 @@ async function refreshLocalWorkerHealth(){
           if(window.consoleStatus&&bs&&bs.ready&&bs.installed){
             consoleStatus.textContent='LOCAL BRAIN READY · ZERO COST · '+String(bs.model||'');
           }
+          if(window.visionState&&bs&&bs.screenVision===true&&bs.screenVisionExplicitOnly===true){
+            visionState.textContent=' · SCREEN VISION: LOCAL READY · EXPLICIT ONLY';
+          }
         }).catch(()=>{
           if(window.coreSubtitle)coreSubtitle.textContent='LOCAL BRAIN OFFLINE · browser fallback';
         });
