@@ -171,7 +171,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.68.0','worker version');
+    assert(hj.version==='2.69.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localStt&&hj.localStt.adaptiveDecode===true,'adaptive STT decode health');
     assert(hj.localStt&&hj.localStt.dynamicEndpointing===true,'dynamic STT endpointing health');
@@ -224,6 +224,10 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.capabilities.includes('natural_pause_timing_v1'),'natural pause timing capability');
     assert(hj.adaptiveTts.backchannelPrewarm===true,'thinking backchannel prewarm health');
     assert(hj.adaptiveTts.backchannelState&&Number(hj.adaptiveTts.backchannelState.total)>=4,'backchannel prewarm state metadata');
+    assert(hj.adaptiveTts.wakeAckPrewarm===true,'wake acknowledgement prewarm health');
+    assert(Number(hj.adaptiveTts.wakeAckVariants)>=4,'wake acknowledgement variants health');
+    assert(hj.capabilities.includes('dynamic_wake_ack_v1'),'dynamic wake acknowledgement capability');
+    assert(hj.capabilities.includes('wake_ack_turn_timing_v1'),'wake acknowledgement turn timing capability');
     assert(hj.adaptiveTts.offlineFallback==='windows-sapi','offline TTS fallback health');
     assert(hj.brainRuntime&&hj.brainRuntime.keepAlive,'brain runtime health');
 
