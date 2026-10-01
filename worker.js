@@ -27,8 +27,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.38.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1'];
+const WORKER_VERSION='2.39.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1'];
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -44,6 +44,12 @@ const CREATOR_TTS_VOICE='tr-TR-EmelNeural';
 const CREATOR_TTS_RATE='-7%';
 const CREATOR_TTS_PITCH='-6Hz';
 const CREATOR_TTS_VOLUME='+14%';
+
+// Zero-cost local conversational brain. No paid API is used.
+// Default model is intentionally small enough for older Windows laptops.
+const LOCAL_BRAIN_URL=String(process.env.JARVIS_LOCAL_BRAIN_URL||'http://127.0.0.1:11434').replace(/\/$/,'');
+const LOCAL_BRAIN_MODEL=String(process.env.JARVIS_LOCAL_BRAIN_MODEL||'qwen2.5:1.5b').trim();
+const LOCAL_BRAIN_HISTORY_FILE=path.join(MEMORY_DIR,'brain-history.jsonl');
 let speechQueue=Promise.resolve();
 const TTS_LOCK_FILE=path.join(__dirname,'jarvis-tts-active.lock');
 let lastQueuedSpeech='';
@@ -157,6 +163,114 @@ function isLocalSafeControlCommand(command){
     || /^(?:aç|ac|open|uygulama aç|uygulama ac|program aç|program ac|site aç|site ac)\s+.+$/i.test(c)
     || /^.+?\s+(?:aç|ac)$/i.test(c);
 }
+function readLocalBrainHistory(limit=10){
+  try{
+    if(!fs.existsSync(LOCAL_BRAIN_HISTORY_FILE))return [];
+    return fs.readFileSync(LOCAL_BRAIN_HISTORY_FILE,'utf8')
+      .split('\n').filter(Boolean).slice(-Math.max(2,limit*2))
+      .map(x=>{try{return JSON.parse(x)}catch(_){return null}})
+      .filter(x=>x&&['user','assistant'].includes(x.role)&&typeof x.content==='string');
+  }catch(_){return []}
+}
+function appendLocalBrainHistory(role,content){
+  try{
+    fs.mkdirSync(MEMORY_DIR,{recursive:true});
+    fs.appendFileSync(LOCAL_BRAIN_HISTORY_FILE,JSON.stringify({
+      at:new Date().toISOString(),role,content:String(content||'').slice(0,1600)
+    })+'\n','utf8');
+    const lines=fs.readFileSync(LOCAL_BRAIN_HISTORY_FILE,'utf8').split('\n').filter(Boolean);
+    if(lines.length>120)fs.writeFileSync(LOCAL_BRAIN_HISTORY_FILE,lines.slice(-80).join('\n')+'\n','utf8');
+  }catch(_){}
+}
+async function localBrainStatus(){
+  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),1800);
+  try{
+    const r=await fetch(LOCAL_BRAIN_URL+'/api/tags',{signal:ctl.signal});
+    clearTimeout(timer);
+    if(!r.ok)return{ready:false,model:LOCAL_BRAIN_MODEL,error:'HTTP '+r.status};
+    const j=await r.json().catch(()=>({}));
+    const models=(j.models||[]).map(x=>String(x.name||x.model||''));
+    const installed=models.some(x=>x===LOCAL_BRAIN_MODEL||x.startsWith(LOCAL_BRAIN_MODEL+':'));
+    return{ready:true,installed,model:LOCAL_BRAIN_MODEL,models:models.slice(0,12)};
+  }catch(e){
+    clearTimeout(timer);
+    return{ready:false,installed:false,model:LOCAL_BRAIN_MODEL,error:String(e.message||e)};
+  }
+}
+function extractLocalBrainJson(text){
+  const raw=String(text||'').trim();
+  try{return JSON.parse(raw)}catch(_){}
+  const m=raw.match(/\{[\s\S]*\}/);
+  if(m)try{return JSON.parse(m[0])}catch(_){}
+  return null;
+}
+async function callLocalBrain(message){
+  const text=String(message||'').replace(/\s+/g,' ').trim().slice(0,1800);
+  if(!text)return{ok:true,type:'chat',reply:'Sizi dinliyorum Cihan Bey.',command:null};
+
+  const status=await localBrainStatus();
+  if(!status.ready)return{ok:false,error:'OLLAMA_OFFLINE',model:LOCAL_BRAIN_MODEL};
+  if(!status.installed)return{ok:false,error:'MODEL_NOT_INSTALLED',model:LOCAL_BRAIN_MODEL};
+
+  const history=readLocalBrainHistory(8).map(x=>({role:x.role,content:x.content}));
+  const system=[
+    'Sen JARVIS\'sin; Cihan Bey\'in kişisel yapay zeka asistanısın.',
+    'Türkçe konuş. Doğal, sıcak, zeki, kısa ve insan gibi ol.',
+    'Uygun olduğunda hafif espri yap; yapmacık, aşırı resmi veya sürekli övgü dolu olma.',
+    'Konuşma dilindeki eksik ekleri, küçük ses tanıma hatalarını ve önceki cümleye yapılan göndermeleri anlamaya çalış.',
+    'Gerçek bir PC eylemi yapılmadıysa yapıldı deme.',
+    'Güvenli bir bilgisayar komutu isteniyorsa type=command ve command alanına tek bir standart komut yaz.',
+    'Desteklenen güvenli komutlar: sistem durumu, disk durumu, ağ durumu, pil durumu, sesi yükselt, sesi azalt, sessize al, oynat, duraklat, sonraki, önceki, medyayı durdur, youtube aç, google aç, github aç, chatgpt aç, opera gx aç, chrome aç, edge aç, not defteri aç, hesap makinesi aç, dosya gezgini aç, görev yöneticisi aç, ayarlar aç, ses ayarları aç, bluetooth ayarları aç, wifi ayarları aç, çalışma alanı aç.',
+    'Bunun dışındaki konuşma, fikir, soru, şaka ve açıklamalarda type=chat kullan.',
+    'Belirsizse tek kısa soru sor.',
+    'SADECE JSON döndür: {"type":"chat|command","reply":"...","command":null|"..."}.'
+  ].join(' ');
+
+  const body={
+    model:LOCAL_BRAIN_MODEL,
+    stream:false,
+    format:'json',
+    options:{temperature:0.55,top_p:0.9,num_predict:220},
+    messages:[
+      {role:'system',content:system},
+      ...history,
+      {role:'user',content:text}
+    ]
+  };
+
+  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),45000);
+  try{
+    const r=await fetch(LOCAL_BRAIN_URL+'/api/chat',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify(body),
+      signal:ctl.signal
+    });
+    clearTimeout(timer);
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.error||('OLLAMA '+r.status));
+    const parsed=extractLocalBrainJson(j&&j.message&&j.message.content);
+    if(!parsed)throw new Error('LOCAL_BRAIN_BAD_JSON');
+
+    let type=parsed.type==='command'?'command':'chat';
+    let reply=String(parsed.reply||'').replace(/\s+/g,' ').trim().slice(0,900);
+    let command=parsed.command==null?null:String(parsed.command).trim();
+
+    if(type==='command'&&!isLocalSafeControlCommand(command)){
+      type='chat';command=null;
+      reply='Bu isteği anladım ama henüz güvenli yerel komut listemde yok. İsterseniz bu yeteneği ekleyelim.';
+    }
+    if(!reply)reply=type==='command'?'Komutu hazırladım.':'Buradayım Cihan Bey.';
+
+    appendLocalBrainHistory('user',text);
+    appendLocalBrainHistory('assistant',reply);
+    remember({kind:'local_brain',type,command:command||null,model:LOCAL_BRAIN_MODEL});
+    return{ok:true,type,reply,command,model:LOCAL_BRAIN_MODEL};
+  }catch(e){
+    clearTimeout(timer);
+    return{ok:false,error:String(e.message||e),model:LOCAL_BRAIN_MODEL};
+  }
+}
 function startLocalTtsBridge(){
   if(!TTS_ENABLED)return;
   const port=Number(process.env.JARVIS_TTS_PORT||8765);
@@ -173,7 +287,10 @@ function startLocalTtsBridge(){
     if(req.method==='OPTIONS'){res.writeHead(204);return res.end()}
     if(req.method==='GET'&&req.url==='/health'){
       res.writeHead(200,{'content-type':'application/json'});
-      return res.end(JSON.stringify({ok:true,voice:TTS_VOICE,version:WORKER_VERSION}));
+      return res.end(JSON.stringify({
+        ok:true,voice:TTS_VOICE,version:WORKER_VERSION,
+        localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL}
+      }));
     }
     if(req.method==='POST'&&req.url==='/wake'){
       const now=Date.now();
@@ -191,6 +308,24 @@ function startLocalTtsBridge(){
       res.writeHead(200,{'content-type':'application/json'});
       return res.end(JSON.stringify({ok:true,wake:localWakeCounter}));
     }
+    if(req.method==='POST'&&req.url==='/brain'){
+      let body='',tooLarge=false;
+      req.on('data',chunk=>{body+=chunk;if(body.length>65536){tooLarge=true;req.destroy()}});
+      req.on('end',async()=>{
+        if(tooLarge){res.writeHead(413,{'content-type':'application/json'});return res.end(JSON.stringify({ok:false,error:'too large'}))}
+        try{
+          const d=JSON.parse(body||'{}');
+          const result=await callLocalBrain(d.message);
+          res.writeHead(result.ok?200:503,{'content-type':'application/json'});
+          return res.end(JSON.stringify(result));
+        }catch(e){
+          res.writeHead(500,{'content-type':'application/json'});
+          return res.end(JSON.stringify({ok:false,error:String(e.message||e)}));
+        }
+      });
+      return;
+    }
+
     if(req.method==='POST'&&req.url==='/control'){
       let body='',tooLarge=false;
       req.on('data',chunk=>{body+=chunk;if(body.length>32768){tooLarge=true;req.destroy()}});
