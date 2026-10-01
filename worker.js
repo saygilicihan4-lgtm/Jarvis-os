@@ -27,8 +27,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.48.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1'];
+const WORKER_VERSION='2.49.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1'];
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -188,6 +188,44 @@ function prepareJarvisSpeechText(text,tone='balanced'){
   if(tone==='gentle')s=s.replace(/!+/g,'.');
   return s.slice(0,900);
 }
+function sapiRateForTone(tone='balanced'){
+  const t=String(tone||'balanced').toLowerCase();
+  if(t==='excited'||t==='playful')return 1;
+  if(t==='casual'||t==='focused'||t==='work')return 0;
+  if(t==='warm'||t==='serious')return -1;
+  if(t==='gentle')return -2;
+  return -1;
+}
+async function speakWindowsSapiFallback(text,tone='balanced',generation=ttsGeneration){
+  if(process.platform!=='win32'||generation!==ttsGeneration)return false;
+  const clean=String(text||'').replace(/\s+/g,' ').trim().slice(0,900);
+  if(!clean)return false;
+  const safe=clean.replace(/'/g,"''");
+  const rate=sapiRateForTone(tone);
+  const ps="Add-Type -AssemblyName System.Speech; $s=New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.Rate="+rate+"; $s.Volume=100; $s.Speak('"+safe+"'); $s.Dispose()";
+  return new Promise((resolve,reject)=>{
+    let settled=false;
+    const p=childProcess.spawn('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-Command',ps],{
+      windowsHide:true,stdio:'ignore'
+    });
+    activeTtsPlayback=p;
+    const finish=(err)=>{
+      if(settled)return;
+      settled=true;
+      clearTimeout(timer);
+      if(activeTtsPlayback===p)activeTtsPlayback=null;
+      if(generation!==ttsGeneration)return resolve(false);
+      if(err)return reject(err);
+      resolve(true);
+    };
+    const timer=setTimeout(()=>{killChildTree(p);finish(new Error('SAPI TTS zaman aşımı'))},45000);
+    p.on('error',finish);
+    p.on('exit',code=>{
+      if(generation!==ttsGeneration)return finish();
+      code===0?finish():finish(new Error('SAPI TTS çıkış kodu '+code));
+    });
+  });
+}
 async function speakJarvisNow(text,tone='balanced',generation=ttsGeneration){
   if(!TTS_ENABLED||generation!==ttsGeneration)return;
   const clean=prepareJarvisSpeechText(text,tone);
@@ -198,17 +236,24 @@ async function speakJarvisNow(text,tone='balanced',generation=ttsGeneration){
   ttsLastStartedAt=Date.now();
   setTtsLock(true);
   try{
-    await runHidden('py',[
-      '-m','edge_tts',
-      '--voice',TTS_VOICE,
-      '--rate='+profile.rate,
-      '--pitch='+profile.pitch,
-      '--volume='+profile.volume,
-      '--text',clean,
-      '--write-media',mp3
-    ],45000);
+    let edgeReady=false;
+    try{
+      await runHidden('py',[
+        '-m','edge_tts',
+        '--voice',TTS_VOICE,
+        '--rate='+profile.rate,
+        '--pitch='+profile.pitch,
+        '--volume='+profile.volume,
+        '--text',clean,
+        '--write-media',mp3
+      ],45000);
+      edgeReady=fs.existsSync(mp3)&&fs.statSync(mp3).size>512;
+    }catch(e){
+      console.error('[JARVIS] EDGE TTS FAILED, SAPI FALLBACK:',e.message);
+    }
     if(generation!==ttsGeneration)return;
-    await playTtsMp3Cancelable(mp3,generation);
+    if(edgeReady)await playTtsMp3Cancelable(mp3,generation);
+    else await speakWindowsSapiFallback(clean,tone,generation);
   }finally{
     try{if(fs.existsSync(mp3))fs.unlinkSync(mp3)}catch(e){}
     if(generation===ttsGeneration){
@@ -1013,7 +1058,7 @@ function startLocalTtsBridge(){
         capabilities:CAPS,
         localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2'},
         localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper'},
-        adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',interruptible:true,profiles:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']},
+        adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',interruptible:true,offlineFallback:'windows-sapi',profiles:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']},
         brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,toolReflection:true},
         mobileRelay:{brain:true,tts:true,pollMs:650}
       }));
