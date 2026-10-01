@@ -270,7 +270,25 @@ function jarvisWakePhrase(text){
     .replace(/[.,!?;:]+/g,' ')
     .replace(/\s+/g,' ')
     .trim();
-  return /^(?:hey\s+)?jarvis(?:\s+(?:beni\s+dinle|uyan|burada\s+mısın|orada\s+mısın))?$/.test(s);
+  if(!s)return false;
+
+  const compact=s.replace(/^hey\s+/,'').trim();
+  const parts=compact.split(' ');
+  const first=(parts[0]||'')
+    .replace(/ı/g,'i')
+    .replace(/ş/g,'s')
+    .replace(/ç/g,'c')
+    .replace(/ğ/g,'g')
+    .replace(/ö/g,'o')
+    .replace(/ü/g,'u');
+
+  // Browsers using Turkish speech recognition can transcribe the English
+  // name Jarvis as Carvis/Jervis/Jarves. Accept only short wake utterances
+  // to keep false positives low.
+  const aliases=new Set(['jarvis','carvis','jervis','jarves','jarviz','jarvıs','jarvisin']);
+  if(parts.length<=4&&aliases.has(first))return true;
+
+  return /^(?:jarvis|carvis|jervis|jarves|jarviz)\s+(?:beni\s+dinle|uyan|burada\s+mısın|orada\s+mısın)$/.test(compact);
 }
 function scheduleDesktopWakeWord(delay=700){
   if(!desktopWakeWordEnabled||!recognition||privacyMode||document.hidden)return;
@@ -286,17 +304,18 @@ function scheduleDesktopWakeWord(delay=700){
   },wait);
 }
 function answerJarvisWakeWord(){
-  wakeWordMutedUntil=Date.now()+4200;
-  wakeWordConversationUntil=Date.now()+12000;
+  wakeWordMutedUntil=Date.now()+5000;
+  wakeWordConversationUntil=Date.now()+15000;
   try{if(recognition&&listening)recognition.stop()}catch(_){}
   if(window.voiceState)voiceState.textContent='VOICE: JARVIS WAKE DETECTED';
-  if(window.coreSubtitle)coreSubtitle.textContent='JARVIS seslenişi algılandı';
-  speak('Buradayım Cihan Bey.');
+  if(window.coreSubtitle)coreSubtitle.textContent='JARVIS seslenişi algılandı · cevap veriliyor';
+  if(window.consoleStatus)consoleStatus.textContent='JARVIS WAKE WORD · RESPONSE';
+  speak('Buradayım Cihan Bey. Sizi dinliyorum.');
   if(desktopWakeWordEnabled){
     setTimeout(()=>{
       wakeWordMutedUntil=Date.now()+250;
       scheduleDesktopWakeWord(0);
-    },3200);
+    },4300);
   }
 }
 const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -304,7 +323,7 @@ if(SpeechRecognition){
   recognition=new SpeechRecognition();
   recognition.lang=activeLanguage;
   recognition.interimResults=true;
-  recognition.continuous=false;
+  recognition.continuous=desktopWakeWordEnabled;
   recognition.onstart=()=>setVoiceMode(true);
   recognition.onend=()=>{
     setVoiceMode(false);
