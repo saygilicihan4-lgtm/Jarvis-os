@@ -29,7 +29,9 @@ const mock=http.createServer(async(req,res)=>{
     const text=String(last&&last.content||'');
     const system=(body.messages||[]).filter(x=>x.role==='system').map(x=>String(x.content||'')).join('\n');
     let out;
-    if(/gelecekte bağlamı korumak/i.test(system)){
+    if(/araç veya bilgisayar eylemi az önce gerçekten çalıştırıldı/i.test(system)){
+      out={reply:'Pil yüzde seksen iki. Sistem normal görünüyor.',tone:'focused'};
+    } else if(/gelecekte bağlamı korumak/i.test(system)){
       out={
         summary:'Eski sohbette Mavi roket projesi ve doğal JARVIS konuşma tarzı ele alındı.',
         topics:['Mavi roket projesi','JARVIS konuşma tarzı'],
@@ -99,7 +101,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.46.0','worker version');
+    assert(hj.version==='2.47.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.adaptiveTts&&hj.adaptiveTts.interruptible===true,'interruptible TTS health');
     assert(hj.brainRuntime&&hj.brainRuntime.keepAlive,'brain runtime health');
@@ -128,6 +130,26 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(pm.type==='plan','multi-action plan routing');
     assert(Array.isArray(pm.commands)&&pm.commands.length===2,'multi-action commands missing');
     assert(pm.commands[0]==='youtube aç'&&pm.commands[1]==='sesi yükselt','multi-action order');
+
+    const reflected=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain-finalize',{
+      message:'Pil durumu nedir?',
+      results:['PC güç durumu · pil %82 · RAM 5.4 / 8 GB boş'],
+      tone:'focused'
+    });
+    assert(reflected.status===200,'tool reflection status');
+    const rfj=JSON.parse(reflected.body);
+    assert(rfj.ok===true&&rfj.reflected===true,'tool reflection not used');
+    assert(/yüzde seksen iki/i.test(rfj.reply),'tool reflection reply missing verified result');
+
+    const simpleFinal=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain-finalize',{
+      message:"YouTube'u aç",
+      results:['youtube açıldı'],
+      tone:'focused'
+    });
+    assert(simpleFinal.status===200,'simple tool finalizer status');
+    const sfj=JSON.parse(simpleFinal.body);
+    assert(sfj.ok===true&&sfj.reflected===false,'simple tool should avoid extra model latency');
+    assert(/youtube açıldı/i.test(sfj.reply),'simple tool final reply');
 
     const blocked=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Bilgisayarı formatla.'});
     assert(blocked.status===200,'blocked status');

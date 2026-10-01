@@ -27,8 +27,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.46.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1'];
+const WORKER_VERSION='2.47.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2'];
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -799,7 +799,7 @@ async function callLocalBrain(message){
     stream:false,
     think:false,
     format:schema,
-    keep_alive:'10m',
+    keep_alive:LOCAL_BRAIN_KEEP_ALIVE,
     options:{
       temperature:repairNote?0.25:turnStyle.temperature,
       top_p:0.9,
@@ -867,7 +867,7 @@ async function callLocalBrain(message){
     }
 
     appendLocalBrainHistory('user',text);
-    appendLocalBrainHistory('assistant',reply);
+    if(type==='chat')appendLocalBrainHistory('assistant',reply);
     remember({
       kind:'local_brain_v2',
       type,command:command||null,commands,model:LOCAL_BRAIN_MODEL,
@@ -879,6 +879,97 @@ async function callLocalBrain(message){
   }
 }
 
+function shouldReflectToolResult(command,message,resultCount=1){
+  const c=String(command||'').toLocaleLowerCase('tr-TR');
+  const m=String(message||'');
+  return resultCount>1
+    || /(?:durumu|status|dosyalarda ara|workspace search|işlemleri listele|islemleri listele|process list|yerel ai)/i.test(c)
+    || m.length>150;
+}
+async function finalizeToolReply(userMessage,toolResults,toneHint='focused'){
+  const userText=String(userMessage||'').replace(/\s+/g,' ').trim().slice(0,1800);
+  const results=(Array.isArray(toolResults)?toolResults:[toolResults])
+    .map(x=>String(x||'').replace(/\s+/g,' ').trim())
+    .filter(Boolean)
+    .slice(0,4);
+  if(!results.length)return{ok:false,error:'NO_TOOL_RESULTS'};
+
+  const rawReply=results.join('. ').replace(/\s+/g,' ').trim().slice(0,900);
+  const commandHint=userText;
+  if(!shouldReflectToolResult(commandHint,rawReply,results.length)){
+    appendLocalBrainHistory('assistant',rawReply);
+    remember({kind:'tool_result_final',reflected:false,results:results.length,tone:toneHint});
+    return{ok:true,reply:rawReply,tone:toneHint,model:'deterministic-tool-finalizer',latencyMs:0,reflected:false};
+  }
+
+  const status=await localBrainStatus();
+  if(!status.ready||!status.installed){
+    appendLocalBrainHistory('assistant',rawReply);
+    return{ok:true,reply:rawReply,tone:toneHint,model:'tool-fallback',latencyMs:0,reflected:false};
+  }
+
+  const recent=recentBrainHistory(8);
+  const allowedTones=['balanced','casual','playful','warm','focused','work','serious','excited','gentle'];
+  const schema={
+    type:'object',
+    properties:{
+      reply:{type:'string'},
+      tone:{type:'string',enum:allowedTones}
+    },
+    required:['reply','tone'],
+    additionalProperties:false
+  };
+  const system=[
+    'Sen JARVIS\'sin. Bir araç veya bilgisayar eylemi az önce gerçekten çalıştırıldı ve aşağıda doğrulanmış sonuçları var.',
+    'Kullanıcıya yalnızca bu gerçek sonuçlara dayanarak doğal Türkçe ile, insan gibi ve kısa biçimde cevap ver.',
+    'Sonuçlarda olmayan bilgi, sayı veya başarı uydurma.',
+    'Ham teknik metni sesli konuşmaya uygun hale getir.',
+    'Durum, arama veya çok adımlı sonuçlarda önemli noktaları seç; ekrandaki her satırı okumaya çalışma.',
+    'Uygunsa tek kısa espri kullanabilirsin; sonucu gölgelememeli.',
+    'Cihan Bey hitabını ara sıra kullan, her turda kullanma.',
+    'SADECE JSON şemasına uy.'
+  ].join(' ');
+  const toolBlock=results.map((x,i)=>'SONUÇ '+(i+1)+': '+x).join('\n');
+  const body={
+    model:LOCAL_BRAIN_MODEL,
+    stream:false,
+    think:false,
+    format:schema,
+    keep_alive:LOCAL_BRAIN_KEEP_ALIVE,
+    options:{temperature:0.42,top_p:0.88,repeat_penalty:1.08,num_ctx:3072,num_predict:170},
+    messages:[
+      {role:'system',content:system},
+      ...recent.map(x=>({role:x.role,content:x.content})),
+      {role:'user',content:'İstek: '+userText+'\n'+toolBlock}
+    ]
+  };
+
+  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),30000);
+  const started=Date.now();
+  try{
+    const r=await fetch(LOCAL_BRAIN_URL+'/api/chat',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify(body),
+      signal:ctl.signal
+    });
+    clearTimeout(timer);
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.error||('OLLAMA '+r.status));
+    const parsed=extractLocalBrainJson(j&&j.message&&j.message.content);
+    if(!parsed||!parsed.reply)throw new Error('TOOL_REFLECTION_BAD_JSON');
+    const reply=normalizeBrainReply(parsed.reply);
+    const tone=allowedTones.includes(String(parsed.tone||''))?String(parsed.tone):toneHint;
+    appendLocalBrainHistory('assistant',reply);
+    remember({kind:'tool_result_final',reflected:true,model:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-started,results:results.length,tone});
+    return{ok:true,reply,tone,model:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-started,reflected:true};
+  }catch(e){
+    clearTimeout(timer);
+    appendLocalBrainHistory('assistant',rawReply);
+    remember({kind:'tool_result_final',reflected:false,error:String(e.message||e).slice(0,180),results:results.length,tone:toneHint});
+    return{ok:true,reply:rawReply,tone:toneHint,model:'tool-fallback',latencyMs:Date.now()-started,reflected:false};
+  }
+}
 function startLocalTtsBridge(){
   if(!TTS_ENABLED&&!FORCE_LOCAL_BRIDGE&&!TEST_MODE)return;
   const port=Number(process.env.JARVIS_TTS_PORT||8765);
@@ -901,7 +992,7 @@ function startLocalTtsBridge(){
         localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2'},
         localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper'},
         adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',interruptible:true,profiles:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']},
-        brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE},
+        brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,toolReflection:true},
         mobileRelay:{brain:true,tts:true,pollMs:650}
       }));
     }
@@ -968,6 +1059,24 @@ function startLocalTtsBridge(){
         try{
           const d=JSON.parse(body||'{}');
           const result=await callLocalBrain(d.message);
+          res.writeHead(result.ok?200:503,{'content-type':'application/json'});
+          return res.end(JSON.stringify(result));
+        }catch(e){
+          res.writeHead(500,{'content-type':'application/json'});
+          return res.end(JSON.stringify({ok:false,error:String(e.message||e)}));
+        }
+      });
+      return;
+    }
+
+    if(req.method==='POST'&&req.url==='/brain-finalize'){
+      let body='',tooLarge=false;
+      req.on('data',chunk=>{body+=chunk;if(body.length>65536){tooLarge=true;req.destroy()}});
+      req.on('end',async()=>{
+        if(tooLarge){res.writeHead(413,{'content-type':'application/json'});return res.end(JSON.stringify({ok:false,error:'too large'}))}
+        try{
+          const d=JSON.parse(body||'{}');
+          const result=await finalizeToolReply(d.message,d.results,d.tone||'focused');
           res.writeHead(result.ok?200:503,{'content-type':'application/json'});
           return res.end(JSON.stringify(result));
         }catch(e){
@@ -1903,31 +2012,46 @@ async function serviceMobileBrain(){
           if(!action||!action.ok){allOk=false;break}
         }
         const summary=actionResults.map(x=>String(x&&x.message||'')).filter(Boolean).join('. ');
+        const final=await finalizeToolReply(
+          q.message,
+          actionResults.map(x=>String(x&&x.message||'')).filter(Boolean),
+          allOk?String(result.tone||'focused'):'warm'
+        );
         result={
           ok:true,
           type:'chat',
-          reply:summary||String(result.reply||'Plan işlendi.'),
+          reply:String(final&&final.reply||summary||result.reply||'Plan işlendi.'),
           command:null,
           commands:result.commands.slice(0,4),
           executed:allOk,
           actionResults,
           model:result.model,
-          tone:allOk?String(result.tone||'focused'):'warm',
+          finalizerModel:final&&final.model||null,
+          reflected:!!(final&&final.reflected),
+          tone:String(final&&final.tone||(allOk?result.tone||'focused':'warm')),
           memoryHits:result.memoryHits||0,
           personaVersion:result.personaVersion||2
         };
       }else if(result.type==='command'&&result.command){
         const action=await execute({command:result.command});
+        const raw=String(action&&action.message||result.reply||'Komut işlendi.');
+        const final=await finalizeToolReply(
+          q.message,
+          [raw],
+          action&&action.ok?String(result.tone||'focused'):'warm'
+        );
         result={
           ok:true,
           type:'chat',
-          reply:String(action&&action.message||result.reply||'Komut işlendi.'),
+          reply:String(final&&final.reply||raw),
           command:result.command,
           commands:[],
           executed:!!(action&&action.ok),
           actionResult:action||null,
           model:result.model,
-          tone:action&&action.ok?String(result.tone||'focused'):'warm',
+          finalizerModel:final&&final.model||null,
+          reflected:!!(final&&final.reflected),
+          tone:String(final&&final.tone||(action&&action.ok?result.tone||'focused':'warm')),
           memoryHits:result.memoryHits||0,
           personaVersion:result.personaVersion||2
         };
