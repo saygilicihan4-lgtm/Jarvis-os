@@ -10,6 +10,7 @@ const required=[
   'canonicalJarvisCommand',
   'applyLearnedSpeechAlias',
   'loadLocalSpeechLexicon',
+  'normalizeWithWorkerSpeechLexicon',
   'teachLocalSpeechAlias',
   'maybeLearnVoiceCorrection',
   'listenWithLocalStt',
