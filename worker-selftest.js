@@ -143,7 +143,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.58.0','worker version');
+    assert(hj.version==='2.59.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localStt&&hj.localStt.adaptiveDecode===true,'adaptive STT decode health');
     assert(hj.localStt&&hj.localStt.dynamicEndpointing===true,'dynamic STT endpointing health');
@@ -160,6 +160,8 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.adaptiveTts.prefetch===true,'TTS prefetch health');
     assert(hj.adaptiveTts.safeCache===true,'safe TTS cache health');
     assert(hj.adaptiveTts.backchannelPrewarm===true,'thinking backchannel prewarm health');
+    assert(hj.adaptiveTts.sentenceProsody===true,'sentence prosody health');
+    assert(hj.adaptiveTts.cadenceAdaptation===true,'cadence adaptation health');
     assert(hj.adaptiveTts.backchannelState&&Number(hj.adaptiveTts.backchannelState.total)>=4,'backchannel prewarm state metadata');
     assert(hj.adaptiveTts.offlineFallback==='windows-sapi','offline TTS fallback health');
     assert(hj.brainRuntime&&hj.brainRuntime.keepAlive,'brain runtime health');
@@ -179,6 +181,31 @@ function assert(x,msg){if(!x)throw new Error(msg)}
 
     const noStreamAction=await post('http://127.0.0.1:'+BRIDGE_PORT+'/chat-stream',{message:"YouTube'u açar mısın?"});
     assert(noStreamAction.status===409,'PC action must be rejected by chat streaming');
+
+    const qProfile=await post('http://127.0.0.1:'+BRIDGE_PORT+'/tts-profile',{
+      text:'Bunu gerçekten yapalım mı?',
+      tone:'balanced',
+      index:0,
+      total:2
+    });
+    assert(qProfile.status===200,'question prosody profile status');
+    const qpj=JSON.parse(qProfile.body);
+    assert(qpj.ok===true&&qpj.sentenceProsody===true,'question prosody profile payload');
+
+    const endProfile=await post('http://127.0.0.1:'+BRIDGE_PORT+'/tts-profile',{
+      text:'Tamam, burada bitirelim.',
+      tone:'balanced',
+      index:1,
+      total:2
+    });
+    assert(endProfile.status===200,'closing prosody profile status');
+    const epj=JSON.parse(endProfile.body);
+    const qPitch=Number(String(qpj.profile.pitch).replace(/Hz/i,''));
+    const endPitch=Number(String(epj.profile.pitch).replace(/Hz/i,''));
+    const qRate=Number(String(qpj.profile.rate).replace(/%/g,''));
+    const endRate=Number(String(epj.profile.rate).replace(/%/g,''));
+    assert(Number.isFinite(qPitch)&&Number.isFinite(endPitch)&&qPitch>endPitch,'question/final pitch contour');
+    assert(Number.isFinite(qRate)&&Number.isFinite(endRate)&&qRate>endRate,'question/final cadence contour');
 
     const agentDir=path.join(workspace,'projects');
     fs.mkdirSync(agentDir,{recursive:true});
