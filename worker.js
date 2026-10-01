@@ -922,6 +922,17 @@ function startLocalTtsBridge(){
       res.writeHead(200,{'content-type':'application/json'});
       return res.end(JSON.stringify(stopped));
     }
+    if(req.method==='POST'&&req.url==='/brain-warm'){
+      warmLocalBrain().then(state=>{
+        const ok=state.status==='ready';
+        res.writeHead(ok?200:503,{'content-type':'application/json'});
+        res.end(JSON.stringify({ok,...state}));
+      }).catch(e=>{
+        res.writeHead(503,{'content-type':'application/json'});
+        res.end(JSON.stringify({ok:false,status:'error',error:String(e.message||e)}));
+      });
+      return;
+    }
     if(req.method==='GET'&&req.url==='/brain-status'){
       localBrainStatus().then(status=>{
         res.writeHead(200,{'content-type':'application/json'});
