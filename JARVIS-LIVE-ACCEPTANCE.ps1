@@ -54,8 +54,15 @@ try {
   Add-Result "Local brain ready" $ok (($b.model)+" · RAM "+($b.ramGb)+"GB")
   Add-Result "Qwen3 conversational engine" ([string]$b.model -match "^qwen3:") ([string]$b.model)
   Add-Result "Episodic memory engine" ($null -ne $b.memoryEpisodes) ("episodes="+$b.memoryEpisodes+" facts="+$b.memoryFacts)
+
+  $warmSw=[Diagnostics.Stopwatch]::StartNew()
+  $warm=Invoke-Json "http://127.0.0.1:8765/brain-warm" "POST" @{} 45
+  $warmSw.Stop()
+  $warmOk=($warm.ok -eq $true -and $warm.status -eq "ready")
+  Add-Result "Local brain prewarm" $warmOk ("model="+$warm.model+" warm="+$warm.latencyMs+"ms") $warmSw.Elapsed.TotalMilliseconds
 } catch {
   Add-Result "Local brain ready" $false $_.Exception.Message
+  Add-Result "Local brain prewarm" $false $_.Exception.Message
 }
 
 try {
@@ -64,8 +71,26 @@ try {
   Add-Result "Local Turkish STT" $ok (($s.engine)+" · "+($s.model)+" · mic "+($s.microphone))
   $hotwordsOk=([string]$s.hotwords -match "Jarvis" -and [string]$s.hotwords -match "YouTube")
   Add-Result "STT command vocabulary bias" $hotwordsOk ([string]$s.hotwords)
+
+  $sttLoaded=$false
+  $sttDetail=""
+  1..60 | ForEach-Object {
+    $probe=Invoke-Json "http://127.0.0.1:8768/health" "GET" $null 5
+    if($probe.loaded -eq $true) {
+      $sttLoaded=$true
+      $sttDetail=("model="+$probe.model+" load="+$probe.load_state.load_seconds+"s")
+      break
+    }
+    if($probe.load_state.status -eq "error") {
+      $sttDetail=[string]$probe.load_state.error
+      break
+    }
+    Start-Sleep -Milliseconds 500
+  }
+  Add-Result "STT model preloaded" $sttLoaded $sttDetail
 } catch {
   Add-Result "Local Turkish STT" $false $_.Exception.Message
+  Add-Result "STT model preloaded" $false $_.Exception.Message
 }
 
 try {
@@ -111,8 +136,11 @@ try {
   $robotic=($reply -match "nas.l yard.mc. olabilirim")
   $ok=($r.ok -eq $true -and $r.type -eq "chat" -and $reply.Length -ge 8 -and -not $robotic)
   Add-Result "Humanlike casual reply" $ok $reply $x.ms
+  $latencyOk=($x.ms -le 15000)
+  Add-Result "Conversation latency" $latencyOk ("brain round-trip="+[math]::Round($x.ms,0)+"ms · target<=15000ms") $x.ms
 } catch {
   Add-Result "Humanlike casual reply" $false $_.Exception.Message
+  Add-Result "Conversation latency" $false $_.Exception.Message
 }
 
 $memoryPhrase = "Test tercihim: videolarda sinematik ama komik bir ton."
@@ -136,8 +164,13 @@ try {
 try {
   $ts=Invoke-Json "http://127.0.0.1:8765/tts-state" "GET" $null 5
   Add-Result "Turn-taking TTS state" ($ts.ok -eq $true -and $null -ne $ts.active) ("active="+$ts.active+" pending="+$ts.pending)
+  Add-Result "Interruptible Jarvis speech" ($ts.interruptible -eq $true) ("generation="+$ts.generation)
+  $stop=Invoke-Json "http://127.0.0.1:8765/tts-stop" "POST" @{reason="acceptance"} 5
+  Add-Result "TTS interrupt endpoint" ($stop.ok -eq $true -and $stop.stopped -eq $true) ("generation="+$stop.generation)
 } catch {
   Add-Result "Turn-taking TTS state" $false $_.Exception.Message
+  Add-Result "Interruptible Jarvis speech" $false $_.Exception.Message
+  Add-Result "TTS interrupt endpoint" $false $_.Exception.Message
 }
 
 $acceptFile=Join-Path $Workspace ".jarvis-acceptance-search.txt"
@@ -164,8 +197,10 @@ $criticalFailed=($results | Where-Object {
     "Adaptive voice profiles",
     "Phone local brain relay",
     "Local brain ready",
+    "Local brain prewarm",
     "Qwen3 conversational engine",
     "Local Turkish STT",
+    "STT model preloaded",
     "STT command vocabulary bias",
     "Episodic memory engine",
     "Natural command: volume",
@@ -173,9 +208,12 @@ $criticalFailed=($results | Where-Object {
     "Multi-action planning",
     "Safety: unsafe action blocked",
     "Humanlike casual reply",
+    "Conversation latency",
     "Persistent memory write",
     "Persistent memory recall",
     "Turn-taking TTS state",
+    "Interruptible Jarvis speech",
+    "TTS interrupt endpoint",
     "Workspace local search",
     "Zero-cost guard"
   )
