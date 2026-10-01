@@ -200,6 +200,34 @@ function brainPersona(){
   }catch(_){}
   return defaults;
 }
+function saveBrainPersona(p){
+  try{
+    fs.mkdirSync(MEMORY_DIR,{recursive:true});
+    fs.writeFileSync(LOCAL_BRAIN_PERSONA_FILE,JSON.stringify(p,null,2),'utf8');
+  }catch(_){}
+}
+function clamp01(x){return Math.max(0,Math.min(1,Number(x)||0))}
+function updateBrainPersonaFromUserText(text){
+  const s=String(text||'').toLocaleLowerCase('tr-TR');
+  const p=brainPersona();
+  let changed=false;
+  const bump=(k,d)=>{const n=clamp01(Number(p[k]||0)+d);if(n!==p[k]){p[k]=n;changed=true}};
+
+  if(/daha (?:eğlenceli|eglenceli|komik|şakacı|sakaci)|gırgır|girgir|şamata|samimi konuş|rahat konuş/.test(s)){bump('humor',0.14);bump('playfulness',0.14);bump('warmth',0.06)}
+  if(/daha ciddi|şaka yapma|saka yapma|ciddi konuş/.test(s)){bump('humor',-0.22);bump('playfulness',-0.20);bump('directness',0.08)}
+  if(/kısa konuş|kisa konus|uzatma|kısa cevap/.test(s)){bump('verbosity',-0.18);bump('directness',0.08)}
+  if(/detaylı anlat|detayli anlat|uzun anlat|ayrıntılı anlat|ayrintili anlat/.test(s)){bump('verbosity',0.18)}
+  if(/daha net|direkt konuş|direkt konus|lafı dolandırma|lafi dolandirma/.test(s)){bump('directness',0.12)}
+  if(/daha sıcak|daha sicak|daha samimi/.test(s)){bump('warmth',0.12)}
+
+  if(changed){
+    p.updatedAt=new Date().toISOString();
+    p.version=Math.max(2,Number(p.version)||2);
+    saveBrainPersona(p);
+    remember({kind:'brain_persona_adjusted',warmth:p.warmth,humor:p.humor,directness:p.directness,playfulness:p.playfulness,verbosity:p.verbosity});
+  }
+  return p;
+}
 function brainTokens(text){
   return [...new Set(String(text||'').toLocaleLowerCase('tr-TR')
     .replace(/[^a-z0-9çğıöşü\s]/gi,' ')
@@ -340,6 +368,7 @@ async function callLocalBrain(message){
   if(!text)return{ok:true,type:'chat',reply:'Sizi dinliyorum Cihan Bey.',command:null};
 
   maybeRememberExplicitPreference(text);
+  const adjustedPersona=updateBrainPersonaFromUserText(text);
 
   const status=await localBrainStatus();
   if(!status.ready)return{ok:false,error:'OLLAMA_OFFLINE',model:LOCAL_BRAIN_MODEL};
@@ -347,7 +376,7 @@ async function callLocalBrain(message){
 
   const recent=recentBrainHistory(6);
   const memory=relevantBrainMemory(text,5);
-  const persona=brainPersona();
+  const persona=adjustedPersona||brainPersona();
   const memoryText=memory.length
     ? memory.map(x=>'- '+(x.role==='memory'?'Hatırlanan tercih':'Önceki konuşma')+': '+x.text).join('\n')
     : '- İlgili eski kayıt yok.';
