@@ -67,6 +67,8 @@ try {
   Add-Result "Streaming voice runtime" $streamRuntimeOk ("chat="+$h.brainRuntime.streamingChat+" sentenceTts="+$h.brainRuntime.sentenceStreamTts)
   $socialRuntimeOk=($h.brainRuntime.socialDialogue -eq $true -and $h.brainRuntime.responseVariation -eq $true -and $h.brainRuntime.contextualFollowup -eq $true)
   Add-Result "Social dialogue runtime" $socialRuntimeOk ("social="+$h.brainRuntime.socialDialogue+" variation="+$h.brainRuntime.responseVariation+" followup="+$h.brainRuntime.contextualFollowup)
+  $feedbackRuntimeOk=($h.brainRuntime.dialogueFeedbackLearning -eq $true -and $h.brainRuntime.socialPreferenceAdaptation -eq $true)
+  Add-Result "Dialogue feedback learning" $feedbackRuntimeOk ("learning="+$h.brainRuntime.dialogueFeedbackLearning+" adaptation="+$h.brainRuntime.socialPreferenceAdaptation)
   $duplexOk=(@($h.capabilities) -contains "full_duplex_interrupt_v1" -and @($h.capabilities) -contains "cancellable_agent_v1" -and $h.brainRuntime.fullDuplexInterrupt -eq $true -and $h.brainRuntime.cancellableAgent -eq $true)
   Add-Result "Full duplex reasoning cancellation" $duplexOk ("interrupt="+$h.brainRuntime.fullDuplexInterrupt+" cancellableAgent="+$h.brainRuntime.cancellableAgent)
 } catch {
@@ -88,6 +90,14 @@ try {
   Add-Result "Dynamic sentence prosody behavior" $prosodyOk ("chunks="+$chunks.Count+" qPitch="+$chunks[1].profile.pitch+" basePitch="+$chunks[0].profile.pitch)
 } catch {
   Add-Result "Dynamic sentence prosody behavior" $false $_.Exception.Message
+}
+
+try {
+  $df=Invoke-Json "http://127.0.0.1:8765/dialogue-feedback" "GET" $null 5
+  $dfOk=($df.ok -eq $true -and $null -ne $df.followupBias -and $null -ne $df.banterBias -and $null -ne $df.variationBias)
+  Add-Result "Dialogue feedback state" $dfOk ("followup="+$df.followupBias+" banter="+$df.banterBias+" variation="+$df.variationBias)
+} catch {
+  Add-Result "Dialogue feedback state" $false $_.Exception.Message
 }
 
 $voiceTmp=Join-Path $env:TEMP ("jarvis-ahmet-accept-"+[guid]::NewGuid().ToString("N")+".mp3")
@@ -410,6 +420,8 @@ $criticalFailed=($results | Where-Object {
     "Phone local brain relay",
     "Streaming voice runtime",
     "Social dialogue runtime",
+    "Dialogue feedback learning",
+    "Dialogue feedback state",
     "Full duplex reasoning cancellation",
     "Local brain ready",
     "Local brain prewarm",
