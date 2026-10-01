@@ -32,7 +32,8 @@ $files = @(
   "start-worker-windows.bat",
   "jarvis-wake-hotkey.ps1",
   "jarvis-double-clap-v9.py",
-  "jarvis-local-stt-v1.py"
+  "jarvis-local-stt-v1.py",
+  "JARVIS-LIVE-ACCEPTANCE.ps1"
 )
 foreach ($f in $files) { Download-RepoFile $f | Out-Null }
 
@@ -138,20 +139,22 @@ $stt = $null
 }
 if (-not $stt -or -not $stt.ok) { throw "JARVIS local STT health failed" }
 
-Write-Host "[8/8] Gercek Local Brain smoke testi..." -ForegroundColor Yellow
-$brainBody = @{ message = "Merhaba Jarvis. Kisa, dogal ve hafif esprili bir selam ver." } | ConvertTo-Json -Compress
-$brain = Invoke-RestMethod -Uri "http://127.0.0.1:8765/brain" -Method Post -ContentType "application/json" -Body $brainBody -TimeoutSec 90
-if (-not $brain.ok -or -not $brain.reply) { throw "Local Brain smoke test failed" }
+Write-Host "[8/8] JARVIS canli kabul testleri calistiriliyor..." -ForegroundColor Yellow
+$acceptance = Join-Path $JarvisDir "JARVIS-LIVE-ACCEPTANCE.ps1"
+& powershell -NoProfile -ExecutionPolicy Bypass -File $acceptance
+if ($LASTEXITCODE -ne 0) {
+  throw "JARVIS live acceptance suite failed. Sistem tamamlandi sayilmadi."
+}
 
 Write-Host ""
 Write-Host "==============================================" -ForegroundColor Green
-Write-Host " JARVIS LOCAL AI DOGRULANDI" -ForegroundColor Green
+Write-Host " JARVIS ZERO-COST LOCAL AI KABUL TESTLERINDEN GECTI" -ForegroundColor Green
 Write-Host "==============================================" -ForegroundColor Green
 Write-Host ("Worker : v{0}" -f $bridge.version)
-Write-Host ("Brain  : {0} / ZERO COST" -f $brain.model)
+Write-Host ("Brain  : {0} / ZERO COST" -f $env:JARVIS_LOCAL_BRAIN_MODEL)
 Write-Host ("STT    : {0} / {1}" -f $stt.engine,$stt.model)
-Write-Host ("Mic    : READY")
-Write-Host ("Reply  : {0}" -f $brain.reply)
+Write-Host ("Mic    : {0}" -f $stt.microphone)
 Write-Host ""
 Write-Host "Ucretli AI API: KAPALI" -ForegroundColor Green
-Write-Host "Kurulum ancak bu dogrulamalar gectikten sonra basarili sayildi."
+Write-Host "Kurulum ancak tum canli kabul testleri gectigi icin basarili sayildi."
+
