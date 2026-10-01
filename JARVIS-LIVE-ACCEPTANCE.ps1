@@ -46,6 +46,8 @@ try {
   Add-Result "Conversation repair capability" $repairCapabilityOk ("runtime="+$h.brainRuntime.conversationRepair)
   $modelRouterOk=(@($h.capabilities) -contains "adaptive_model_router_v1" -and @($h.capabilities) -contains "deep_model_fallback_v1" -and $h.brainRuntime.adaptiveModelRouter -eq $true)
   Add-Result "Adaptive local model router" $modelRouterOk ("fast="+$h.brainRuntime.fastModel+" deep="+$h.brainRuntime.deepModel)
+  $qualityEscalationOk=(@($h.capabilities) -contains "auto_quality_escalation_v1" -and @($h.capabilities) -contains "weak_response_escalation_v1" -and @($h.capabilities) -contains "repair_quality_escalation_v1" -and $h.brainRuntime.autoQualityEscalation -eq $true -and $h.brainRuntime.weakResponseEscalation -eq $true -and $h.brainRuntime.repairQualityEscalation -eq $true)
+  Add-Result "Automatic quality escalation" $qualityEscalationOk ("auto="+$h.brainRuntime.autoQualityEscalation+" weak="+$h.brainRuntime.weakResponseEscalation+" repair="+$h.brainRuntime.repairQualityEscalation)
   $turnPacingOk=(@($h.capabilities) -contains "adaptive_turn_pacing_v1" -and @($h.capabilities) -contains "latency_learning_v1" -and $h.brainRuntime.adaptiveTurnPacing -eq $true)
   Add-Result "Adaptive turn pacing capability" $turnPacingOk ("runtime="+$h.brainRuntime.adaptiveTurnPacing)
   $adaptiveOk=($null -ne $h.adaptiveTts -and $h.adaptiveTts.engine -eq "edge-neural" -and $h.adaptiveTts.profiles.Count -ge 4)
@@ -408,6 +410,7 @@ $criticalFailed=($results | Where-Object {
     "Natural spoken interruption",
     "Conversation repair capability",
     "Adaptive local model router",
+    "Automatic quality escalation",
     "Adaptive turn pacing capability",
     "Adaptive voice profiles",
     "Chunked voice pipeline",
