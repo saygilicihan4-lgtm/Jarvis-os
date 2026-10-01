@@ -21,7 +21,7 @@ function readJson(req){
   });
 }
 const mock=http.createServer(async(req,res)=>{
-  if(req.url==='/api/tags')return json(res,200,{models:[{name:'qwen3.5:2b'}]});
+  if(req.url==='/api/tags')return json(res,200,{models:[{name:'qwen3.5:2b'},{name:'qwen3.5:4b'}]});
   if(req.url==='/api/chat'&&req.method==='POST'){
     const body=await readJson(req);
     seen.push(body);
@@ -133,6 +133,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
         JARVIS_TTS_PORT:String(BRIDGE_PORT),
         JARVIS_LOCAL_BRAIN_URL:'http://127.0.0.1:'+OLLAMA_PORT,
         JARVIS_LOCAL_BRAIN_MODEL:'qwen3.5:2b',
+        JARVIS_LOCAL_BRAIN_DEEP_MODEL:'qwen3.5:4b',
         JARVIS_TOKEN:'test-token',
         JARVIS_WORKSPACE:workspace
       },
@@ -143,7 +144,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.60.0','worker version');
+    assert(hj.version==='2.61.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localStt&&hj.localStt.adaptiveDecode===true,'adaptive STT decode health');
     assert(hj.localStt&&hj.localStt.dynamicEndpointing===true,'dynamic STT endpointing health');
@@ -156,6 +157,11 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.capabilities.includes('conversation_repair_v1'),'conversation repair capability health');
     assert(hj.capabilities.includes('misunderstanding_recovery_v1'),'misunderstanding recovery capability health');
     assert(hj.brainRuntime.conversationRepair===true,'conversation repair runtime health');
+    assert(hj.brainRuntime.adaptiveModelRouter===true,'adaptive model router health');
+    assert(hj.brainRuntime.fastModel==='qwen3.5:2b','fast model health');
+    assert(hj.brainRuntime.deepModel==='qwen3.5:4b','deep model health');
+    assert(hj.capabilities.includes('adaptive_model_router_v1'),'adaptive model router capability');
+    assert(hj.capabilities.includes('deep_model_fallback_v1'),'deep model fallback capability');
     assert(hj.brainRuntime.sentenceStreamTts===true,'sentence stream TTS health');
     assert(Number(hj.brainRuntime.context)>=4096,'adaptive context health');
     assert(hj.brainRuntime.screenVisionExplicitOnly===true,'screen vision consent health');
@@ -198,6 +204,16 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(aj.actions[0].tool==='workspace_search'&&aj.actions[1].tool==='workspace_read','adaptive tool chain order');
     assert(aj.actions.every(x=>x.ok===true),'adaptive tool chain result');
     assert(/Mavi roket dosyasını buldum/i.test(aj.reply),'native agent final reply');
+
+    const deepAgentSeen=seen.length;
+    const deepAgent=await post('http://127.0.0.1:'+BRIDGE_PORT+'/agent',{message:'Mavi roket dosyasını kapsamlı analiz et.',maxRounds:4});
+    assert(deepAgent.status===200,'deep native agent status');
+    const daj=JSON.parse(deepAgent.body);
+    assert(daj.ok===true&&daj.reasoning==='deep','deep native agent reasoning mode');
+    assert(daj.model==='qwen3.5:4b','deep native agent did not use stronger model');
+    const deepAgentReqs=seen.slice(deepAgentSeen).filter(x=>Array.isArray(x.tools));
+    assert(deepAgentReqs.length>=1&&deepAgentReqs.every(x=>x.model==='qwen3.5:4b'),'deep native tool loop mixed model tiers');
+    assert(deepAgentReqs.some(x=>x.think===true),'deep native tool loop did not enable thinking');
 
     const secret=await post('http://127.0.0.1:'+BRIDGE_PORT+'/agent',{message:'Gizli env dosyasını oku.',maxRounds:2});
     assert(secret.status===200,'native secret guard status');
@@ -294,6 +310,9 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const ragPrompt=ragRequests.map(x=>(x.messages||[]).map(m=>String(m.content||'')).join('\n')).join('\n');
     assert(ragRequests.some(x=>x.think===true),'deep request did not enable thinking');
     assert(ragRequests.some(x=>x.think===false),'fast draft pass missing before deep reasoning');
+    assert(ragRequests.some(x=>x.think===false&&x.model==='qwen3.5:2b'),'fast draft did not stay on fast model');
+    assert(ragRequests.some(x=>x.think===true&&x.model==='qwen3.5:4b'),'deep reflection did not route to stronger installed model');
+    assert(ragj.deepModel==='qwen3.5:4b','deep model metadata missing from brain result');
     assert(ragRequests.every(x=>Number(x.options&&x.options.num_ctx||0)>=4096),'adaptive context not applied');
     assert(/safir anka 4821/i.test(ragPrompt),'workspace RAG snippet missing from prompt');
     assert(!/SHOULD_NOT_ENTER_RAG/i.test(ragPrompt),'sensitive RAG content leaked');
