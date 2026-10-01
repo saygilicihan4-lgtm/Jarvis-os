@@ -123,6 +123,12 @@ try {
   $learnOk=($learn.ok -eq $true -and $lex.ok -eq $true -and $lex.count -ge 1)
   Add-Result "Adaptive speech lexicon learn" $learnOk ("count="+$lex.count+" heard="+$learn.heard+" -> "+$learn.intended)
 
+  $norm=Invoke-Json "http://127.0.0.1:8765/speech-normalize" "POST" @{
+    text=("jarvis "+$testHeard+" lutfen")
+  } 5
+  $normOk=($norm.ok -eq $true -and $norm.changed -eq $true -and [string]$norm.normalized -match "youtube")
+  Add-Result "Speech phrase normalization" $normOk ([string]$norm.normalized)
+
   $aliasBrain=Ask-Brain $testHeard
   $ar=$aliasBrain.result
   $aliasOk=($ar.ok -eq $true -and $ar.type -eq "command" -and [string]$ar.command -match "youtube")
@@ -138,6 +144,7 @@ try {
   Add-Result "Voice correction teaching phrase" $directiveOk ([string]$dr.reply)
 } catch {
   Add-Result "Adaptive speech lexicon learn" $false $_.Exception.Message
+  Add-Result "Speech phrase normalization" $false $_.Exception.Message
   Add-Result "Learned voice correction reuse" $false $_.Exception.Message
   Add-Result "STT adaptive lexicon bridge" $false $_.Exception.Message
   Add-Result "Voice correction teaching phrase" $false $_.Exception.Message
@@ -320,6 +327,7 @@ $criticalFailed=($results | Where-Object {
     "STT model preloaded",
     "STT command vocabulary bias",
     "Adaptive speech lexicon learn",
+    "Speech phrase normalization",
     "Learned voice correction reuse",
     "STT adaptive lexicon bridge",
     "Voice correction teaching phrase",
