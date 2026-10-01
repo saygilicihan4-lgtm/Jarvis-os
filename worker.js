@@ -996,7 +996,7 @@ async function callLocalBrain(message){
           if(refined&&refined.reply){
             reply=normalizeBrainReply(refined.reply);
             if(allowedTones.has(String(refined.tone||'')))tone=String(refined.tone);
-            remember({kind:'deep_reflection',model:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-deepStarted,workspaceSources:workspaceCtx.sources});
+            remember({kind:'deep_reflection',model:LOCAL_BRAIN_MODEL,latencyMs:Date.now()-deepStarted,workspaceSources:workspaceCtx.sources,thinking:true,context:LOCAL_BRAIN_CTX});
           }
         }
       }catch(e){
