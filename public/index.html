@@ -1707,12 +1707,17 @@ async function refreshLocalWorkerHealth(){
       fetch('http://127.0.0.1:8765/brain-status',{cache:'no-store'})
         .then(r=>r.json()).then(bs=>{
           if(window.coreSubtitle){
+            const modelLabel=bs&&bs.adaptiveModelRouter
+              ?('FAST '+String(bs.fastModel||bs.model||'')+' · DEEP '+String(bs.deepModel||bs.model||''))
+              :String(bs&&bs.model||j.localBrain.model||'configured');
             coreSubtitle.textContent=bs&&bs.ready&&bs.installed
-              ?('LOCAL BRAIN READY · '+String(bs.model||j.localBrain.model||'configured')+' · MEMORY '+String(bs.memoryFacts||0))
+              ?('LOCAL BRAIN READY · '+modelLabel+' · MEMORY '+String(bs.memoryFacts||0))
               :('LOCAL BRAIN WAITING · '+String(bs&&bs.error||'MODEL/Ollama'));
           }
           if(window.consoleStatus&&bs&&bs.ready&&bs.installed){
-            consoleStatus.textContent='LOCAL BRAIN READY · ZERO COST · '+String(bs.model||'');
+            consoleStatus.textContent=bs.adaptiveModelRouter
+              ?('LOCAL BRAIN · ZERO COST · FAST '+String(bs.fastModel||bs.model||'')+' · DEEP '+String(bs.deepModel||bs.model||''))
+              :('LOCAL BRAIN READY · ZERO COST · '+String(bs.model||''));
           }
           if(window.visionState&&bs&&bs.screenVision===true&&bs.screenVisionExplicitOnly===true){
             visionState.textContent=' · SCREEN VISION: LOCAL READY · EXPLICIT ONLY';
