@@ -23,6 +23,10 @@ jobs:
           node --check lexicon-ui-selftest.js
           python -m py_compile jarvis-local-stt-v3.py
           python -m py_compile stt-lexicon-selftest.py
+      - name: Lexicon acceptance syntax
+        shell: pwsh
+        run: |
+          [scriptblock]::Create((Get-Content ./JARVIS-LEXICON-ACCEPTANCE.ps1 -Raw)) | Out-Null
       - name: STT dynamic hotwords
         run: python stt-lexicon-selftest.py
       - name: Adaptive UI
