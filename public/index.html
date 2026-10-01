@@ -161,6 +161,7 @@ let currentChatStreamController=null;
 let currentChatStreamId=0;
 let currentBrainRequestController=null;
 let currentBrainRequestId=0;
+let recentJarvisSpeechEchoes=[];
 let bargeInMode=false;
 let bargeInRestartTimer=null;
 let clapStream=null,clapCtx=null,clapRAF=null,lastClap=0,clapArmed=false,clapCooldown=0;
@@ -364,6 +365,52 @@ function speechKey(s){
     .replace(/ğ/g,'g').replace(/ö/g,'o').replace(/ü/g,'u')
     .replace(/\s+/g,' ').trim();
 }
+function rememberJarvisSpeechEcho(text){
+  const key=speechKey(text);
+  if(!key||key.length<2)return;
+  const now=Date.now();
+  recentJarvisSpeechEchoes=recentJarvisSpeechEchoes
+    .filter(x=>now-Number(x.at||0)<12000)
+    .slice(-10);
+  recentJarvisSpeechEchoes.push({key,at:now});
+}
+function jarvisEchoSimilarity(a,b){
+  const x=speechKey(a),y=speechKey(b);
+  if(!x||!y)return 0;
+  if(x===y)return 1;
+  if(x.length>=8&&(x.includes(y)||y.includes(x)))return 0.95;
+  const xt=x.split(/\s+/).filter(Boolean),yt=y.split(/\s+/).filter(Boolean);
+  if(!xt.length||!yt.length)return 0;
+  const ys=new Set(yt);
+  let hit=0;
+  for(const t of xt)if(ys.has(t))hit++;
+  const coverage=hit/Math.min(xt.length,yt.length);
+  const charScore=1-(levenshtein(x,y)/Math.max(x.length,y.length,1));
+  return Math.max(coverage,charScore);
+}
+function isLikelyJarvisEcho(text){
+  const key=speechKey(text);
+  if(!key||key.length<3)return false;
+
+  // Explicit user interruption must always win, even if JARVIS recently said
+  // a similar phrase.
+  if(/^jarvis\b/.test(key))return false;
+  if(/^(?:sus|dur|bekle|bir dakika|bi dakika|yeter|kes|tamam tamam)$/.test(key))return false;
+  if(/^(?:hayir|yok)\s+(?:dur|bekle|bir dakika|bi dakika|sus|kes)$/.test(key))return false;
+
+  const now=Date.now();
+  recentJarvisSpeechEchoes=recentJarvisSpeechEchoes.filter(x=>now-Number(x.at||0)<12000);
+  for(const item of recentJarvisSpeechEchoes){
+    const score=jarvisEchoSimilarity(key,item.key);
+    const words=key.split(/\s+/).filter(Boolean).length;
+    if(words<=2&&key.length<12){
+      if(score>=0.99)return true;
+      continue;
+    }
+    if(score>=0.78)return true;
+  }
+  return false;
+}
 function speechLexiconKeyUi(text){
   return String(text||'')
     .toLocaleLowerCase('tr-TR')
@@ -383,7 +430,7 @@ function applyLearnedSpeechAlias(text){
   let normalized=key;
   for(const [from,to] of entries){
     if(from.length<4)continue;
-    const escaped=from.replace(/[.*+?^$()|[\]\\]/g,'\\function canonicalJarvisCommand(input){');
+    const escaped=from.replace(/[.*+?^$()|[\]\\]/g,'\\const escaped=from.replace(/[.*+?^$()|[\]\\]/g,'\\function canonicalJarvisCommand(input){');');
     const re=new RegExp('(^|\\s)'+escaped+'(?=\\s|$)','i');
     if(re.test(normalized)){
       normalized=normalized.replace(re,(m,prefix)=>prefix+String(to).toLocaleLowerCase('tr-TR'));
@@ -877,6 +924,11 @@ if(SpeechRecognition){
     const captured=String(choice.text||'').trim();
     if(e.results[e.results.length-1].isFinal){
       if(bargeInMode){
+        if(isLikelyJarvisEcho(captured)){
+          if(window.consoleStatus)consoleStatus.textContent='JARVIS · SELF-ECHO IGNORED · '+captured.slice(0,90);
+          if(window.voiceState)voiceState.textContent='VOICE: ECHO REJECTED · INTERRUPT READY';
+          return;
+        }
         await handleBargeInTranscript(captured);
         return;
       }
@@ -1471,6 +1523,7 @@ function speak(text,lang=activeLanguage,tone='balanced'){
     });
     return;
   }
+  rememberJarvisSpeechEcho(spoken);
   const ctl=new AbortController();
   const timer=setTimeout(()=>ctl.abort(),1200);
   fetch('http://127.0.0.1:8765/speak',{
@@ -1891,6 +1944,7 @@ function thinkingBackchannelPhrase(message){
 function speakThinkingBackchannel(text){
   if(!text||isMobileJarvis())return false;
   const spoken=String(text).trim();
+  rememberJarvisSpeechEcho(spoken);
   const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),1200);
   fetch('http://127.0.0.1:8765/speak',{
     method:'POST',
