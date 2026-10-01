@@ -1251,6 +1251,9 @@ async function refreshLocalWorkerHealth(){
     if(!r.ok)return null;
     const ver=String(j.version||'');
     if(window.workerSetup)workerSetup.textContent='LOCAL v'+ver+' · CLOUD '+workerSetup.textContent;
+    if(j.localBrain&&window.coreSubtitle){
+      coreSubtitle.textContent='LOCAL BRAIN · '+String(j.localBrain.model||'configured')+' · zero-cost';
+    }
     if(ver&&/^2\.(?:3[8-9]|[4-9]\d|[1-9]\d{2,})\./.test(ver)){
       if(window.consoleStatus&&/NEEDS_TOOL|UPDATE REQUIRED/i.test(consoleStatus.textContent||'')){
         consoleStatus.textContent='LOCAL PC BRIDGE READY · v'+ver;
@@ -1285,6 +1288,46 @@ async function tryDirectLocalPcControl(command){
   }
 }
 async function askJarvisBrain(message){
+  // PC first: use the zero-cost local Ollama brain through the Worker bridge.
+  if(/Windows/i.test(navigator.userAgent)&&!isMobileJarvis()){
+    try{
+      const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),45000);
+      const lr=await fetch('http://127.0.0.1:8765/brain',{
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body:JSON.stringify({message:String(message||'').trim()}),
+        signal:ctl.signal
+      });
+      clearTimeout(timer);
+      const lj=await lr.json().catch(()=>({}));
+      if(lr.ok&&lj.ok===true){
+        if(lj.type==='command'&&lj.command){
+          const normalized=canonicalJarvisCommand(String(lj.command));
+          consoleStatus.textContent='LOCAL BRAIN · '+String(message)+' → '+normalized;
+          if(await tryDirectLocalPcControl(normalized)){
+            if(lj.reply)coreSubtitle.textContent=String(lj.reply).slice(0,180);
+            return {handled:true};
+          }
+        }
+        if(lj.type==='chat'&&lj.reply){
+          const reply=String(lj.reply).trim();
+          consoleStatus.textContent='LOCAL BRAIN · '+String(lj.model||'READY');
+          coreSubtitle.textContent=reply.slice(0,220);
+          cmd.value='';
+          speak(reply,'tr-TR');
+          return {handled:true};
+        }
+      }else if(lj.error==='MODEL_NOT_INSTALLED'){
+        consoleStatus.textContent='LOCAL BRAIN · MODEL KURULUMU GEREKLİ';
+      }else if(lj.error==='OLLAMA_OFFLINE'){
+        consoleStatus.textContent='LOCAL BRAIN · OLLAMA KAPALI';
+      }
+    }catch(e){
+      consoleStatus.textContent='LOCAL BRAIN FALLBACK · '+String(e.message||e).slice(0,80);
+    }
+  }
+
+  // Cloud brain is optional and zero-cost mode blocks paid API calls by default.
   try{
     const r=await fetch('/api/brain',{
       method:'POST',
