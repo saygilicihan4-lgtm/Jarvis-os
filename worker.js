@@ -27,9 +27,9 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.55.0';
+const WORKER_VERSION='2.56.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
-CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1');
+CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','speech_normalize_bridge_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -532,7 +532,7 @@ function applySpeechLexicon(text){
   let normalized=key;
   for(const [from,to] of entries){
     if(from.length<4)continue;
-    const escaped=from.replace(/[.*+?^${}()|[\]\\]/g,'\\function brainPersona(){');
+    const escaped=from.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
     const re=new RegExp('(^|\\s)'+escaped+'(?=\\s|$)','i');
     if(re.test(normalized)){
       normalized=normalized.replace(re,(m,prefix)=>prefix+String(to).toLocaleLowerCase('tr-TR'));
@@ -1810,6 +1810,31 @@ function startLocalTtsBridge(){
         updatedAt:x.updatedAt
       }));
     }
+    if(req.method==='POST'&&req.url==='/speech-normalize'){
+      let body='',tooLarge=false;
+      req.on('data',chunk=>{body+=chunk;if(body.length>32768){tooLarge=true;req.destroy()}});
+      req.on('end',()=>{
+        if(tooLarge){res.writeHead(413,{'content-type':'application/json'});return res.end(JSON.stringify({ok:false,error:'too large'}))}
+        try{
+          const d=JSON.parse(body||'{}');
+          const raw=String(d.text||'').replace(/\s+/g,' ').trim().slice(0,1800);
+          if(!raw){res.writeHead(400,{'content-type':'application/json'});return res.end(JSON.stringify({ok:false,error:'text required'}))}
+          const normalized=applySpeechLexicon(raw);
+          const x=readSpeechLexicon();
+          res.writeHead(200,{'content-type':'application/json'});
+          return res.end(JSON.stringify({
+            ok:true,raw,normalized,
+            changed:normalized!==raw,
+            lexiconCount:Object.keys(x.aliases||{}).length
+          }));
+        }catch(e){
+          res.writeHead(500,{'content-type':'application/json'});
+          return res.end(JSON.stringify({ok:false,error:String(e.message||e)}));
+        }
+      });
+      return;
+    }
+
     if(req.method==='POST'&&req.url==='/speech-lexicon'){
       let body='',tooLarge=false;
       req.on('data',chunk=>{body+=chunk;if(body.length>32768){tooLarge=true;req.destroy()}});
