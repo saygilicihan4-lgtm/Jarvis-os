@@ -1097,7 +1097,8 @@ function dialogueFeedbackIntent(text){
   if(!raw||raw.length>180)return null;
   const s=raw.toLocaleLowerCase('tr-TR').replace(/[!?.,;:]+/g,' ').replace(/\s+/g,' ').trim();
 
-  const hasAny=phrases=>phrases.some(p=>s.includes(p));
+  const padded=' '+s+' ';
+  const hasAny=phrases=>phrases.some(p=>padded.includes(' '+p+' '));
   if(hasAny(['çok soru soruyorsun','cok soru soruyorsun','bu kadar soru sorma','her seferinde soru sorma','soru sorma','takip sorusu sorma'])){
     return{kind:'followup-less',followup:-0.30,negative:true,reply:'Tamam. Takip sorularını azaltıyorum; gerektiğinde doğrudan cevabı bırakacağım.'};
   }
