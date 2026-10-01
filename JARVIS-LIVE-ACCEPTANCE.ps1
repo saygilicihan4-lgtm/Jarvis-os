@@ -133,6 +133,45 @@ try {
 }
 
 try {
+  $testHeard="zumrut tup 941"
+  $learn=Invoke-Json "http://127.0.0.1:8765/speech-lexicon" "POST" @{
+    heard=$testHeard
+    intended="youtube aç"
+    source="live-acceptance"
+  } 10
+  $lex=Invoke-Json "http://127.0.0.1:8765/speech-lexicon" "GET" $null 5
+  $learnOk=($learn.ok -eq $true -and $lex.ok -eq $true -and $lex.count -ge 1)
+  Add-Result "Adaptive speech lexicon learn" $learnOk ("count="+$lex.count+" heard="+$learn.heard+" -> "+$learn.intended)
+
+  $norm=Invoke-Json "http://127.0.0.1:8765/speech-normalize" "POST" @{text=("jarvis "+$testHeard+" lutfen")} 5
+  $normOk=($norm.ok -eq $true -and $norm.changed -eq $true -and [string]$norm.normalized -match "youtube")
+  Add-Result "Speech phrase normalization" $normOk ([string]$norm.normalized)
+
+  $aliasBrain=Ask-Brain $testHeard
+  $ar=$aliasBrain.result
+  $aliasOk=($ar.ok -eq $true -and $ar.type -eq "command" -and [string]$ar.command -match "youtube")
+  Add-Result "Learned voice correction reuse" $aliasOk ("type="+$ar.type+" command="+$ar.command) $aliasBrain.ms
+
+  $sttLex=Invoke-Json "http://127.0.0.1:8768/health" "GET" $null 5
+  $sttLexOk=($sttLex.adaptive_lexicon -eq $true -and [int]$sttLex.lexicon_count -ge 1)
+  Add-Result "STT adaptive lexicon bridge" $sttLexOk ("adaptive="+$sttLex.adaptive_lexicon+" count="+$sttLex.lexicon_count)
+
+  $directive=Ask-Brain "gok yakut 812 dersem google aç anla"
+  $dr=$directive.result
+  $directiveOk=($dr.ok -eq $true -and [string]$dr.model -eq "local-speech-lexicon")
+  Add-Result "Voice correction teaching phrase" $directiveOk ([string]$dr.reply)
+} catch {
+  Add-Result "Adaptive speech lexicon learn" $false $_.Exception.Message
+  Add-Result "Speech phrase normalization" $false $_.Exception.Message
+  Add-Result "Learned voice correction reuse" $false $_.Exception.Message
+  Add-Result "STT adaptive lexicon bridge" $false $_.Exception.Message
+  Add-Result "Voice correction teaching phrase" $false $_.Exception.Message
+} finally {
+  try { $null=Invoke-Json "http://127.0.0.1:8765/speech-lexicon" "POST" @{action="forget";heard="zumrut tup 941"} 5 } catch {}
+  try { $null=Invoke-Json "http://127.0.0.1:8765/speech-lexicon" "POST" @{action="forget";heard="gok yakut 812"} 5 } catch {}
+}
+
+try {
   $x=Ask-Brain "Sesi biraz yukseltebilir misin?"
   $r=$x.result
   $ok=($r.ok -eq $true -and $r.type -eq "command" -and [string]$r.command -match "sesi y.kselt")
@@ -330,6 +369,11 @@ $criticalFailed=($results | Where-Object {
     "Local Turkish STT",
     "STT model preloaded",
     "STT command vocabulary bias",
+    "Adaptive speech lexicon learn",
+    "Speech phrase normalization",
+    "Learned voice correction reuse",
+    "STT adaptive lexicon bridge",
+    "Voice correction teaching phrase",
     "Episodic memory engine",
     "Natural command: volume",
     "Natural command: YouTube",
