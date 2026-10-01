@@ -42,6 +42,8 @@ try {
   Add-Result "Worker bridge" ($h.ok -eq $true) ("v"+$h.version)
   $bargeOk=(@($h.capabilities) -contains "natural_barge_in_v1" -and @($h.capabilities) -contains "spoken_followup_interrupt_v1")
   Add-Result "Natural spoken interruption" $bargeOk ("bargeIn="+(@($h.capabilities) -contains "natural_barge_in_v1")+" followup="+(@($h.capabilities) -contains "spoken_followup_interrupt_v1"))
+  $repairCapabilityOk=(@($h.capabilities) -contains "conversation_repair_v1" -and @($h.capabilities) -contains "misunderstanding_recovery_v1" -and $h.brainRuntime.conversationRepair -eq $true)
+  Add-Result "Conversation repair capability" $repairCapabilityOk ("runtime="+$h.brainRuntime.conversationRepair)
   $adaptiveOk=($null -ne $h.adaptiveTts -and $h.adaptiveTts.engine -eq "edge-neural" -and $h.adaptiveTts.profiles.Count -ge 4)
   Add-Result "Adaptive voice profiles" $adaptiveOk (($h.adaptiveTts.voice)+" · "+(($h.adaptiveTts.profiles -join ",")))
   $pipelineOk=($h.adaptiveTts.chunkedPipeline -eq $true -and $h.adaptiveTts.prefetch -eq $true -and $h.adaptiveTts.safeCache -eq $true)
@@ -160,6 +162,16 @@ try {
 } catch {
   Add-Result "Local Turkish STT" $false $_.Exception.Message
   Add-Result "STT model preloaded" $false $_.Exception.Message
+}
+
+try {
+  $seed=Ask-Brain "Bana sade bir fikir ver."
+  $repair=Ask-Brain "Hayir, beni yanlis anladin; komik bir fikir istemistim."
+  $rr=$repair.result
+  $repairOk=($seed.result.ok -eq $true -and $rr.ok -eq $true -and $rr.repairMode -eq $true)
+  Add-Result "Conversation misunderstanding repair" $repairOk ("repairMode="+$rr.repairMode+" model="+$rr.model) $repair.ms
+} catch {
+  Add-Result "Conversation misunderstanding repair" $false $_.Exception.Message
 }
 
 try {
@@ -346,6 +358,7 @@ $criticalFailed=($results | Where-Object {
   -not $_.ok -and $_.name -in @(
     "Worker bridge",
     "Natural spoken interruption",
+    "Conversation repair capability",
     "Adaptive voice profiles",
     "Chunked voice pipeline",
     "Thinking backchannel runtime",
@@ -366,6 +379,7 @@ $criticalFailed=($results | Where-Object {
     "STT model preloaded",
     "STT command vocabulary bias",
     "Episodic memory engine",
+    "Conversation misunderstanding repair",
     "Natural command: volume",
     "Natural command: YouTube",
     "Multi-action planning",
