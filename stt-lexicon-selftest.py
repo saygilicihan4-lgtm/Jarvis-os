@@ -13,7 +13,7 @@ with tempfile.TemporaryDirectory() as td:
     }, ensure_ascii=False), encoding="utf-8")
 
     os.environ["JARVIS_SPEECH_LEXICON_FILE"] = str(lex)
-    spec = importlib.util.spec_from_file_location("jarvis_local_stt_v4", "jarvis-local-stt-v4.py")
+    spec = importlib.util.spec_from_file_location("jarvis_local_stt_v5", "jarvis-local-stt-v5.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
 
