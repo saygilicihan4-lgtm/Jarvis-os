@@ -156,6 +156,8 @@ let voiceConversationActive=false;
 let voiceConversationUntil=0;
 let conversationFollowupTimer=null;
 let lastThinkingBackchannel='';
+let currentChatStreamController=null;
+let currentChatStreamId=0;
 let bargeInMode=false;
 let bargeInRestartTimer=null;
 let clapStream=null,clapCtx=null,clapRAF=null,lastClap=0,clapArmed=false,clapCooldown=0;
@@ -571,6 +573,10 @@ async function localTtsState(){
 async function stopJarvisSpeech(reason='voice-interrupt'){
   bargeInMode=false;
   clearTimeout(bargeInRestartTimer);
+  if(currentChatStreamController){
+    try{currentChatStreamController.abort()}catch(_){}
+    currentChatStreamController=null;
+  }
   try{
     if(recognition&&listening)recognition.stop();
   }catch(_){}
@@ -1820,6 +1826,129 @@ function armThinkingBackchannel(message){
   },delay);
   return()=>{cancelled=true;clearTimeout(timer)};
 }
+function shouldStreamLocalConversation(message){
+  if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis()||privacyMode||document.hidden)return false;
+  if(!voiceConversationActive||Date.now()>voiceConversationUntil)return false;
+  const text=String(message||'').replace(/\s+/g,' ').trim();
+  if(!text||text.length>700)return false;
+  const k=speechKey(text);
+  if(/(?:kapsamli|derin dusun|detayli dusun|analiz et|karsilastir|strateji|nedenlerini incele|mantigini incele)/.test(k))return false;
+  if(/^(?:devam et|devam|nerede kalmistik|ne yapiyorduk|onu yap|onu ac|az onceki)$/i.test(k))return false;
+  if(/(?:hatirla|unut|dedigimde|dersem|duzeltmesini)/.test(k))return false;
+  if(/(?:\b(?:ac|acar|acabilir|kapat|kapatir|kapatabilir|baslat|baslatir|baslatabilir|calistir|calistirir|calistirabilir|gir|girer|girebilir)\b|ayar|\bsesi\b|\bsesini\b|\bpil\b|batarya|\bdisk\b|\bag\b|wifi|bluetooth|dosya|klasor|ekran|kamera|gorev yoneticisi|workspace|terminal|powershell)/.test(k))return false;
+  return true;
+}
+function splitStreamSpeechBuffer(buffer,final=false){
+  let text=String(buffer||'');
+  const chunks=[];
+  let start=0;
+  for(let i=0;i<text.length;i++){
+    if(!/[.!?…]/.test(text[i]))continue;
+    const candidate=text.slice(start,i+1).replace(/\s+/g,' ').trim();
+    if(candidate.length>=24){
+      chunks.push(candidate);
+      start=i+1;
+    }
+  }
+  let rest=text.slice(start);
+  while(!final&&rest.length>220){
+    let cut=rest.lastIndexOf(' ',220);
+    if(cut<110)cut=220;
+    const chunk=rest.slice(0,cut).replace(/\s+/g,' ').trim();
+    if(chunk)chunks.push(chunk);
+    rest=rest.slice(cut).trimStart();
+  }
+  if(final&&rest.trim()){
+    chunks.push(rest.replace(/\s+/g,' ').trim());
+    rest='';
+  }
+  return{chunks,rest};
+}
+async function streamLocalConversation(message){
+  if(!shouldStreamLocalConversation(message))return{handled:false};
+  const id=++currentChatStreamId;
+  const ctl=new AbortController();
+  currentChatStreamController=ctl;
+  let tone='balanced',full='',speechBuffer='',spokenChunks=0,donePayload=null;
+  const flushSpeech=(final=false)=>{
+    const out=splitStreamSpeechBuffer(speechBuffer,final);
+    speechBuffer=out.rest;
+    for(const chunk of out.chunks){
+      if(!chunk)continue;
+      spokenChunks++;
+      speak(chunk,'tr-TR',tone);
+    }
+  };
+  try{
+    if(window.consoleStatus)consoleStatus.textContent='LOCAL STREAM · BAĞLANIYOR';
+    const r=await fetch('http://127.0.0.1:8765/chat-stream',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({message:String(message||'').trim()}),
+      signal:ctl.signal
+    });
+    if(r.status===409)return{handled:false,reason:'not-streamable'};
+    if(!r.ok||!r.body)throw new Error('LOCAL_STREAM_'+r.status);
+
+    const reader=r.body.getReader();
+    const decoder=new TextDecoder();
+    let buf='';
+    while(true){
+      const {value,done}=await reader.read();
+      if(done)break;
+      buf+=decoder.decode(value,{stream:true});
+      const rows=buf.split(/\r?\n/);
+      buf=rows.pop()||'';
+      for(const row of rows){
+        if(!row.trim())continue;
+        let evt;try{evt=JSON.parse(row)}catch(_){continue}
+        if(evt.type==='meta'){
+          tone=String(evt.tone||'balanced');
+          if(window.consoleStatus)consoleStatus.textContent='LOCAL STREAM · '+String(evt.model||'READY')+' · İLK CÜMLE BEKLENİYOR';
+        }else if(evt.type==='delta'){
+          const d=String(evt.text||'');
+          full+=d;
+          speechBuffer+=d;
+          if(window.coreSubtitle)coreSubtitle.textContent=full.replace(/\s+/g,' ').trim().slice(-220);
+          flushSpeech(false);
+        }else if(evt.type==='done'){
+          donePayload=evt;
+          if(evt.reply)full=String(evt.reply);
+        }else if(evt.type==='error'){
+          throw new Error(String(evt.error||'stream error'));
+        }
+      }
+    }
+    if(buf.trim()){
+      try{
+        const evt=JSON.parse(buf.trim());
+        if(evt.type==='done'){donePayload=evt;if(evt.reply)full=String(evt.reply)}
+      }catch(_){}
+    }
+    flushSpeech(true);
+    const reply=String(donePayload&&donePayload.reply||full).replace(/\s+/g,' ').trim();
+    if(!reply)throw new Error('EMPTY_STREAM_REPLY');
+    cmd.value='';
+    voiceConversationActive=true;
+    voiceConversationUntil=Date.now()+120000;
+    if(window.coreSubtitle)coreSubtitle.textContent=reply.slice(-220);
+    if(window.consoleStatus){
+      const first=Number(donePayload&&donePayload.firstDeltaMs);
+      consoleStatus.textContent='LOCAL STREAM · '+spokenChunks+' SES PARÇASI · '+(Number.isFinite(first)?('İLK TOKEN '+Math.round(first)+'ms'):'TAMAMLANDI');
+    }
+    scheduleVoiceConversationFollowup(reply);
+    return{handled:true,streaming:true,reply,tone,spokenChunks,result:donePayload};
+  }catch(e){
+    if(e&&e.name==='AbortError'){
+      if(window.consoleStatus)consoleStatus.textContent='LOCAL STREAM · KESİLDİ';
+      return{handled:true,streaming:true,interrupted:true};
+    }
+    if(window.consoleStatus)consoleStatus.textContent='LOCAL STREAM FALLBACK · '+String(e.message||e).slice(0,80);
+    return{handled:false,error:e};
+  }finally{
+    if(currentChatStreamId===id)currentChatStreamController=null;
+  }
+}
 async function askNativeLocalAgent(message){
   if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis())return {handled:false};
   const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),65000);
@@ -1903,6 +2032,13 @@ async function askJarvisBrainCore(message){
   if(isMobileJarvis()){
     const mobile=await askMobileLocalBrain(message);
     if(mobile.handled)return mobile;
+  }
+
+  // Pure voice conversation takes the local streaming path so the first
+  // sentence can be spoken before the whole answer is generated.
+  if(shouldStreamLocalConversation(message)){
+    const streamed=await streamLocalConversation(message);
+    if(streamed.handled)return streamed;
   }
 
   // PC first: use the native local tool-calling loop. If this model/runtime
@@ -2029,7 +2165,7 @@ async function askJarvisBrainCore(message){
   return {handled:false};
 }
 async function askJarvisBrain(message){
-  const cancelThinkingBackchannel=armThinkingBackchannel(message);
+  const cancelThinkingBackchannel=shouldStreamLocalConversation(message)?(()=>{}):armThinkingBackchannel(message);
   try{
     return await askJarvisBrainCore(message);
   }finally{

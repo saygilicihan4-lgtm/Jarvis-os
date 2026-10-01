@@ -25,10 +25,26 @@ const mock=http.createServer(async(req,res)=>{
   if(req.url==='/api/chat'&&req.method==='POST'){
     const body=await readJson(req);
     seen.push(body);
+    if(body.stream===true){
+      res.writeHead(200,{'content-type':'application/x-ndjson'});
+      const deltas=['Olur. ','Biraz gırgır, ','biraz fikir; akıcı devam ederiz.'];
+      for(const delta of deltas){
+        res.write(JSON.stringify({message:{role:'assistant',content:delta},done:false})+'\n');
+      }
+      res.end(JSON.stringify({message:{role:'assistant',content:''},done:true})+'\n');
+      return;
+    }
     const last=(body.messages||[]).filter(x=>x.role==='user').slice(-1)[0];
     const text=String(last&&last.content||'');
     const system=(body.messages||[]).filter(x=>x.role==='system').map(x=>String(x.content||'')).join('\n');
     const toolMessages=(body.messages||[]).filter(x=>x.role==='tool');
+    if(body.stream===true){
+      res.writeHead(200,{'content-type':'application/x-ndjson'});
+      res.write(JSON.stringify({message:{role:'assistant',content:'Olur. '},done:false})+'\n');
+      res.write(JSON.stringify({message:{role:'assistant',content:'Biraz gırgır, biraz fikir; '},done:false})+'\n');
+      res.end(JSON.stringify({message:{role:'assistant',content:'bugün gayet iyi gidiyor.'},done:true})+'\n');
+      return;
+    }
     if(Array.isArray(body.tools)&&body.tools.length){
       if(/arka planda ne var/i.test(text)&&toolMessages.length===0){
         return json(res,200,{message:{role:'assistant',content:'',tool_calls:[{function:{name:'screen_describe',arguments:{question:'Ekranda ne görüyorsun?'}}}]}});
@@ -127,13 +143,15 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.57.0','worker version');
+    assert(hj.version==='2.58.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localStt&&hj.localStt.adaptiveDecode===true,'adaptive STT decode health');
     assert(hj.localStt&&hj.localStt.dynamicEndpointing===true,'dynamic STT endpointing health');
     assert(hj.localBrain.vision===true,'local multimodal health');
     assert(hj.brainRuntime&&hj.brainRuntime.nativeTools===true,'native tools health');
     assert(hj.brainRuntime.selectiveReasoning===true,'selective reasoning health');
+    assert(hj.brainRuntime.streamingChat===true,'streaming chat health');
+    assert(hj.brainRuntime.sentenceStreamTts===true,'sentence stream TTS health');
     assert(Number(hj.brainRuntime.context)>=4096,'adaptive context health');
     assert(hj.brainRuntime.screenVisionExplicitOnly===true,'screen vision consent health');
     assert(hj.brainRuntime.screenVision===false,'CI must not claim Windows screen capture');
@@ -145,6 +163,22 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.adaptiveTts.backchannelState&&Number(hj.adaptiveTts.backchannelState.total)>=4,'backchannel prewarm state metadata');
     assert(hj.adaptiveTts.offlineFallback==='windows-sapi','offline TTS fallback health');
     assert(hj.brainRuntime&&hj.brainRuntime.keepAlive,'brain runtime health');
+
+    const streamSeen=seen.length;
+    const streamed=await post('http://127.0.0.1:'+BRIDGE_PORT+'/chat-stream',{message:'Naber Jarvis, bugün nasıl gidiyor?'});
+    assert(streamed.status===200,'streaming chat status');
+    const streamEvents=streamed.body.split(/\r?\n/).filter(Boolean).map(x=>JSON.parse(x));
+    assert(streamEvents[0]&&streamEvents[0].type==='meta'&&streamEvents[0].streaming===true,'streaming chat meta');
+    const deltas=streamEvents.filter(x=>x.type==='delta').map(x=>String(x.text||''));
+    assert(deltas.length>=2,'streaming chat deltas missing');
+    const doneEvent=streamEvents.find(x=>x.type==='done');
+    assert(doneEvent&&doneEvent.ok===true&&/gırgır|fikir/i.test(doneEvent.reply),'streaming chat done payload');
+    const streamReq=seen.slice(streamSeen).find(x=>x.stream===true);
+    assert(streamReq&&streamReq.think===false,'streaming Ollama request mode');
+    assert(!Array.isArray(streamReq.tools),'streaming chat must not expose PC tools');
+
+    const noStreamAction=await post('http://127.0.0.1:'+BRIDGE_PORT+'/chat-stream',{message:"YouTube'u açar mısın?"});
+    assert(noStreamAction.status===409,'PC action must be rejected by chat streaming');
 
     const agentDir=path.join(workspace,'projects');
     fs.mkdirSync(agentDir,{recursive:true});
