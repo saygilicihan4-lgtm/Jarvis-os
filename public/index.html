@@ -554,11 +554,34 @@ function chooseRecognitionCandidate(e){
   return candidates.map(scoreRecognitionCandidate).sort((a,b)=>b.score-a.score)[0];
 }
 
+function parseBargeInIntent(text){
+  const raw=String(text||'').replace(/\s+/g,' ').trim();
+  if(!raw)return{interrupt:false,command:'',reason:''};
+
+  const wake=parseJarvisWake(raw);
+  const stopPattern=/^(?:sus|dur|bekle|bir dakika|bi dakika|yeter|kes|tamam tamam|konusmayi kes|konusmayi durdur|sesini kes|cevabi kes|cevabı kes)$/;
+  if(wake.wake){
+    if(!wake.command)return{interrupt:false,command:'',reason:'wake-only'};
+    const k=speechKey(wake.command);
+    if(stopPattern.test(k))return{interrupt:true,command:'',reason:'explicit-stop'};
+    return{interrupt:true,command:wake.command,reason:'wake-command'};
+  }
+
+  const k=speechKey(raw);
+  if(stopPattern.test(k)||/^(?:hayir|yok)\s+(?:dur|bekle|bir dakika|bi dakika|sus|kes)$/.test(k)){
+    return{interrupt:true,command:'',reason:'bare-stop'};
+  }
+
+  // Natural self-correction while JARVIS is speaking. Keep this deliberately
+  // narrow so its own speaker output cannot accidentally launch a command.
+  const words=k.split(/\s+/).filter(Boolean);
+  if(words.length<=12&&/^(?:hayir|yok|yanlis anladin|yanlis)\b/.test(k)){
+    return{interrupt:true,command:raw,reason:'correction'};
+  }
+  return{interrupt:false,command:'',reason:''};
+}
 function isJarvisBargeInPhrase(text){
-  const p=parseJarvisWake(text);
-  if(!p.wake||!p.command)return false;
-  const k=speechKey(p.command);
-  return /^(?:sus|dur|bekle|yeter|konusmayi kes|konusmayi durdur|sesini kes|cevabi kes|cevabı kes)$/.test(k);
+  return parseBargeInIntent(text).interrupt;
 }
 async function localTtsState(){
   if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis())return null;
@@ -570,7 +593,7 @@ async function localTtsState(){
     return await r.json().catch(()=>null);
   }catch(_){clearTimeout(timer);return null}
 }
-async function stopJarvisSpeech(reason='voice-interrupt'){
+async function stopJarvisSpeech(reason='voice-interrupt',{listenAfter=true}={}){
   bargeInMode=false;
   clearTimeout(bargeInRestartTimer);
   if(currentChatStreamController){
@@ -592,12 +615,31 @@ async function stopJarvisSpeech(reason='voice-interrupt'){
     if(window.consoleStatus)consoleStatus.textContent='JARVIS · SÖZ KESİLDİ · SİZİ DİNLİYOR';
     voiceConversationActive=true;
     voiceConversationUntil=Date.now()+120000;
-    setTimeout(()=>listenWithLocalStt('after-interrupt').catch(()=>{}),250);
+    if(listenAfter)setTimeout(()=>listenWithLocalStt('after-interrupt').catch(()=>{}),250);
     return true;
   }catch(e){
     if(window.consoleStatus)consoleStatus.textContent='JARVIS INTERRUPT FAILED · '+String(e.message||e).slice(0,70);
     return false;
   }
+}
+async function handleBargeInTranscript(text){
+  const intent=parseBargeInIntent(text);
+  if(!intent.interrupt)return false;
+
+  const hasReplacement=!!String(intent.command||'').trim();
+  const stopped=await stopJarvisSpeech('voice-barge-in',{listenAfter:!hasReplacement});
+  if(!stopped)return true;
+
+  if(hasReplacement){
+    const replacement=String(intent.command||'').trim();
+    if(window.consoleStatus)consoleStatus.textContent='JARVIS · SÖZÜNÜZÜ ALDI · '+replacement.slice(0,110);
+    await new Promise(r=>setTimeout(r,120));
+    voiceConversationActive=true;
+    voiceConversationUntil=Date.now()+120000;
+    cmd.value=canonicalJarvisCommand(replacement);
+    await send();
+  }
+  return true;
 }
 function armBargeInRecognition(delay=450){
   if(!desktopWakeWordEnabled||!recognition||privacyMode||document.hidden||localSttListening)return;
@@ -613,7 +655,7 @@ function armBargeInRecognition(delay=450){
     try{
       recognition.lang='tr-TR';
       recognition.start();
-      if(window.voiceState)voiceState.textContent='VOICE: JARVIS SPEAKING · "JARVIS SUS" TO INTERRUPT';
+      if(window.voiceState)voiceState.textContent='VOICE: JARVIS SPEAKING · DUR / BEKLE / JARVIS ...';
     }catch(_){
       bargeInRestartTimer=setTimeout(launch,300);
     }
@@ -819,9 +861,7 @@ if(SpeechRecognition){
     const captured=String(choice.text||'').trim();
     if(e.results[e.results.length-1].isFinal){
       if(bargeInMode){
-        if(isJarvisBargeInPhrase(captured)){
-          stopJarvisSpeech('voice-barge-in').catch(()=>{});
-        }
+        await handleBargeInTranscript(captured);
         return;
       }
       if(await maybeLearnVoiceCorrection(captured))return;
