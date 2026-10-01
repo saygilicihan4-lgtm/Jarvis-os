@@ -285,17 +285,18 @@ function removeBrainFactsMatching(query){
 }
 function handleBrainMemoryDirective(text){
   const raw=String(text||'').replace(/\s+/g,' ').trim();
-  let m=raw.match(/^(?:jarvis\s+)?(?:şunu|sunu|bunu)?\s*(?:hatırla|hatirla|aklında tut|aklinda tut)\s*[:,-]?\s*(.+)$/i);
+  const plain=raw.replace(/[?.!,;:]+$/g,'').trim();
+  let m=plain.match(/^(?:jarvis\s+)?(?:şunu|sunu|bunu)?\s*(?:hatırla|hatirla|aklında tut|aklinda tut)\s*[:,-]?\s*(.+)$/i);
   if(m&&m[1]){
     appendBrainFact(m[1].trim(),'explicit_memory');
     return{handled:true,reply:'Tamam. Bunu yerel hafızama aldım.',command:null,type:'chat'};
   }
-  m=raw.match(/^(?:jarvis\s+)?(?:şunu|sunu|bunu)?\s*(?:unut|unut gitsin)\s*[:,-]?\s*(.+)$/i);
+  m=plain.match(/^(?:jarvis\s+)?(?:şunu|sunu|bunu)?\s*(?:unut|unut gitsin)\s*[:,-]?\s*(.+)$/i);
   if(m&&m[1]){
     const n=removeBrainFactsMatching(m[1].trim());
     return{handled:true,reply:n?('Tamam, '+n+' hafıza kaydını çıkardım.'):'Bu ifadeyle eşleşen kalıcı bir hafıza kaydı bulamadım.',command:null,type:'chat'};
   }
-  if(/^(?:jarvis\s+)?(?:benimle ilgili )?(?:ne hatırlıyorsun|ne hatirliyorsun|neleri hatırlıyorsun|neleri hatirliyorsun)$/i.test(raw)){
+  if(/^(?:jarvis\s+)?(?:benimle ilgili )?(?:ne hatırlıyorsun|ne hatirliyorsun|neleri hatırlıyorsun|neleri hatirliyorsun)$/i.test(plain)){
     const facts=readBrainFacts(12).slice(-8);
     if(!facts.length)return{handled:true,reply:'Kalıcı yerel hafızamda henüz açık bir tercih kaydı yok.',command:null,type:'chat'};
     const summary=facts.map(x=>String(x.text||'')).filter(Boolean).join(' · ');
