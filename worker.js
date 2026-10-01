@@ -2359,6 +2359,8 @@ async function streamLocalConversationHttp(message,res){
       kind:'streaming_chat',
       model:LOCAL_BRAIN_MODEL,
       repairMode:cfg.repairMode===true,
+      socialMode:cfg.socialMode,
+      followupAllowed:cfg.followupAllowed===true,
       firstDeltaMs:firstDeltaAt?firstDeltaAt-started:null,
       latencyMs:Date.now()-started,
       chars:final.length,
