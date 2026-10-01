@@ -37,10 +37,11 @@ const mock=http.createServer(async(req,res)=>{
         preferences:['Gırgır ve samimi ton'],
         unresolved:['Mavi roket projesinin sonraki adımı']
       };
-    } else if(/youtube/i.test(text))out={type:'command',reply:'YouTube açılıyor.',command:'youtube aç',tone:'focused'};
-    else if(/format/i.test(text))out={type:'command',reply:'Tamam, formatlıyorum.',command:'bilgisayarı formatla',tone:'serious'};
-    else if(/az önce/i.test(text))out={type:'chat',reply:'Az önce sohbeti biraz daha eğlenceli hale getirmek istediğinizi söylediniz.',command:null,tone:'warm'};
-    else out={type:'chat',reply:'Olur. Biraz gırgır, biraz fikir; sıkıcı asistan moduna girmeden devam edelim.',command:null,tone:'playful'};
+    } else if(/youtube/i.test(text)&&/ses/i.test(text))out={type:'plan',reply:'YouTube ve ses ayarını birlikte hallediyorum.',command:null,commands:['youtube aç','sesi yükselt'],tone:'focused'};
+    else if(/youtube/i.test(text))out={type:'command',reply:'YouTube açılıyor.',command:'youtube aç',commands:[],tone:'focused'};
+    else if(/format/i.test(text))out={type:'command',reply:'Tamam, formatlıyorum.',command:'bilgisayarı formatla',commands:[],tone:'serious'};
+    else if(/az önce/i.test(text))out={type:'chat',reply:'Az önce sohbeti biraz daha eğlenceli hale getirmek istediğinizi söylediniz.',command:null,commands:[],tone:'warm'};
+    else out={type:'chat',reply:'Olur. Biraz gırgır, biraz fikir; sıkıcı asistan moduna girmeden devam edelim.',command:null,commands:[],tone:'playful'};
     return json(res,200,{message:{role:'assistant',content:JSON.stringify(out)}});
   }
   return json(res,404,{error:'not found'});
@@ -98,7 +99,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.44.0','worker version');
+    assert(hj.version==='2.45.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
 
     const chat=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Bugün biraz sohbet edelim; böyle konuşmanı istiyorum, biraz da gırgır olsun.'});
@@ -118,6 +119,13 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(cmd.status===200,'command status');
     const cm=JSON.parse(cmd.body);
     assert(cm.type==='command'&&cm.command==='youtube aç','safe command normalization');
+
+    const plan=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:"YouTube'u aç ve sesi yükselt."});
+    assert(plan.status===200,'multi-action plan status');
+    const pm=JSON.parse(plan.body);
+    assert(pm.type==='plan','multi-action plan routing');
+    assert(Array.isArray(pm.commands)&&pm.commands.length===2,'multi-action commands missing');
+    assert(pm.commands[0]==='youtube aç'&&pm.commands[1]==='sesi yükselt','multi-action order');
 
     const blocked=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Bilgisayarı formatla.'});
     assert(blocked.status===200,'blocked status');
@@ -167,6 +175,14 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(/bilgisayar/i.test(sp.spokenText),'PC naturalization missing');
     assert(/yüzde\s*75/i.test(sp.spokenText),'percent naturalization missing');
     assert(/8 gigabayt/i.test(sp.spokenText),'GB naturalization missing');
+
+    const searchDir=path.join(workspace,'projects');
+    fs.mkdirSync(searchDir,{recursive:true});
+    fs.writeFileSync(path.join(searchDir,'mavi-roket.md'),'# Mavi Roket\n\nBu proje yerel çalışma alanı arama testi içindir.\n','utf8');
+    const search=await post('http://127.0.0.1:'+BRIDGE_PORT+'/control',{command:'dosyalarda ara mavi roket'});
+    assert(search.status===200,'workspace search status');
+    const sj=JSON.parse(search.body);
+    assert(sj.ok===true&&/mavi-roket\.md/i.test(sj.message),'workspace search result missing');
 
     // Force a long local conversation and verify automatic episode compaction.
     const histDir=path.join(workspace,'.jarvis-memory');
