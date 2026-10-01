@@ -12,6 +12,7 @@ const required=[
   'scheduleVoiceConversationFollowup',
   'askJarvisBrain',
   'askMobileLocalBrain',
+  'finalizeLocalToolReply',
   'playJarvisMobileRelay',
   'isJarvisBargeInPhrase',
   'stopJarvisSpeech',
