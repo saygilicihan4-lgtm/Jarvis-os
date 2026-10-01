@@ -124,7 +124,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.53.0','worker version');
+    assert(hj.version==='2.54.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localBrain.vision===true,'local multimodal health');
     assert(hj.brainRuntime&&hj.brainRuntime.nativeTools===true,'native tools health');
@@ -204,6 +204,46 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(cmd.status===200,'command status');
     const cm=JSON.parse(cmd.body);
     assert(cm.type==='command'&&cm.command==='youtube aç','safe command normalization');
+
+    const learned=await post('http://127.0.0.1:'+BRIDGE_PORT+'/speech-lexicon',{
+      heard:'yutup ac',
+      intended:'youtube aç',
+      source:'selftest'
+    });
+    assert(learned.status===200,'speech lexicon learn status');
+    const learnedj=JSON.parse(learned.body);
+    assert(learnedj.ok===true&&learnedj.count>=1,'speech lexicon learn result');
+
+    const exactNorm=await post('http://127.0.0.1:'+BRIDGE_PORT+'/speech-normalize',{text:'yutup ac'});
+    assert(exactNorm.status===200,'speech normalize exact status');
+    const enj=JSON.parse(exactNorm.body);
+    assert(enj.ok===true&&enj.changed===true&&enj.normalized==='youtube aç','speech exact normalization');
+
+    const phraseLearn=await post('http://127.0.0.1:'+BRIDGE_PORT+'/speech-lexicon',{
+      heard:'mavi motor',
+      intended:'google',
+      source:'selftest'
+    });
+    assert(phraseLearn.status===200,'speech phrase learn status');
+    const phraseNorm=await post('http://127.0.0.1:'+BRIDGE_PORT+'/speech-normalize',{text:'jarvis mavi motor ac'});
+    assert(phraseNorm.status===200,'speech phrase normalize status');
+    const pnj=JSON.parse(phraseNorm.body);
+    assert(pnj.ok===true&&pnj.changed===true&&/jarvis google ac/i.test(pnj.normalized),'speech phrase normalization');
+
+    const learnedCmd=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'yutup ac'});
+    assert(learnedCmd.status===200,'learned command brain status');
+    const lcj=JSON.parse(learnedCmd.body);
+    assert(lcj.type==='command'&&lcj.command==='youtube aç','learned alias did not reach native brain');
+
+    const directive=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'gugil dersem google aç anla'});
+    assert(directive.status===200,'speech teaching directive status');
+    const dj=JSON.parse(directive.body);
+    assert(dj.ok===true&&dj.model==='local-speech-lexicon','speech teaching directive routing');
+
+    for(const heard of ['yutup ac','mavi motor','gugil']){
+      const forgotten=await post('http://127.0.0.1:'+BRIDGE_PORT+'/speech-lexicon',{action:'forget',heard});
+      assert([200,422].includes(forgotten.status),'speech alias cleanup');
+    }
 
     const plan=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:"YouTube'u aç ve sesi yükselt."});
     assert(plan.status===200,'multi-action plan status');
