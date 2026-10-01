@@ -1024,8 +1024,17 @@ function extractLocalBrainJson(text){
   return null;
 }
 async function callLocalBrain(message){
-  const text=String(message||'').replace(/\s+/g,' ').trim().slice(0,1800);
-  if(!text)return{ok:true,type:'chat',reply:'Sizi dinliyorum Cihan Bey.',command:null};
+  const originalText=String(message||'').replace(/\s+/g,' ').trim().slice(0,1800);
+  if(!originalText)return{ok:true,type:'chat',reply:'Sizi dinliyorum Cihan Bey.',command:null};
+
+  const lexiconDirective=handleSpeechLexiconDirective(originalText);
+  if(lexiconDirective.handled){
+    appendLocalBrainHistory('user',originalText);
+    appendLocalBrainHistory('assistant',lexiconDirective.reply);
+    return{ok:true,...lexiconDirective,model:'local-speech-lexicon',memoryHits:0,personaVersion:brainPersona().version};
+  }
+
+  const text=applySpeechLexicon(originalText);
 
   const memoryDirective=handleBrainMemoryDirective(text);
   if(memoryDirective.handled){
@@ -1074,6 +1083,7 @@ async function callLocalBrain(message){
     'Güvenli katalog dışındaki eylemleri type=chat olarak ele al; açık ve kısa biçimde henüz bağlı olmadığını söyle.',
     'Belirsizse tek kısa soru sor. Gereksiz teyit isteme.',
     'Kullanıcının açık tercihlerini hatırla ancak hassas özellikler hakkında çıkarım yapma.',
+    'Yerel ses sözlüğü daha önce yanlış duyulan ifadeleri düzeltebilir. Düzeltilmiş kullanıcı metnini esas al; eski yanlış biçimi geri üretmeye çalışma.',
     'Kişilik ayarları: sıcaklık '+persona.warmth+', mizah '+persona.humor+', doğrudanlık '+persona.directness+', oyunbazlık '+persona.playfulness+'.',
     'Bu tur konuşma modu: '+turnStyle.mode+'. '+turnStyle.instruction,
     'tone alanı seslendirme duygusudur. balanced/casual/playful/warm/focused/work/serious/excited/gentle seçeneklerinden cevabın anlamına en uygun olanı seç.',
@@ -1469,8 +1479,17 @@ async function executeNativeAgentTool(name,args){
   return result||{ok:false,message:'Araç sonucu alınamadı.'};
 }
 async function runNativeAgent(message,{maxRounds=4}={}){
-  const text=String(message||'').replace(/\s+/g,' ').trim().slice(0,1800);
-  if(!text)return{ok:true,type:'chat',reply:'Sizi dinliyorum Cihan Bey.',tone:'balanced',actions:[]};
+  const originalText=String(message||'').replace(/\s+/g,' ').trim().slice(0,1800);
+  if(!originalText)return{ok:true,type:'chat',reply:'Sizi dinliyorum Cihan Bey.',tone:'balanced',actions:[]};
+
+  const lexiconDirective=handleSpeechLexiconDirective(originalText);
+  if(lexiconDirective.handled){
+    appendLocalBrainHistory('user',originalText);
+    appendLocalBrainHistory('assistant',lexiconDirective.reply);
+    return{ok:true,type:'chat',reply:lexiconDirective.reply,tone:lexiconDirective.tone||'warm',actions:[],model:'local-speech-lexicon'};
+  }
+
+  const text=applySpeechLexicon(originalText);
 
   const status=await localBrainStatus();
   if(!status.ready)return{ok:false,error:'OLLAMA_OFFLINE',model:LOCAL_BRAIN_MODEL};
@@ -1489,6 +1508,7 @@ async function runNativeAgent(message,{maxRounds=4}={}){
   const system=[
     'Sen JARVIS\'sin; Cihan Bey\'in kişisel yerel yapay zeka asistanısın.',
     'Doğal Türkçe konuş; kısa soruya kısa cevap, iş sorusuna net cevap ver. Uygun olduğunda kısa espri yap ama yapmacık olma.',
+    'Native tool loop da yerel ses sözlüğünden geçirilmiş kullanıcı metnini esas alır; yanlış duyulan eski ifadeyi geri üretme.',
     'Elindeki yerel araçları yalnızca gerçekten gerektiğinde kullan. Araç kullanmadan cevap verebiliyorsan doğrudan cevap ver.',
     'Bir araç sonucuna göre başka bir araca ihtiyaç varsa sonucu gördükten sonra ikinci aracı çağır. Körlemesine peş peşe araç çağırma.',
     'Araç sonuçlarında olmayan bilgiyi uydurma. Bir eylem başarısızsa başarılı olmuş gibi konuşma.',
@@ -1712,13 +1732,43 @@ function startLocalTtsBridge(){
     res.setHeader('Access-Control-Allow-Headers','content-type');
     res.setHeader('Access-Control-Allow-Methods','GET,POST,OPTIONS');
     if(req.method==='OPTIONS'){res.writeHead(204);return res.end()}
+    if(req.method==='GET'&&req.url==='/speech-lexicon'){
+      const x=readSpeechLexicon();
+      res.writeHead(200,{'content-type':'application/json'});
+      return res.end(JSON.stringify({
+        ok:true,
+        aliases:x.aliases,
+        hotwords:x.hotwords,
+        count:Object.keys(x.aliases||{}).length,
+        updatedAt:x.updatedAt
+      }));
+    }
+    if(req.method==='POST'&&req.url==='/speech-lexicon'){
+      let body='',tooLarge=false;
+      req.on('data',chunk=>{body+=chunk;if(body.length>32768){tooLarge=true;req.destroy()}});
+      req.on('end',()=>{
+        if(tooLarge){res.writeHead(413,{'content-type':'application/json'});return res.end(JSON.stringify({ok:false,error:'too large'}))}
+        try{
+          const d=JSON.parse(body||'{}');
+          const result=d.action==='forget'
+            ?forgetSpeechAlias(d.heard)
+            :learnSpeechAlias(d.heard,d.intended,d.source||'local-ui');
+          res.writeHead(result.ok?200:422,{'content-type':'application/json'});
+          return res.end(JSON.stringify(result));
+        }catch(e){
+          res.writeHead(500,{'content-type':'application/json'});
+          return res.end(JSON.stringify({ok:false,error:String(e.message||e)}));
+        }
+      });
+      return;
+    }
     if(req.method==='GET'&&req.url==='/health'){
       res.writeHead(200,{'content-type':'application/json'});
       return res.end(JSON.stringify({
         ok:true,voice:TTS_VOICE,version:WORKER_VERSION,
         capabilities:CAPS,
         localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2',vision:isLocalVisionModel()},
-        localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper'},
+        localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper',adaptiveLexicon:true,lexiconCount:Object.keys(readSpeechLexicon().aliases||{}).length},
         adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',interruptible:true,offlineFallback:'windows-sapi',chunkedPipeline:true,prefetch:true,safeCache:true,profiles:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']},
         brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,toolReflection:true,multimodal:isLocalVisionModel(),nativeTools:true,maxToolRounds:4,selectiveReasoning:true},
         mobileRelay:{brain:true,tts:true,pollMs:650}
@@ -1982,10 +2032,16 @@ function startWindowsClapHelper(){
 }
 function startWindowsLocalSttHelper(){
   if(process.platform!=='win32'||TEST_MODE)return;
-  const helper=ensureWindowsHelper('jarvis-local-stt-v2.py');
+  const helper=ensureWindowsHelper('jarvis-local-stt-v3.py');
   if(!helper){console.error('[JARVIS] LOCAL STT: helper hazırlanamadı');return}
   try{
-    const env={...process.env,JARVIS_STT_PORT:String(LOCAL_STT_PORT),JARVIS_STT_MODEL:LOCAL_STT_MODEL,JARVIS_WEB_ORIGIN:new URL(BASE).origin};
+    const env={
+      ...process.env,
+      JARVIS_STT_PORT:String(LOCAL_STT_PORT),
+      JARVIS_STT_MODEL:LOCAL_STT_MODEL,
+      JARVIS_WEB_ORIGIN:new URL(BASE).origin,
+      JARVIS_SPEECH_LEXICON_FILE:SPEECH_LEXICON_FILE
+    };
     const p=childProcess.spawn('py',[helper],{windowsHide:true,stdio:['ignore','pipe','pipe'],env});
     p.stdout.on('data',d=>process.stdout.write(String(d)));
     p.stderr.on('data',d=>process.stderr.write('[JARVIS] LOCAL STT ERROR: '+String(d)));
