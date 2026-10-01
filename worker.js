@@ -27,8 +27,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.55.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
+const WORKER_VERSION='2.56.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1','adaptive_speech_lexicon_v1','voice_correction_learning_v1','speech_normalize_bridge_v1'];
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -61,6 +61,7 @@ const TEST_MODE=process.env.JARVIS_TEST_MODE==='1';
 const FORCE_LOCAL_BRIDGE=process.env.JARVIS_LOCAL_BRIDGE_FORCE==='1';
 const LOCAL_STT_PORT=Number(process.env.JARVIS_STT_PORT||8768);
 const LOCAL_STT_MODEL=String(process.env.JARVIS_STT_MODEL||'base').trim();
+const SPEECH_LEXICON_FILE=path.join(MEMORY_DIR,'speech-lexicon.json');
 let speechQueue=Promise.resolve();
 const TTS_LOCK_FILE=path.join(__dirname,'jarvis-tts-active.lock');
 const TTS_CACHE_DIR=path.join(MEMORY_DIR,'tts-cache');
@@ -453,7 +454,68 @@ function isLocalSafeControlCommand(command){
     || /^(?:aç|ac|open|uygulama aç|uygulama ac|program aç|program ac|site aç|site ac)\s+.+$/i.test(c)
     || /^.+?\s+(?:aç|ac)$/i.test(c);
 }
-function brainPersona(){
+function speechLexiconKey(text){
+  return String(text||'')
+    .toLocaleLowerCase('tr-TR')
+    .replace(/[’']/g,'')
+    .replace(/[^a-z0-9çğıöşü\s.-]/gi,' ')
+    .replace(/\s+/g,' ')
+    .trim()
+    .slice(0,240);
+}
+function defaultSpeechLexicon(){
+  return{version:1,updatedAt:null,aliases:{},hotwords:[],history:[]};
+}
+function readSpeechLexicon(){
+  try{
+    if(!fs.existsSync(SPEECH_LEXICON_FILE))return defaultSpeechLexicon();
+    const x=JSON.parse(fs.readFileSync(SPEECH_LEXICON_FILE,'utf8'));
+    const aliases=x&&x.aliases&&typeof x.aliases==='object'&&!Array.isArray(x.aliases)?x.aliases:{};
+    return{
+      version:1,updatedAt:x.updatedAt||null,aliases,
+      hotwords:Array.isArray(x.hotwords)?x.hotwords.filter(Boolean).slice(-160):[],
+      history:Array.isArray(x.history)?x.history.slice(-120):[]
+    };
+  }catch(_){return defaultSpeechLexicon()}
+}
+function writeSpeechLexicon(data){
+  const clean={
+    version:1,updatedAt:new Date().toISOString(),
+    aliases:data&&data.aliases&&typeof data.aliases==='object'?data.aliases:{},
+    hotwords:Array.isArray(data&&data.hotwords)?[...new Set(data.hotwords.map(x=>String(x||'').trim()).filter(Boolean))].slice(-160):[],
+    history:Array.isArray(data&&data.history)?data.history.slice(-120):[]
+  };
+  fs.mkdirSync(MEMORY_DIR,{recursive:true});
+  fs.writeFileSync(SPEECH_LEXICON_FILE,JSON.stringify(clean,null,2),'utf8');
+  return clean;
+}
+function learnSpeechAlias(heard,intended,source='voice-correction'){
+  const from=speechLexiconKey(heard);
+  const target=String(intended||'').replace(/\s+/g,' ').trim().slice(0,240);
+  if(!from||from.length<2||!target)return{ok:false,error:'heard and intended required'};
+  if(from===speechLexiconKey(target))return{ok:false,error:'correction is identical'};
+  const x=readSpeechLexicon();
+  x.aliases[from]=target;
+  const targetWords=target.split(/\s+/).filter(y=>y.length>=3);
+  x.hotwords=[...new Set([...(x.hotwords||[]),target,...targetWords])].slice(-160);
+  x.history=[...(x.history||[]),{at:new Date().toISOString(),action:'learn',heard:from,intended:target,source:String(source||'voice-correction').slice(0,80)}].slice(-120);
+  const saved=writeSpeechLexicon(x);
+  remember({kind:'speech_lexicon_learn',heard:from,intended:target,source:String(source||'voice-correction').slice(0,80)});
+  return{ok:true,heard:from,intended:target,count:Object.keys(saved.aliases).length};
+}
+function forgetSpeechAlias(heard){
+  const key=speechLexiconKey(heard),x=readSpeechLexicon();
+  if(!Object.prototype.hasOwnProperty.call(x.aliases,key))return{ok:false,error:'alias not found',heard:key};
+  const intended=x.aliases[key];
+  delete x.aliases[key];
+  x.history=[...(x.history||[]),{at:new Date().toISOString(),action:'forget',heard:key,intended}].slice(-120);
+  const saved=writeSpeechLexicon(x);
+  remember({kind:'speech_lexicon_forget',heard:key,intended});
+  return{ok:true,heard:key,intended,count:Object.keys(saved.aliases).length};
+}
+function escapeRegexLiteral(s){
+  const specials='\\.^$*+?()[]{}|';
+  return String(s||'').replace(/[.*+?^${}()|[\]\\]/g,'\\function brainPersona(){
   const defaults={
     version:2,
     name:'JARVIS',
