@@ -2006,7 +2006,7 @@ async function streamLocalConversation(message){
         let evt;try{evt=JSON.parse(row)}catch(_){continue}
         if(evt.type==='meta'){
           tone=String(evt.tone||'balanced');
-          if(window.consoleStatus)consoleStatus.textContent='LOCAL STREAM · '+String(evt.model||'READY')+' · İLK CÜMLE BEKLENİYOR';
+          if(window.consoleStatus)consoleStatus.textContent='LOCAL STREAM · '+String(evt.model||'READY')+' · SOCIAL '+String(evt.socialMode||'natural').toUpperCase()+' · İLK CÜMLE BEKLENİYOR';
         }else if(evt.type==='delta'){
           const d=String(evt.text||'');
           full+=d;
@@ -2037,7 +2037,7 @@ async function streamLocalConversation(message){
     if(window.coreSubtitle)coreSubtitle.textContent=reply.slice(-220);
     if(window.consoleStatus){
       const first=Number(donePayload&&donePayload.firstDeltaMs);
-      consoleStatus.textContent='LOCAL STREAM · '+spokenChunks+' SES PARÇASI · '+(Number.isFinite(first)?('İLK TOKEN '+Math.round(first)+'ms'):'TAMAMLANDI');
+      consoleStatus.textContent='LOCAL STREAM · '+spokenChunks+' SES PARÇASI · SOCIAL '+String(donePayload&&donePayload.socialMode||'natural').toUpperCase()+' · '+(Number.isFinite(first)?('İLK TOKEN '+Math.round(first)+'ms'):'TAMAMLANDI');
     }
     scheduleVoiceConversationFollowup(reply);
     return{handled:true,streaming:true,reply,tone,spokenChunks,result:donePayload};
