@@ -183,6 +183,28 @@ try {
   Add-Result "Short-term context continuity" $false $_.Exception.Message
 }
 
+$ragDir=Join-Path $Workspace ".jarvis-acceptance-rag"
+$ragFile=Join-Path $ragDir "varova-note.md"
+$ragSecret=Join-Path $ragDir "credentials.json"
+try {
+  New-Item -ItemType Directory -Force -Path $ragDir | Out-Null
+  "VAROVA zümrüt kartal 6193. Yerel kabul notu: ürün anlatımı net, demo problem-cozum akışında olmalı." | Set-Content -Encoding UTF8 $ragFile
+  "api_key=DO_NOT_RAG zümrüt kartal 6193" | Set-Content -Encoding UTF8 $ragSecret
+
+  $rag=Ask-Brain "VAROVA projesindeki zümrüt kartal 6193 notunu kapsamli analiz et."
+  $rr=$rag.result
+  $sources=@($rr.workspaceSources)
+  $ragOk=($rr.ok -eq $true -and $rr.deepReflected -eq $true -and ($sources -join " ") -match "varova-note")
+  Add-Result "Local project RAG" $ragOk ("sources="+($sources -join ",")+" deep="+$rr.deepReflected) $rag.ms
+  $secretOk=(($sources -join " ") -notmatch "credentials")
+  Add-Result "RAG secret exclusion" $secretOk ("sources="+($sources -join ","))
+} catch {
+  Add-Result "Local project RAG" $false $_.Exception.Message
+  Add-Result "RAG secret exclusion" $false $_.Exception.Message
+} finally {
+  Remove-Item $ragDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 $memoryPhrase = "Test tercihim: videolarda sinematik ama komik bir ton."
 try {
   $r=(Ask-Brain ("Hatirla: "+$memoryPhrase)).result
@@ -253,6 +275,8 @@ $criticalFailed=($results | Where-Object {
     "Tool-result reflection",
     "Fast simple finalizer",
     "Short-term context continuity",
+    "Local project RAG",
+    "RAG secret exclusion",
     "Persistent memory write",
     "Persistent memory recall",
     "Turn-taking TTS state",
