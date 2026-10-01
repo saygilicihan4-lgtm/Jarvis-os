@@ -325,6 +325,104 @@ function jarvisWakePhrase(text){
   const p=parseJarvisWake(text);
   return p.wake&&!p.command;
 }
+function levenshtein(a,b){
+  a=String(a||'');b=String(b||'');
+  const m=a.length,n=b.length;
+  if(!m)return n;if(!n)return m;
+  const prev=Array.from({length:n+1},(_,i)=>i),cur=new Array(n+1);
+  for(let i=1;i<=m;i++){
+    cur[0]=i;
+    for(let j=1;j<=n;j++){
+      const cost=a[i-1]===b[j-1]?0:1;
+      cur[j]=Math.min(cur[j-1]+1,prev[j]+1,prev[j-1]+cost);
+    }
+    for(let j=0;j<=n;j++)prev[j]=cur[j];
+  }
+  return prev[n];
+}
+function speechKey(s){
+  return normalizeJarvisSpeech(s)
+    .replace(/ı/g,'i').replace(/ş/g,'s').replace(/ç/g,'c')
+    .replace(/ğ/g,'g').replace(/ö/g,'o').replace(/ü/g,'u')
+    .replace(/\s+/g,' ').trim();
+}
+function canonicalJarvisCommand(input){
+  const raw=String(input||'').trim();
+  const k=speechKey(raw);
+  if(!k)return raw;
+
+  // Fast semantic repairs for the commands we intentionally allow to run
+  // without confirmation. These absorb common Turkish ASR suffix mistakes.
+  if(/ses/.test(k)&&/(yuksel|yukselt|artir|arttir|ac)/.test(k))return 'sesi yükselt';
+  if(/ses/.test(k)&&/(azalt|kis|dusur)/.test(k))return 'sesi azalt';
+  if(/ses/.test(k)&&/(sessiz|kapat|sustur|mute)/.test(k))return 'sessize al';
+  if(/(pil|batarya|guc)/.test(k)&&/(durum|kac|yuzde)/.test(k))return 'pil durumu';
+  if(/sistem/.test(k)&&/durum/.test(k))return 'sistem durumu';
+  if(/disk|depolama/.test(k)&&/durum/.test(k))return 'disk durumu';
+  if(/(ag|internet|network)/.test(k)&&/durum/.test(k))return 'ağ durumu';
+  if(/duraklat|pause/.test(k))return 'duraklat';
+  if(/oynat|play/.test(k))return 'oynat';
+  if(/sonraki|next/.test(k))return 'sonraki';
+  if(/onceki|previous/.test(k))return 'önceki';
+
+  const canon=[
+    'sistem durumu','disk durumu','ağ durumu','pil durumu',
+    'sesi yükselt','sesi azalt','sessize al','oynat','duraklat','sonraki','önceki',
+    'youtube aç','google aç','github aç','chatgpt aç','opera gx aç','chrome aç','edge aç',
+    'not defteri aç','hesap makinesi aç','dosya gezgini aç','görev yöneticisi aç',
+    'ses ayarlarını aç','bluetooth ayarlarını aç','wifi ayarlarını aç','çalışma alanı aç'
+  ];
+  let best=null,bestRatio=1;
+  for(const x of canon){
+    const xk=speechKey(x),d=levenshtein(k,xk);
+    const ratio=d/Math.max(k.length,xk.length,1);
+    if(ratio<bestRatio){bestRatio=ratio;best=x}
+  }
+  // Conservative threshold: repair only clearly close low-risk commands.
+  return best&&bestRatio<=0.24?best:raw;
+}
+function recognitionCandidates(e){
+  const groups=[];
+  for(let i=0;i<e.results.length;i++){
+    const r=e.results[i],alts=[];
+    const limit=Math.min(r.length||1,5);
+    for(let j=0;j<limit;j++){
+      const t=String(r[j]&&r[j].transcript||'').trim();
+      if(t&&!alts.includes(t))alts.push(t);
+    }
+    if(alts.length)groups.push(alts);
+  }
+  if(!groups.length)return [];
+  let combos=[''];
+  for(const g of groups){
+    const next=[];
+    for(const base of combos)for(const x of g.slice(0,3)){
+      next.push((base+' '+x).replace(/\s+/g,' ').trim());
+      if(next.length>=18)break;
+    }
+    combos=next.slice(0,18);
+  }
+  return [...new Set(combos)];
+}
+function scoreRecognitionCandidate(text){
+  const p=parseJarvisWake(text);
+  if(p.wake&&p.command){
+    const repaired=canonicalJarvisCommand(p.command);
+    return {score:300+(repaired!==p.command?25:0),text,parsed:p,repaired};
+  }
+  if(p.wake)return {score:220,text,parsed:p,repaired:''};
+  if(wakeWordAwaitingCommand&&Date.now()<=wakeWordConversationUntil){
+    const repaired=canonicalJarvisCommand(text);
+    return {score:140+(repaired!==text?25:0),text,parsed:{wake:false,command:''},repaired};
+  }
+  return {score:0,text,parsed:{wake:false,command:''},repaired:text};
+}
+function chooseRecognitionCandidate(e){
+  const candidates=recognitionCandidates(e);
+  if(!candidates.length)return {text:'',parsed:{wake:false,command:''},repaired:'',score:0};
+  return candidates.map(scoreRecognitionCandidate).sort((a,b)=>b.score-a.score)[0];
+}
+
 function scheduleDesktopWakeWord(delay=700){
   if(!desktopWakeWordEnabled||!recognition||privacyMode||document.hidden)return;
   clearTimeout(wakeWordRestartTimer);
@@ -376,6 +474,7 @@ if(SpeechRecognition){
   recognition=new SpeechRecognition();
   recognition.lang=activeLanguage;
   recognition.interimResults=true;
+  recognition.maxAlternatives=5;
   recognition.continuous=false;
   recognition.onstart=()=>setVoiceMode(true);
   recognition.onend=()=>{
@@ -390,36 +489,30 @@ if(SpeechRecognition){
     if(desktopWakeWordEnabled)scheduleDesktopWakeWord(1200);
   };
   recognition.onresult=e=>{
-    // Chromium/Opera can split one spoken sentence into multiple result chunks.
-    // Joining without spaces turned "Jarvis sistem durumu" into
-    // "Jarvissistem durumu", so the wake-word parser missed the command.
-    const text=[];
-    for(let i=0;i<e.results.length;i++){
-      const chunk=String(e.results[i][0]&&e.results[i][0].transcript||'').trim();
-      if(chunk)text.push(chunk);
-    }
-    const captured=text.join(' ').replace(/\s+/g,' ').trim();
+    const choice=chooseRecognitionCandidate(e);
+    const captured=String(choice.text||'').trim();
     if(e.results[e.results.length-1].isFinal){
       if(/jarvis.*(bu konuşmayı|bu konusmayi).*dinleme|dinlemeyi (durdur|kapat)|gizlilik modu/i.test(captured)){
         enterPrivacyMode();return;
       }
       if(privacyMode)return;
 
-      const wake=parseJarvisWake(captured);
+      const wake=choice.parsed&&choice.parsed.wake!==undefined?choice.parsed:parseJarvisWake(captured);
       if(wake.wake){
         if(!wake.command){
           answerJarvisWakeWord();
           return;
         }
         // One-breath mode: "Jarvis, sistem durumu".
-        activeLanguage=detectLanguage(wake.command);
+        const repairedCommand=canonicalJarvisCommand(choice.repaired||wake.command);
+        activeLanguage=detectLanguage(repairedCommand);
         recognition.lang=activeLanguage;
-        cmd.value=wake.command;
+        cmd.value=repairedCommand;
         wakeWordAwaitingCommand=false;
         wakeWordConversationUntil=0;
         wakeWordMutedUntil=Date.now()+12000;
         voiceState.textContent='VOICE: JARVIS · COMMAND CAPTURED';
-        consoleStatus.textContent='JARVIS · TEK NEFESTE KOMUT: '+wake.command;
+        consoleStatus.textContent='JARVIS · DUYULAN: '+captured+' · KOMUT: '+repairedCommand;
         setTimeout(()=>send(),120);
         return;
       }
@@ -438,14 +531,15 @@ if(SpeechRecognition){
         return;
       }
 
-      activeLanguage=detectLanguage(captured);
+      const repairedFollowUp=canonicalJarvisCommand(choice.repaired||captured);
+      activeLanguage=detectLanguage(repairedFollowUp);
       recognition.lang=activeLanguage;
-      cmd.value=captured;
+      cmd.value=repairedFollowUp;
       wakeWordAwaitingCommand=false;
       wakeWordConversationUntil=0;
       wakeWordMutedUntil=Date.now()+12000;
       voiceState.textContent='VOICE: '+(LANGUAGE_NAMES[activeLanguage.split('-')[0]]||activeLanguage)+' · COMMAND CAPTURED';
-      consoleStatus.textContent='JARVIS · KOMUT ALGILANDI';
+      consoleStatus.textContent='JARVIS · DUYULAN: '+captured+' · KOMUT: '+repairedFollowUp;
       setTimeout(()=>send(),140);
     }
   };
