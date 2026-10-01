@@ -43,6 +43,7 @@ const required=[
   'isJarvisBargeInPhrase',
   'handleBargeInTranscript',
   'stopJarvisSpeech',
+  'refreshInterruptionResumeHint',
   'armBargeInRecognition',
   'executeDirectLocalPcControl',
   'tryDirectLocalPcControl'
@@ -110,3 +111,5 @@ if(!html.includes('QUALITY ↑'))throw new Error('Automatic quality escalation d
 if(!html.includes('socialMomentum')||!html.includes('MOMENTUM'))throw new Error('Social momentum diagnostics missing from streaming UI');
 
 if(!html.includes('cadenceMode')||!html.includes('RİTİM'))throw new Error('Adaptive conversation cadence diagnostics missing from streaming UI');
+
+if(!html.includes('/interruption-state')||!html.includes('DEVAM ET'))throw new Error('Interrupted-answer resume UI is missing');
