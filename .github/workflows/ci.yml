@@ -20,7 +20,11 @@ jobs:
         run: |
           node --check server.js
           node --check worker.js
-          python -m py_compile jarvis-local-stt-v2.py
+          python -m py_compile jarvis-local-stt-v4.py
+      - name: STT lexicon selftest
+        run: python stt-lexicon-selftest.py
+      - name: STT adaptive latency selftest
+        run: python stt-adaptive-selftest.py
       - name: UI selftest
         run: node ui-selftest.js
       - name: PowerShell installer syntax
