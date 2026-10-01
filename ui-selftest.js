@@ -23,6 +23,8 @@ const required=[
   'thinkingBackchannelPhrase',
   'speakThinkingBackchannel',
   'armThinkingBackchannel',
+  'beginLocalBrainRequest',
+  'currentBrainRequestController',
   'askNativeLocalAgent',
   'askMobileLocalBrain',
   'armMobileConversationFollowup',
@@ -70,3 +72,8 @@ if(!html.includes('const delay=adaptiveBackchannelDelay(text)'))throw new Error(
 if(!html.includes('recordConversationLatency(performance.now()-requestStarted)'))throw new Error('Native local-agent latency is not learned');
 if(!html.includes('recordConversationLatency(Number(donePayload.firstDeltaMs))'))throw new Error('Streaming first-token latency is not learned');
 if(/const delay=deep\?950:\(text\.length<32\?1650:1250\)/.test(html))throw new Error('Legacy fixed backchannel delay still present');
+
+if(!html.includes('currentBrainRequestController.abort'))throw new Error('Active local reasoning is not abortable from voice interruption');
+if(!html.includes('beginLocalBrainRequest(65000)'))throw new Error('Native local-agent request is not registered for cancellation');
+if(!html.includes("return{handled:true,interrupted:true}"))throw new Error('Interrupted local-agent turn can still fall through to stale fallback');
+if(!html.includes('VOICE: INTERRUPT READY'))throw new Error('Thinking-phase interruption readiness is not surfaced');
