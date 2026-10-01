@@ -15,6 +15,8 @@ const required=[
   'armMobileConversationFollowup',
   'finalizeLocalToolReply',
   'playJarvisMobileRelay',
+  'analyzeFrameAiLocal',
+  'capturedFrameBase64',
   'isJarvisBargeInPhrase',
   'stopJarvisSpeech',
   'armBargeInRecognition',

@@ -21,7 +21,7 @@ function readJson(req){
   });
 }
 const mock=http.createServer(async(req,res)=>{
-  if(req.url==='/api/tags')return json(res,200,{models:[{name:'qwen3:1.7b'}]});
+  if(req.url==='/api/tags')return json(res,200,{models:[{name:'qwen3.5:2b'}]});
   if(req.url==='/api/chat'&&req.method==='POST'){
     const body=await readJson(req);
     seen.push(body);
@@ -29,7 +29,9 @@ const mock=http.createServer(async(req,res)=>{
     const text=String(last&&last.content||'');
     const system=(body.messages||[]).filter(x=>x.role==='system').map(x=>String(x.content||'')).join('\n');
     let out;
-    if(/JARVIS yanıt kalite denetleyicisisin/i.test(system)){
+    if(last&&Array.isArray(last.images)&&last.images.length){
+      out={reply:'Görüntüde kırmızı bir kare görüyorum.',tone:'focused',observations:['kırmızı kare','sade arka plan']};
+    } else if(/JARVIS yanıt kalite denetleyicisisin/i.test(system)){
       out={reply:'VAROVA için yerel proje notuna dayanarak odak noktası müşteri dönüşümü ve net ürün anlatımı olmalı.',tone:'work'};
     } else if(/araç veya bilgisayar eylemi az önce gerçekten çalıştırıldı/i.test(system)){
       out={reply:'Pil yüzde seksen iki. Sistem normal görünüyor.',tone:'focused'};
@@ -92,7 +94,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
         JARVIS_LOCAL_BRIDGE_FORCE:'1',
         JARVIS_TTS_PORT:String(BRIDGE_PORT),
         JARVIS_LOCAL_BRAIN_URL:'http://127.0.0.1:'+OLLAMA_PORT,
-        JARVIS_LOCAL_BRAIN_MODEL:'qwen3:1.7b',
+        JARVIS_LOCAL_BRAIN_MODEL:'qwen3.5:2b',
         JARVIS_TOKEN:'test-token',
         JARVIS_WORKSPACE:workspace
       },
@@ -103,11 +105,22 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.50.0','worker version');
+    assert(hj.version==='2.51.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
+    assert(hj.localBrain.vision===true,'local multimodal health');
     assert(hj.adaptiveTts&&hj.adaptiveTts.interruptible===true,'interruptible TTS health');
     assert(hj.adaptiveTts.offlineFallback==='windows-sapi','offline TTS fallback health');
     assert(hj.brainRuntime&&hj.brainRuntime.keepAlive,'brain runtime health');
+
+    const vision=await post('http://127.0.0.1:'+BRIDGE_PORT+'/vision',{
+      image:'aGVsbG8=',
+      question:'Bu görüntüde ne görüyorsun?'
+    });
+    assert(vision.status===200,'local vision status');
+    const vj=JSON.parse(vision.body);
+    assert(vj.ok===true&&vj.localOnly===true,'local vision routing');
+    assert(/kırmızı bir kare/i.test(vj.reply),'local vision reply');
+    assert(vj.model==='qwen3.5:2b','local vision model');
 
     const chat=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Bugün biraz sohbet edelim; böyle konuşmanı istiyorum, biraz da gırgır olsun.'});
     assert(chat.status===200,'chat status');

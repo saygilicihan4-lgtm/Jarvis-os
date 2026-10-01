@@ -53,7 +53,8 @@ try {
   $b=Invoke-Json "http://127.0.0.1:8765/brain-status" "GET" $null 5
   $ok=($b.ok -eq $true -and $b.ready -eq $true -and $b.installed -eq $true)
   Add-Result "Local brain ready" $ok (($b.model)+" · RAM "+($b.ramGb)+"GB")
-  Add-Result "Qwen3 conversational engine" ([string]$b.model -match "^qwen3:") ([string]$b.model)
+  Add-Result "Qwen3.5 multimodal engine" ([string]$b.model -match "^qwen3\.5:") ([string]$b.model)
+  Add-Result "Local multimodal capability" ($b.vision -eq $true) ("vision="+$b.vision)
   Add-Result "Episodic memory engine" ($null -ne $b.memoryEpisodes) ("episodes="+$b.memoryEpisodes+" facts="+$b.memoryFacts)
 
   $warmSw=[Diagnostics.Stopwatch]::StartNew()
@@ -64,6 +65,23 @@ try {
 } catch {
   Add-Result "Local brain ready" $false $_.Exception.Message
   Add-Result "Local brain prewarm" $false $_.Exception.Message
+}
+
+try {
+  # Valid tiny PNG. The test checks the local multimodal transport/model path,
+  # not semantic accuracy of a one-pixel image.
+  $tinyPng="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlG/7AAAAAASUVORK5CYII="
+  $vsw=[Diagnostics.Stopwatch]::StartNew()
+  $v=Invoke-Json "http://127.0.0.1:8765/vision" "POST" @{
+    image=$tinyPng
+    question="Bu cok kucuk test goruntusu icin gordugun seyi tek cumleyle soyle."
+  } 90
+  $vsw.Stop()
+  $vReply=[string]$v.reply
+  $vOk=($v.ok -eq $true -and $v.localOnly -eq $true -and -not [string]::IsNullOrWhiteSpace($vReply))
+  Add-Result "Local multimodal vision" $vOk (($v.model)+" · "+$vReply.Substring(0,[Math]::Min(180,$vReply.Length))) $vsw.Elapsed.TotalMilliseconds
+} catch {
+  Add-Result "Local multimodal vision" $false $_.Exception.Message
 }
 
 try {
@@ -261,7 +279,9 @@ $criticalFailed=($results | Where-Object {
     "Phone local brain relay",
     "Local brain ready",
     "Local brain prewarm",
-    "Qwen3 conversational engine",
+    "Qwen3.5 multimodal engine",
+    "Local multimodal capability",
+    "Local multimodal vision",
     "Local Turkish STT",
     "STT model preloaded",
     "STT command vocabulary bias",

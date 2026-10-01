@@ -158,6 +158,7 @@ let cameraStream=null;
 let capturedFrameUrl='';
 let captureGeneration=0;
 let lastVisionSummary=null;
+let lastVisionAiSummary=null;
 let lastLocalText='';
 let activeLanguage='tr-TR';
 const jarvisCalendar={
@@ -977,7 +978,7 @@ async function captureFrame(){
   capturePreview.removeAttribute('src');
   capturePanel.hidden=true;
   captureMeta.textContent='';
-  lastVisionSummary=null;lastLocalText='';
+  lastVisionSummary=null;lastVisionAiSummary=null;lastLocalText='';
   analyzeBtn.disabled=true;scanTextBtn.disabled=true;
   capturedFrameUrl=URL.createObjectURL(blob);
   capturePreview.src=capturedFrameUrl;
@@ -987,10 +988,9 @@ async function captureFrame(){
   captureMeta.textContent='LOCAL SNAPSHOT · '+width+'×'+height+' · '+Math.max(1,Math.round(blob.size/1024))+' KB · '+new Date().toLocaleTimeString();
   visionState.textContent=' · VISION: SNAPSHOT LOCAL · NOT UPLOADED';
 }
-function analyzeFrameLocal(){
-  if(privacyMode){visionState.textContent=' · VISION: BLOCKED BY PRIVACY';return}
-  if(!capturedFrameUrl||!captureCanvas.width||!captureCanvas.height){visionState.textContent=' · VISION: CAPTURE REQUIRED';return}
-  const src=captureCanvas.getContext('2d',{willReadFrequently:true});
+function analyzeFrameStatsLocal(){
+  if(privacyMode)return null;
+  if(!capturedFrameUrl||!captureCanvas.width||!captureCanvas.height)return null;
   const sample=document.createElement('canvas');
   const sw=Math.min(160,captureCanvas.width),sh=Math.max(1,Math.round(captureCanvas.height*(sw/captureCanvas.width)));
   sample.width=sw;sample.height=sh;
@@ -1016,11 +1016,72 @@ function analyzeFrameLocal(){
   const result=light+' · '+quality+' · BRIGHTNESS '+Math.round(avg)+'/255 · CONTRAST '+Math.round(contrast)+' · COLOR '+Math.round(saturation)+'%';
   lastVisionSummary={light,quality,brightness:Math.round(avg),contrast:Math.round(contrast),color:Math.round(saturation),detail:Math.round(detail),capturedAt:new Date().toISOString()};
   captureMeta.textContent=(captureMeta.textContent.split(' · ANALYSIS:')[0])+' · ANALYSIS: '+result;
-  visionState.textContent=' · VISION: LOCAL ANALYSIS READY · NO CLOUD';
+  return lastVisionSummary;
+}
+function capturedFrameBase64(maxWidth=1024){
+  if(!captureCanvas.width||!captureCanvas.height)return '';
+  const out=document.createElement('canvas');
+  const scale=Math.min(1,maxWidth/captureCanvas.width);
+  out.width=Math.max(1,Math.round(captureCanvas.width*scale));
+  out.height=Math.max(1,Math.round(captureCanvas.height*scale));
+  out.getContext('2d',{alpha:false}).drawImage(captureCanvas,0,0,out.width,out.height);
+  return String(out.toDataURL('image/jpeg',0.82)).replace(/^data:image\/jpeg;base64,/i,'');
+}
+async function analyzeFrameAiLocal(question='Bu görüntüde ne görüyorsun?'){
+  if(privacyMode){visionState.textContent=' · VISION AI: BLOCKED BY PRIVACY';return null}
+  if(!capturedFrameUrl||!captureCanvas.width){visionState.textContent=' · VISION AI: CAPTURE REQUIRED';return null}
+  if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis()){
+    visionState.textContent=' · VISION AI: PC LOCAL MODEL REQUIRED';
+    return null;
+  }
+  const image=capturedFrameBase64(1024);
+  if(!image){visionState.textContent=' · VISION AI: FRAME ENCODE FAILED';return null}
+  visionState.textContent=' · VISION AI: QWEN LOCAL ANALYZING';
+  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),65000);
+  try{
+    const r=await fetch('http://127.0.0.1:8765/vision',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({image,question:String(question||'').trim()}),
+      signal:ctl.signal
+    });
+    clearTimeout(timer);
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||j.ok!==true)throw new Error(j.error||('VISION '+r.status));
+    lastVisionAiSummary={
+      reply:String(j.reply||'').trim(),
+      observations:Array.isArray(j.observations)?j.observations:[],
+      model:String(j.model||''),
+      tone:String(j.tone||'focused'),
+      analyzedAt:new Date().toISOString()
+    };
+    const reply=lastVisionAiSummary.reply;
+    captureMeta.textContent=(captureMeta.textContent.split(' · AI:')[0])+' · AI: '+reply.slice(0,260);
+    visionState.textContent=' · VISION AI: LOCAL '+String(j.model||'READY').toUpperCase()+' · NO CLOUD';
+    coreSubtitle.textContent=reply.slice(0,220);
+    return lastVisionAiSummary;
+  }catch(e){
+    clearTimeout(timer);
+    lastVisionAiSummary=null;
+    const err=String(e.message||e);
+    visionState.textContent=/VISION_MODEL_REQUIRED/.test(err)
+      ?' · VISION AI: QWEN3.5 MODEL REQUIRED'
+      :' · VISION AI: LOCAL FALLBACK';
+    return null;
+  }
+}
+async function analyzeFrameLocal(question='Bu görüntüde ne görüyorsun?'){
+  if(privacyMode){visionState.textContent=' · VISION: BLOCKED BY PRIVACY';return null}
+  if(!capturedFrameUrl||!captureCanvas.width||!captureCanvas.height){visionState.textContent=' · VISION: CAPTURE REQUIRED';return null}
+  analyzeFrameStatsLocal();
+  const ai=await analyzeFrameAiLocal(question);
+  if(ai)return ai;
+  visionState.textContent=' · VISION: LOCAL STATS READY · NO CLOUD';
+  return lastVisionSummary;
 }
 function visionPrivacyInvariant(){
   if(!privacyMode)return true;
-  const clean=!cameraStream&&!capturedFrameUrl&&captureCanvas.width===0&&captureCanvas.height===0&&!lastVisionSummary&&!lastLocalText;
+  const clean=!cameraStream&&!capturedFrameUrl&&captureCanvas.width===0&&captureCanvas.height===0&&!lastVisionSummary&&!lastVisionAiSummary&&!lastLocalText;
   if(!clean){
     stopCamera();
     clearCapturedFrame();
@@ -1411,25 +1472,46 @@ async function connect(){
   }
 }
 
-function localVisionCommand(command){
-  const c=String(command||'').trim().toLocaleLowerCase('tr-TR');
-  const wantsVision=/^(ne görüyorsun|ne goruyorsun|görüntü durumu|goruntu durumu|vision status|frame status)$/.test(c);
-  const wantsText=/^(ne yazıyor|ne yaziyor|yazıyı oku|yaziyi oku|read text|what does it say)$/.test(c);
+async function localVisionCommand(command){
+  const raw=String(command||'').trim();
+  const c=raw.toLocaleLowerCase('tr-TR');
+  const wantsVision=/^(?:jarvis[, ]*)?(ne görüyorsun|ne goruyorsun|görüntü durumu|goruntu durumu|vision status|frame status)(?:\??)?$/.test(c);
+  const wantsText=/^(?:jarvis[, ]*)?(ne yazıyor|ne yaziyor|yazıyı oku|yaziyi oku|read text|what does it say)(?:\??)?$/.test(c);
   if(!wantsVision&&!wantsText)return false;
   if(wantsText){
     if(privacyMode){consoleStatus.textContent='OCR BLOCKED BY PRIVACY';return true}
-    if(!lastLocalText){consoleStatus.textContent='Yerel OCR sonucu yok. CAPTURE → READ TEXT çalıştırın.';return true}
+    if(!lastLocalText&&capturedFrameUrl)await scanTextLocal();
+    if(!lastLocalText){consoleStatus.textContent='Yerel OCR sonucu yok. Önce görüntü yakalayın.';return true}
     consoleStatus.textContent='LOCAL OCR · '+lastLocalText.slice(0,500);
     coreSubtitle.textContent='Yerel OCR sonucu · görüntü Cloud’a gönderilmedi';
+    speak(lastLocalText.slice(0,650),'tr-TR','focused');
     return true;
   }
   if(privacyMode){consoleStatus.textContent='VISION BLOCKED BY PRIVACY';return true}
-  if(!lastVisionSummary){consoleStatus.textContent='Önce CAMERA → CAPTURE → ANALYZE çalıştırın.';return true}
-  const v=lastVisionSummary;
-  const trLight=v.light==='LOW LIGHT'?'düşük ışık':v.light==='VERY BRIGHT'?'çok parlak':'normal ışık';
-  const trQuality=v.quality==='LOW CONTRAST'?'düşük kontrast':v.quality==='LOW DETAIL'?'düşük detay':'kare teknik olarak uygun';
-  consoleStatus.textContent='LOCAL VISION · '+trLight+' · '+trQuality+' · parlaklık '+v.brightness+'/255 · kontrast '+v.contrast+' · renk '+v.color+'%';
-  coreSubtitle.textContent='Yerel Vision özeti hazır · görüntü Cloud’a gönderilmedi';
+  if(!capturedFrameUrl){consoleStatus.textContent='Önce CAMERA → CAPTURE çalıştırın.';return true}
+  if(!lastVisionAiSummary){
+    const ai=await analyzeFrameLocal('Bu görüntüde ne görüyorsun? Önemli olanları doğal Türkçe ile kısaca anlat.');
+    if(ai&&ai.reply){
+      consoleStatus.textContent='LOCAL MULTIMODAL VISION · '+String(ai.model||'READY');
+      speak(ai.reply,'tr-TR',String(ai.tone||'focused'));
+      return true;
+    }
+  }
+  if(lastVisionAiSummary&&lastVisionAiSummary.reply){
+    consoleStatus.textContent='LOCAL MULTIMODAL VISION · '+lastVisionAiSummary.reply.slice(0,500);
+    coreSubtitle.textContent=lastVisionAiSummary.reply.slice(0,220);
+    speak(lastVisionAiSummary.reply,'tr-TR',String(lastVisionAiSummary.tone||'focused'));
+    return true;
+  }
+  if(!lastVisionSummary){analyzeFrameStatsLocal()}
+  if(lastVisionSummary){
+    const v=lastVisionSummary;
+    const trLight=v.light==='LOW LIGHT'?'düşük ışık':v.light==='VERY BRIGHT'?'çok parlak':'normal ışık';
+    const trQuality=v.quality==='LOW CONTRAST'?'düşük kontrast':v.quality==='LOW DETAIL'?'düşük detay':'kare teknik olarak uygun';
+    const msg='Görüntüyü anlamsal olarak çözemiyorum; teknik olarak '+trLight+' ve '+trQuality+'.';
+    consoleStatus.textContent='LOCAL VISION FALLBACK · '+msg;
+    speak(msg,'tr-TR','focused');
+  }
   return true;
 }
 async function checkLocalAI(){
@@ -1741,7 +1823,7 @@ async function send(){
   const command=cmd.value.trim();
   if(!command)return;
   if(await tryDirectLocalPcControl(command))return;
-  if(localVisionCommand(command)){cmd.value='';return}
+  if(await localVisionCommand(command)){cmd.value='';return}
   if(/^(bugün ne var|bugun ne var|günlük özet|gunluk ozet|takvim özeti|takvim ozeti)$/i.test(command)){
     speakDailyBrief();consoleStatus.textContent='ASSISTANT · 24 SAATLIK ÖZET';cmd.value='';return;
   }
