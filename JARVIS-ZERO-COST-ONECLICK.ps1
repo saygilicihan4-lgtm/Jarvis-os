@@ -45,15 +45,15 @@ try {
 
 Write-Host "[2/8] Sistem kapasitesi olculuyor..." -ForegroundColor Yellow
 $ramGb = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1)
-if ($ramGb -ge 14) { $BrainModel = "qwen2.5:3b" }
-elseif ($ramGb -ge 7) { $BrainModel = "qwen2.5:1.5b" }
-else { $BrainModel = "qwen2.5:0.5b" }
+if ($ramGb -ge 14) { $BrainModel = "qwen3:4b" }
+elseif ($ramGb -ge 7) { $BrainModel = "qwen3:1.7b" }
+else { $BrainModel = "qwen3:0.6b" }
 $SttModel = "base"
 [Environment]::SetEnvironmentVariable("JARVIS_LOCAL_BRAIN_MODEL",$BrainModel,"User")
 [Environment]::SetEnvironmentVariable("JARVIS_STT_MODEL",$SttModel,"User")
 $env:JARVIS_LOCAL_BRAIN_MODEL = $BrainModel
 $env:JARVIS_STT_MODEL = $SttModel
-Write-Host ("[JARVIS] RAM: {0} GB -> Local Brain: {1}" -f $ramGb,$BrainModel)
+Write-Host ("[JARVIS] RAM: {0} GB -> Local Brain: {1} (Qwen3 / think=false / zero-cost)" -f $ramGb,$BrainModel)
 
 Write-Host "[3/8] Ollama kontrol ediliyor..." -ForegroundColor Yellow
 $ollama = Get-Command ollama -ErrorAction SilentlyContinue

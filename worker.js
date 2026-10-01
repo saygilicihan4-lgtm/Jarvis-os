@@ -27,8 +27,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.40.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1'];
+const WORKER_VERSION='2.41.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1'];
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -48,7 +48,7 @@ const CREATOR_TTS_VOLUME='+14%';
 // Zero-cost local conversational brain. No paid API is used.
 // Default model is intentionally small enough for older Windows laptops.
 const LOCAL_BRAIN_URL=String(process.env.JARVIS_LOCAL_BRAIN_URL||'http://127.0.0.1:11434').replace(/\/$/,'');
-let LOCAL_BRAIN_MODEL=String(process.env.JARVIS_LOCAL_BRAIN_MODEL||'qwen2.5:1.5b').trim();
+let LOCAL_BRAIN_MODEL=String(process.env.JARVIS_LOCAL_BRAIN_MODEL||'qwen3:1.7b').trim();
 const LOCAL_BRAIN_HISTORY_FILE=path.join(MEMORY_DIR,'brain-history.jsonl');
 const LOCAL_BRAIN_FACTS_FILE=path.join(MEMORY_DIR,'brain-facts.jsonl');
 const LOCAL_BRAIN_PERSONA_FILE=path.join(MEMORY_DIR,'brain-persona.json');
@@ -60,6 +60,10 @@ let speechQueue=Promise.resolve();
 const TTS_LOCK_FILE=path.join(__dirname,'jarvis-tts-active.lock');
 let lastQueuedSpeech='';
 let lastQueuedSpeechAt=0;
+let ttsPendingCount=0;
+let ttsSpeaking=false;
+let ttsLastStartedAt=0;
+let ttsLastEndedAt=0;
 let lastLocalWakeAt=0;
 let localWakeCounter=0;
 
@@ -82,20 +86,58 @@ function setTtsLock(active){
     else if(fs.existsSync(TTS_LOCK_FILE))fs.unlinkSync(TTS_LOCK_FILE);
   }catch(e){}
 }
-async function speakJarvisNow(text){
+function ttsProfileForTone(tone='balanced',text=''){
+  const t=String(tone||'balanced').toLowerCase();
+  const profiles={
+    balanced:{rate:'-18%',pitch:'-12Hz',volume:'+0%'},
+    casual:{rate:'-13%',pitch:'-9Hz',volume:'+2%'},
+    playful:{rate:'-9%',pitch:'-7Hz',volume:'+3%'},
+    warm:{rate:'-21%',pitch:'-11Hz',volume:'+2%'},
+    focused:{rate:'-14%',pitch:'-13Hz',volume:'+0%'},
+    work:{rate:'-14%',pitch:'-13Hz',volume:'+0%'}
+  };
+  const p={...(profiles[t]||profiles.balanced)};
+  const clean=String(text||'');
+  if(/[!?]{2,}|😂|🤣/.test(clean)&&['balanced','casual'].includes(t)){
+    p.rate='-10%';p.pitch='-8Hz';p.volume='+3%';
+  }
+  if(clean.length>420&&t==='balanced')p.rate='-15%';
+  return p;
+}
+function prepareJarvisSpeechText(text,tone='balanced'){
+  let s=String(text||'').replace(/\s+/g,' ').trim();
+  // Edge neural voices react better to human punctuation than raw UI text.
+  s=s.replace(/\s*·\s*/g,', ').replace(/\s*—\s*/g,', ');
+  if(tone==='playful')s=s.replace(/\.{3,}/g,'…');
+  return s.slice(0,900);
+}
+async function speakJarvisNow(text,tone='balanced'){
   if(!TTS_ENABLED)return;
-  const clean=String(text||'').replace(/\s+/g,' ').trim().slice(0,700);
+  const clean=prepareJarvisSpeechText(text,tone);
   if(!clean)return;
+  const profile=ttsProfileForTone(tone,clean);
   const mp3=path.join(os.tmpdir(),'jarvis-tts-'+process.pid+'-'+Date.now()+'-'+crypto.randomBytes(3).toString('hex')+'.mp3');
+  ttsSpeaking=true;
+  ttsLastStartedAt=Date.now();
   setTtsLock(true);
   try{
-    await runHidden('py',['-m','edge_tts','--voice',TTS_VOICE,'--rate='+TTS_RATE,'--pitch='+TTS_PITCH,'--volume='+TTS_VOLUME,'--text',clean,'--write-media',mp3],45000);
+    await runHidden('py',[
+      '-m','edge_tts',
+      '--voice',TTS_VOICE,
+      '--rate='+profile.rate,
+      '--pitch='+profile.pitch,
+      '--volume='+profile.volume,
+      '--text',clean,
+      '--write-media',mp3
+    ],45000);
     const safe=mp3.replace(/'/g,"''");
-    const ps="Add-Type -AssemblyName PresentationCore; $p=New-Object System.Windows.Media.MediaPlayer; $p.Open([uri]'"+safe+"'); for($i=0;$i -lt 100 -and -not $p.NaturalDuration.HasTimeSpan;$i++){Start-Sleep -Milliseconds 100}; $p.Volume=1.0; $p.Play(); if($p.NaturalDuration.HasTimeSpan){Start-Sleep -Milliseconds ([int]$p.NaturalDuration.TimeSpan.TotalMilliseconds+500)}else{Start-Sleep -Seconds 15}; $p.Close()";
+    const ps="Add-Type -AssemblyName PresentationCore; $p=New-Object System.Windows.Media.MediaPlayer; $p.Open([uri]'"+safe+"'); for($i=0;$i -lt 100 -and -not $p.NaturalDuration.HasTimeSpan;$i++){Start-Sleep -Milliseconds 100}; $p.Volume=1.0; $p.Play(); if($p.NaturalDuration.HasTimeSpan){Start-Sleep -Milliseconds ([int]$p.NaturalDuration.TimeSpan.TotalMilliseconds+220)}else{Start-Sleep -Seconds 15}; $p.Close()";
     await runHidden('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-Command',ps],45000);
   }finally{
     try{if(fs.existsSync(mp3))fs.unlinkSync(mp3)}catch(e){}
-    await new Promise(r=>setTimeout(r,900));
+    await new Promise(r=>setTimeout(r,320));
+    ttsSpeaking=false;
+    ttsLastEndedAt=Date.now();
     setTtsLock(false);
   }
 }
@@ -133,7 +175,7 @@ async function renderCreatorVoiceFile(text,name='creator-voice'){
   if(!fs.existsSync(out)||fs.statSync(out).size<512)throw new Error('creator audio render failed');
   return out;
 }
-function queueJarvisSpeech(text){
+function queueJarvisSpeech(text,tone='balanced'){
   if(!TTS_ENABLED)return;
   const clean=String(text||'').replace(/\s+/g,' ').trim();
   if(!clean)return;
@@ -144,9 +186,12 @@ function queueJarvisSpeech(text){
   }
   lastQueuedSpeech=clean;
   lastQueuedSpeechAt=now;
-  speechQueue=speechQueue.then(()=>speakJarvisNow(clean)).catch(e=>console.error('[JARVIS] TTS:',e.message));
+  ttsPendingCount++;
+  speechQueue=speechQueue
+    .then(()=>speakJarvisNow(clean,tone))
+    .catch(e=>console.error('[JARVIS] TTS:',e.message))
+    .finally(()=>{ttsPendingCount=Math.max(0,ttsPendingCount-1)});
 }
-
 
 function showJarvisScreen(){
   if(process.platform!=='win32')return;
@@ -405,9 +450,9 @@ async function localBrainStatus(){
 
     if(!process.env.JARVIS_LOCAL_BRAIN_MODEL){
       const ramGb=os.totalmem()/1073741824;
-      const candidates=ramGb>=14?['qwen2.5:3b','qwen2.5:1.5b','qwen2.5:0.5b']
-        :ramGb>=7?['qwen2.5:1.5b','qwen2.5:0.5b']
-        :['qwen2.5:0.5b','qwen2.5:1.5b'];
+      const candidates=ramGb>=14?['qwen3:4b','qwen3:1.7b','qwen3:0.6b','qwen2.5:1.5b']
+        :ramGb>=7?['qwen3:1.7b','qwen3:0.6b','qwen2.5:1.5b']
+        :['qwen3:0.6b','qwen2.5:0.5b','qwen3:1.7b'];
       const found=candidates.find(has);
       if(found)LOCAL_BRAIN_MODEL=found;
     }
@@ -434,7 +479,7 @@ async function callLocalBrain(message){
   if(memoryDirective.handled){
     appendLocalBrainHistory('user',text);
     appendLocalBrainHistory('assistant',memoryDirective.reply);
-    return{ok:true,...memoryDirective,model:'local-memory',memoryHits:0,personaVersion:brainPersona().version};
+    return{ok:true,...memoryDirective,model:'local-memory',memoryHits:0,personaVersion:brainPersona().version,tone:'warm'};
   }
 
   maybeRememberExplicitPreference(text);
@@ -456,6 +501,8 @@ async function callLocalBrain(message){
     'Sen JARVIS\'sin; Cihan Bey\'in uzun süreli kişisel yapay zeka asistanısın.',
     'Önceliklerin: doğru anlama, doğal sohbet, güvenli eylem, bağlamı koruma ve sonuç odaklılık.',
     'Türkçe konuş. İnsan gibi ritimli, sıcak, zeki ve rahat konuş; robotik kalıp cümlelerden kaçın.',
+    'Gerçek bir insan sohbetindeki gibi bağlama göre bazen kısa karşılık, bazen espri, bazen doğrudan çözüm ver. Her turu aynı kalıpla açma.',
+    'Kullanıcı bir şey anlatıyorsa hemen komuta dönüştürmeye çalışma; sohbeti sohbet olarak sürdürebil.',
     'Uygun olduğunda kısa gırgır, ince espri veya karşılık ver. Her cümlede şaka yapma.',
     'Kullanıcı şakalaşıyorsa enerjiyi karşıla; ciddi iş veriyorsa hızla ciddileş.',
     'Cihan Bey hitabını ara sıra kullan; her cevapta tekrarlama.',
@@ -487,6 +534,7 @@ async function callLocalBrain(message){
   const makeBody=(repairNote='')=>({
     model:LOCAL_BRAIN_MODEL,
     stream:false,
+    think:false,
     format:schema,
     keep_alive:'10m',
     options:{
@@ -546,7 +594,7 @@ async function callLocalBrain(message){
       type,command:command||null,model:LOCAL_BRAIN_MODEL,
       memoryHits:memory.length,mode:turnStyle.mode
     });
-    return{ok:true,type,reply,command,model:LOCAL_BRAIN_MODEL,memoryHits:memory.length,personaVersion:persona.version};
+    return{ok:true,type,reply,command,model:LOCAL_BRAIN_MODEL,memoryHits:memory.length,personaVersion:persona.version,tone:turnStyle.mode};
   }catch(e){
     return{ok:false,error:String(e.message||e),model:LOCAL_BRAIN_MODEL};
   }
@@ -571,7 +619,19 @@ function startLocalTtsBridge(){
       return res.end(JSON.stringify({
         ok:true,voice:TTS_VOICE,version:WORKER_VERSION,
         localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2'},
-        localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper'}
+        localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper'},
+        adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',profiles:['balanced','casual','playful','warm','focused','work']}
+      }));
+    }
+    if(req.method==='GET'&&req.url==='/tts-state'){
+      res.writeHead(200,{'content-type':'application/json'});
+      return res.end(JSON.stringify({
+        ok:true,
+        active:ttsSpeaking||ttsPendingCount>0,
+        speaking:ttsSpeaking,
+        pending:ttsPendingCount,
+        startedAt:ttsLastStartedAt||null,
+        endedAt:ttsLastEndedAt||null
       }));
     }
     if(req.method==='GET'&&req.url==='/brain-status'){
@@ -675,9 +735,10 @@ function startLocalTtsBridge(){
         try{
           const d=JSON.parse(body||'{}'),text=String(d.text||'').trim();
           if(!text){res.writeHead(400);return res.end('text required')}
-          queueJarvisSpeech(text);
+          const tone=['balanced','casual','playful','warm','focused','work'].includes(String(d.tone||''))?String(d.tone):'balanced';
+          queueJarvisSpeech(text,tone);
           res.writeHead(202,{'content-type':'application/json'});
-          return res.end(JSON.stringify({ok:true,queued:true}));
+          return res.end(JSON.stringify({ok:true,queued:true,tone,profile:ttsProfileForTone(tone,text)}));
         }catch(e){res.writeHead(400);return res.end('bad request')}
       });
       return;

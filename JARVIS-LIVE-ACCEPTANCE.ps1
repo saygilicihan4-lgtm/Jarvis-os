@@ -40,6 +40,8 @@ Write-Host "==============================================" -ForegroundColor Cya
 try {
   $h=Invoke-Json "http://127.0.0.1:8765/health" "GET" $null 5
   Add-Result "Worker bridge" ($h.ok -eq $true) ("v"+$h.version)
+  $adaptiveOk=($null -ne $h.adaptiveTts -and $h.adaptiveTts.engine -eq "edge-neural" -and $h.adaptiveTts.profiles.Count -ge 4)
+  Add-Result "Adaptive voice profiles" $adaptiveOk (($h.adaptiveTts.voice)+" · "+(($h.adaptiveTts.profiles -join ",")))
 } catch {
   Add-Result "Worker bridge" $false $_.Exception.Message
 }
@@ -48,6 +50,7 @@ try {
   $b=Invoke-Json "http://127.0.0.1:8765/brain-status" "GET" $null 5
   $ok=($b.ok -eq $true -and $b.ready -eq $true -and $b.installed -eq $true)
   Add-Result "Local brain ready" $ok (($b.model)+" · RAM "+($b.ramGb)+"GB")
+  Add-Result "Qwen3 conversational engine" ([string]$b.model -match "^qwen3:") ([string]$b.model)
 } catch {
   Add-Result "Local brain ready" $false $_.Exception.Message
 }
@@ -116,6 +119,13 @@ try {
   $null=(Ask-Brain ("Unut: "+$memoryPhrase)).result
 } catch {}
 
+try {
+  $ts=Invoke-Json "http://127.0.0.1:8765/tts-state" "GET" $null 5
+  Add-Result "Turn-taking TTS state" ($ts.ok -eq $true -and $null -ne $ts.active) ("active="+$ts.active+" pending="+$ts.pending)
+} catch {
+  Add-Result "Turn-taking TTS state" $false $_.Exception.Message
+}
+
 $zeroCost = ([Environment]::GetEnvironmentVariable("JARVIS_ZERO_COST_ONLY","User") -ne "0")
 Add-Result "Zero-cost guard" $zeroCost ("JARVIS_ZERO_COST_ONLY="+[Environment]::GetEnvironmentVariable("JARVIS_ZERO_COST_ONLY","User"))
 
@@ -124,7 +134,9 @@ $total=$results.Count
 $criticalFailed=($results | Where-Object {
   -not $_.ok -and $_.name -in @(
     "Worker bridge",
+    "Adaptive voice profiles",
     "Local brain ready",
+    "Qwen3 conversational engine",
     "Local Turkish STT",
     "Natural command: volume",
     "Natural command: YouTube",
@@ -132,6 +144,7 @@ $criticalFailed=($results | Where-Object {
     "Humanlike casual reply",
     "Persistent memory write",
     "Persistent memory recall",
+    "Turn-taking TTS state",
     "Zero-cost guard"
   )
 }).Count
