@@ -27,8 +27,8 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.36.0';
-const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1'];
+const WORKER_VERSION='2.37.0';
+const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1'];
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -623,13 +623,52 @@ function firstExisting(paths){
   for(const p of paths)try{if(p&&fs.existsSync(p))return p}catch(_){}
   return null;
 }
+function sendWindowsMediaKey(vk,presses=1){
+  if(process.platform!=='win32')throw new Error('Windows media control only');
+  const count=Math.max(1,Math.min(12,Number(presses)||1));
+  const ps=[
+    "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; namespace Jarvis { public static class Keys { [DllImport(\"user32.dll\")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo); } }' -ErrorAction SilentlyContinue",
+    "$vk="+Number(vk),
+    "1.."+count+" | ForEach-Object { [Jarvis.Keys]::keybd_event([byte]$vk,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 35; [Jarvis.Keys]::keybd_event([byte]$vk,0,2,[UIntPtr]::Zero); Start-Sleep -Milliseconds 45 }"
+  ].join('; ');
+  childProcess.execFileSync('powershell.exe',['-NoProfile','-Command',ps],{encoding:'utf8',windowsHide:true,timeout:5000,maxBuffer:65536});
+}
+function windowsPowerStatus(){
+  if(process.platform!=='win32')return{ok:false,message:'Güç durumu şu anda Windows için etkin'};
+  let battery=null;
+  try{
+    const ps="Get-CimInstance Win32_Battery | Select-Object -First 1 EstimatedChargeRemaining,BatteryStatus | ConvertTo-Json -Compress";
+    const raw=childProcess.execFileSync('powershell.exe',['-NoProfile','-Command',ps],{encoding:'utf8',windowsHide:true,timeout:5000,maxBuffer:65536}).trim();
+    if(raw)battery=JSON.parse(raw);
+  }catch(_){}
+  const free=Math.round(os.freemem()/1073741824*10)/10;
+  const total=Math.round(os.totalmem()/1073741824*10)/10;
+  const uptimeMin=Math.round(os.uptime()/60);
+  const cpu=os.cpus()&&os.cpus()[0]?String(os.cpus()[0].model||'CPU').replace(/\s+/g,' ').trim():'CPU';
+  const parts=['RAM '+free+' / '+total+' GB boş','çalışma süresi '+uptimeMin+' dakika',cpu];
+  if(battery&&Number.isFinite(Number(battery.EstimatedChargeRemaining)))parts.unshift('pil %'+Number(battery.EstimatedChargeRemaining));
+  else parts.unshift('pil bilgisi alınamadı');
+  return{ok:true,message:'PC güç durumu · '+parts.join(' · ')};
+}
 function openKnownDesktopTarget(raw){
   if(process.platform!=='win32')return{ok:false,message:'Masaüstü açma komutları şu anda Windows için etkin'};
-  const key=String(raw||'').toLocaleLowerCase('tr-TR').trim()
+  let key=String(raw||'').toLocaleLowerCase('tr-TR').trim()
     .replace(/\s+/g,' ')
     .replace(/^(?:uygulama|program|site)\s+/,'')
     .replace(/\s+(?:uygulamasını|uygulamasini|programını|programini|sitesini)$/,'')
+    .replace(/['’](?:y)?[ıiuü]$/,'')
     .trim();
+
+  const appAliases={
+    'hesap makinesini':'hesap makinesi',
+    'not defterini':'not defteri',
+    'dosya gezginini':'dosya gezgini',
+    'görev yöneticisini':'görev yöneticisi',
+    'gorev yoneticisini':'gorev yoneticisi',
+    'çalışma alanını':'çalışma alanı',
+    'calisma alanini':'calisma alani'
+  };
+  key=appAliases[key]||key;
 
   const urls={
     'youtube':'https://www.youtube.com/',
@@ -638,6 +677,22 @@ function openKnownDesktopTarget(raw){
     'chatgpt':'https://chatgpt.com/'
   };
   if(urls[key]){openDefaultUrl(urls[key]);return{ok:true,message:key+' açıldı'}}
+
+  const settingsUris={
+    'ayarlar':'ms-settings:',
+    'settings':'ms-settings:',
+    'ses ayarları':'ms-settings:sound',
+    'ses ayarlari':'ms-settings:sound',
+    'bluetooth ayarları':'ms-settings:bluetooth',
+    'bluetooth ayarlari':'ms-settings:bluetooth',
+    'wifi ayarları':'ms-settings:network-wifi',
+    'wi-fi ayarları':'ms-settings:network-wifi',
+    'wifi ayarlari':'ms-settings:network-wifi'
+  };
+  if(settingsUris[key]){
+    childProcess.spawn('cmd.exe',['/c','start','',settingsUris[key]],{detached:true,windowsHide:true,stdio:'ignore'}).unref();
+    return{ok:true,message:key+' açıldı'};
+  }
 
   if(['tarayıcı','tarayici','browser','internet'].includes(key)){
     openDefaultUrl('https://www.google.com/');
@@ -757,6 +812,39 @@ async function execute(task){
     for(const [name,arr] of Object.entries(nets))for(const x of (arr||[]))if(!x.internal&&x.family==='IPv4')active.push(name+' '+x.address);
     return{ok:true,message:'Ağ arayüzleri: '+(active.join(' · ')||'aktif IPv4 arayüzü bulunamadı')};
   }
+  // JARVIS_MEDIA_CONTROL_V1
+  if(/^(?:sesi yükselt|sesi yukselt|ses yükselt|ses yukselt|sesi artır|sesi arttır|ses artır|volume up)$/i.test(c)){
+    sendWindowsMediaKey(0xAF,4);
+    return{ok:true,message:'Ses yükseltildi'};
+  }
+  if(/^(?:sesi azalt|ses azalt|sesi kıs|sesi kis|ses kıs|ses kis|volume down)$/i.test(c)){
+    sendWindowsMediaKey(0xAE,4);
+    return{ok:true,message:'Ses azaltıldı'};
+  }
+  if(/^(?:sessize al|sesi kapat|sesi sustur|mute|sesi aç|sesi ac|unmute)$/i.test(c)){
+    sendWindowsMediaKey(0xAD,1);
+    return{ok:true,message:'Ses mute durumu değiştirildi'};
+  }
+  if(/^(?:oynat|duraklat|devam ettir|oynat duraklat|play pause|play|pause)$/i.test(c)){
+    sendWindowsMediaKey(0xB3,1);
+    return{ok:true,message:'Medya oynat/duraklat komutu gönderildi'};
+  }
+  if(/^(?:sonraki|sonraki şarkı|sonraki sarki|sonraki medya|next track)$/i.test(c)){
+    sendWindowsMediaKey(0xB0,1);
+    return{ok:true,message:'Sonraki medya komutu gönderildi'};
+  }
+  if(/^(?:önceki|onceki|önceki şarkı|onceki sarki|previous track)$/i.test(c)){
+    sendWindowsMediaKey(0xB1,1);
+    return{ok:true,message:'Önceki medya komutu gönderildi'};
+  }
+  if(/^(?:medyayı durdur|medyayi durdur|stop media)$/i.test(c)){
+    sendWindowsMediaKey(0xB2,1);
+    return{ok:true,message:'Medya durduruldu'};
+  }
+  if(/^(?:pil durumu|batarya durumu|güç durumu|guc durumu|power status)$/i.test(c)){
+    return windowsPowerStatus();
+  }
+
   const openTarget=c.match(/^(?:aç|ac|open|uygulama aç|uygulama ac|program aç|program ac|site aç|site ac)\s+(.+)$/i)
     || c.match(/^(.+?)\s+(?:aç|ac)$/i);
   if(openTarget){
