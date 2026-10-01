@@ -632,8 +632,10 @@ async function callLocalBrain(message){
   if(!status.ready)return{ok:false,error:'OLLAMA_OFFLINE',model:LOCAL_BRAIN_MODEL};
   if(!status.installed)return{ok:false,error:'MODEL_NOT_INSTALLED',model:LOCAL_BRAIN_MODEL};
 
-  const recent=recentBrainHistory(6);
-  const memory=relevantBrainMemory(text,5);
+  // Keep enough short-term dialogue turns for natural references such as
+  // "az önce", "onu", "ikincisi" even after several tool/command turns.
+  const recent=recentBrainHistory(12);
+  const memory=relevantBrainMemory(text,6);
   const persona=adjustedPersona||brainPersona();
   const turnStyle=inferBrainTurnStyle(text,persona);
   const memoryText=memory.length
