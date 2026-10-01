@@ -988,9 +988,17 @@ function extractLocalBrainJson(text){
   return null;
 }
 async function callLocalBrain(message){
-  const text=String(message||'').replace(/\s+/g,' ').trim().slice(0,1800);
-  if(!text)return{ok:true,type:'chat',reply:'Sizi dinliyorum Cihan Bey.',command:null};
+  const originalText=String(message||'').replace(/\s+/g,' ').trim().slice(0,1800);
+  if(!originalText)return{ok:true,type:'chat',reply:'Sizi dinliyorum Cihan Bey.',command:null};
 
+  const lexiconDirective=handleSpeechLexiconDirective(originalText);
+  if(lexiconDirective.handled){
+    appendLocalBrainHistory('user',originalText);
+    appendLocalBrainHistory('assistant',lexiconDirective.reply);
+    return{ok:true,...lexiconDirective,model:'local-speech-lexicon',memoryHits:0,personaVersion:brainPersona().version};
+  }
+
+  const text=applySpeechLexicon(originalText);
   const memoryDirective=handleBrainMemoryDirective(text);
   if(memoryDirective.handled){
     appendLocalBrainHistory('user',text);
@@ -1742,13 +1750,39 @@ function startLocalTtsBridge(){
     res.setHeader('Access-Control-Allow-Headers','content-type');
     res.setHeader('Access-Control-Allow-Methods','GET,POST,OPTIONS');
     if(req.method==='OPTIONS'){res.writeHead(204);return res.end()}
+    if(req.method==='GET'&&req.url==='/speech-lexicon'){
+      const x=readSpeechLexicon();res.writeHead(200,{'content-type':'application/json'});
+      return res.end(JSON.stringify({ok:true,aliases:x.aliases,hotwords:x.hotwords,count:Object.keys(x.aliases||{}).length,updatedAt:x.updatedAt}));
+    }
+    if(req.method==='POST'&&req.url==='/speech-normalize'){
+      let body='',tooLarge=false;req.on('data',chunk=>{body+=chunk;if(body.length>32768){tooLarge=true;req.destroy()}});
+      req.on('end',()=>{
+        if(tooLarge){res.writeHead(413,{'content-type':'application/json'});return res.end(JSON.stringify({ok:false,error:'too large'}))}
+        try{
+          const d=JSON.parse(body||'{}'),raw=String(d.text||'').replace(/\s+/g,' ').trim().slice(0,1800);
+          if(!raw){res.writeHead(400,{'content-type':'application/json'});return res.end(JSON.stringify({ok:false,error:'text required'}))}
+          const normalized=applySpeechLexicon(raw),x=readSpeechLexicon();res.writeHead(200,{'content-type':'application/json'});
+          return res.end(JSON.stringify({ok:true,raw,normalized,changed:normalized!==raw,lexiconCount:Object.keys(x.aliases||{}).length}));
+        }catch(e){res.writeHead(500,{'content-type':'application/json'});return res.end(JSON.stringify({ok:false,error:String(e.message||e)}))}
+      });return;
+    }
+    if(req.method==='POST'&&req.url==='/speech-lexicon'){
+      let body='',tooLarge=false;req.on('data',chunk=>{body+=chunk;if(body.length>32768){tooLarge=true;req.destroy()}});
+      req.on('end',()=>{
+        if(tooLarge){res.writeHead(413,{'content-type':'application/json'});return res.end(JSON.stringify({ok:false,error:'too large'}))}
+        try{
+          const d=JSON.parse(body||'{}'),result=d.action==='forget'?forgetSpeechAlias(d.heard):learnSpeechAlias(d.heard,d.intended,d.source||'local-ui');
+          res.writeHead(result.ok?200:422,{'content-type':'application/json'});return res.end(JSON.stringify(result));
+        }catch(e){res.writeHead(500,{'content-type':'application/json'});return res.end(JSON.stringify({ok:false,error:String(e.message||e)}))}
+      });return;
+    }
     if(req.method==='GET'&&req.url==='/health'){
       res.writeHead(200,{'content-type':'application/json'});
       return res.end(JSON.stringify({
         ok:true,voice:TTS_VOICE,version:WORKER_VERSION,
         capabilities:CAPS,
         localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2',vision:isLocalVisionModel()},
-        localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper'},
+        localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper',adaptiveLexicon:true,lexiconCount:Object.keys(readSpeechLexicon().aliases||{}).length},
         adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',interruptible:true,offlineFallback:'windows-sapi',chunkedPipeline:true,prefetch:true,safeCache:true,profiles:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']},
         brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,toolReflection:true,multimodal:isLocalVisionModel(),screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true},
         mobileRelay:{brain:true,tts:true,pollMs:650}
@@ -2032,10 +2066,10 @@ function startWindowsClapHelper(){
 }
 function startWindowsLocalSttHelper(){
   if(process.platform!=='win32'||TEST_MODE)return;
-  const helper=ensureWindowsHelper('jarvis-local-stt-v2.py');
+  const helper=ensureWindowsHelper('jarvis-local-stt-v3.py');
   if(!helper){console.error('[JARVIS] LOCAL STT: helper hazırlanamadı');return}
   try{
-    const env={...process.env,JARVIS_STT_PORT:String(LOCAL_STT_PORT),JARVIS_STT_MODEL:LOCAL_STT_MODEL,JARVIS_WEB_ORIGIN:new URL(BASE).origin};
+    const env={...process.env,JARVIS_STT_PORT:String(LOCAL_STT_PORT),JARVIS_STT_MODEL:LOCAL_STT_MODEL,JARVIS_WEB_ORIGIN:new URL(BASE).origin,JARVIS_SPEECH_LEXICON_FILE:SPEECH_LEXICON_FILE};
     const p=childProcess.spawn('py',[helper],{windowsHide:true,stdio:['ignore','pipe','pipe'],env});
     p.stdout.on('data',d=>process.stdout.write(String(d)));
     p.stderr.on('data',d=>process.stderr.write('[JARVIS] LOCAL STT ERROR: '+String(d)));
