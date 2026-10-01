@@ -40,6 +40,8 @@ Write-Host "==============================================" -ForegroundColor Cya
 try {
   $h=Invoke-Json "http://127.0.0.1:8765/health" "GET" $null 5
   Add-Result "Worker bridge" ($h.ok -eq $true) ("v"+$h.version)
+  $bargeOk=(@($h.capabilities) -contains "natural_barge_in_v1" -and @($h.capabilities) -contains "spoken_followup_interrupt_v1")
+  Add-Result "Natural spoken interruption" $bargeOk ("bargeIn="+(@($h.capabilities) -contains "natural_barge_in_v1")+" followup="+(@($h.capabilities) -contains "spoken_followup_interrupt_v1"))
   $adaptiveOk=($null -ne $h.adaptiveTts -and $h.adaptiveTts.engine -eq "edge-neural" -and $h.adaptiveTts.profiles.Count -ge 4)
   Add-Result "Adaptive voice profiles" $adaptiveOk (($h.adaptiveTts.voice)+" · "+(($h.adaptiveTts.profiles -join ",")))
   $pipelineOk=($h.adaptiveTts.chunkedPipeline -eq $true -and $h.adaptiveTts.prefetch -eq $true -and $h.adaptiveTts.safeCache -eq $true)
@@ -343,6 +345,7 @@ $total=$results.Count
 $criticalFailed=($results | Where-Object {
   -not $_.ok -and $_.name -in @(
     "Worker bridge",
+    "Natural spoken interruption",
     "Adaptive voice profiles",
     "Chunked voice pipeline",
     "Thinking backchannel runtime",

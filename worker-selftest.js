@@ -143,7 +143,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.58.0','worker version');
+    assert(hj.version==='2.59.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localStt&&hj.localStt.adaptiveDecode===true,'adaptive STT decode health');
     assert(hj.localStt&&hj.localStt.dynamicEndpointing===true,'dynamic STT endpointing health');
@@ -151,6 +151,8 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.brainRuntime&&hj.brainRuntime.nativeTools===true,'native tools health');
     assert(hj.brainRuntime.selectiveReasoning===true,'selective reasoning health');
     assert(hj.brainRuntime.streamingChat===true,'streaming chat health');
+    assert(Array.isArray(hj.capabilities)&&hj.capabilities.includes('natural_barge_in_v1'),'natural barge-in capability health');
+    assert(hj.capabilities.includes('spoken_followup_interrupt_v1'),'spoken follow-up interrupt capability health');
     assert(hj.brainRuntime.sentenceStreamTts===true,'sentence stream TTS health');
     assert(Number(hj.brainRuntime.context)>=4096,'adaptive context health');
     assert(hj.brainRuntime.screenVisionExplicitOnly===true,'screen vision consent health');
