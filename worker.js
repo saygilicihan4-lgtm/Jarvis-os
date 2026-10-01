@@ -27,7 +27,7 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.37.0';
+const WORKER_VERSION='2.38.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1'];
 
 
@@ -151,6 +151,12 @@ function showJarvisScreen(){
   }
 }
 
+function isLocalSafeControlCommand(command){
+  const c=String(command||'').trim().replace(/^(pc|bilgisayar)\s*:\s*/i,'');
+  return /^(?:sistem durumu|system status|pc durumu|disk durumu|disk status|depolama durumu|ağ durumu|ag durumu|network status|internet durumu|pil durumu|batarya durumu|güç durumu|guc durumu|power status|sesi yükselt|sesi yukselt|ses yükselt|ses yukselt|sesi artır|sesi arttır|ses artır|volume up|sesi azalt|ses azalt|sesi kıs|sesi kis|ses kıs|ses kis|volume down|sessize al|sesi kapat|sesi sustur|mute|sesi aç|sesi ac|unmute|oynat|duraklat|devam ettir|oynat duraklat|play pause|play|pause|sonraki|sonraki şarkı|sonraki sarki|sonraki medya|next track|önceki|onceki|önceki şarkı|onceki sarki|previous track|medyayı durdur|medyayi durdur|stop media)$/i.test(c)
+    || /^(?:aç|ac|open|uygulama aç|uygulama ac|program aç|program ac|site aç|site ac)\s+.+$/i.test(c)
+    || /^.+?\s+(?:aç|ac)$/i.test(c);
+}
 function startLocalTtsBridge(){
   if(!TTS_ENABLED)return;
   const port=Number(process.env.JARVIS_TTS_PORT||8765);
@@ -184,6 +190,28 @@ function startLocalTtsBridge(){
     if(req.method==='GET'&&req.url.startsWith('/wake-state')){
       res.writeHead(200,{'content-type':'application/json'});
       return res.end(JSON.stringify({ok:true,wake:localWakeCounter}));
+    }
+    if(req.method==='POST'&&req.url==='/control'){
+      let body='',tooLarge=false;
+      req.on('data',chunk=>{body+=chunk;if(body.length>32768){tooLarge=true;req.destroy()}});
+      req.on('end',async()=>{
+        if(tooLarge){res.writeHead(413,{'content-type':'application/json'});return res.end(JSON.stringify({ok:false,error:'too large'}))}
+        try{
+          const d=JSON.parse(body||'{}');
+          const command=String(d.command||'').trim();
+          if(!command||!isLocalSafeControlCommand(command)){
+            res.writeHead(403,{'content-type':'application/json'});
+            return res.end(JSON.stringify({ok:false,error:'command not allowed on local safe bridge'}));
+          }
+          const result=await execute({command});
+          res.writeHead(result&&result.ok?200:422,{'content-type':'application/json'});
+          return res.end(JSON.stringify(result||{ok:false,message:'no result'}));
+        }catch(e){
+          res.writeHead(500,{'content-type':'application/json'});
+          return res.end(JSON.stringify({ok:false,error:String(e.message||e)}));
+        }
+      });
+      return;
     }
     if(req.method==='POST'&&req.url==='/creator-render'){
       let body='',tooLarge=false;
