@@ -148,6 +148,9 @@ let wakeWordMutedUntil=0;
 let wakeWordRestartTimer=null;
 let localSttListening=false;
 let localSttAvailable=null;
+let speechLexiconAliases={};
+let speechLexiconUpdatedAt='';
+let lastVoiceTranscript='';
 let voiceConversationActive=false;
 let voiceConversationUntil=0;
 let conversationFollowupTimer=null;
@@ -354,10 +357,23 @@ function speechKey(s){
     .replace(/ğ/g,'g').replace(/ö/g,'o').replace(/ü/g,'u')
     .replace(/\s+/g,' ').trim();
 }
-function canonicalJarvisCommand(input){
+function speechLexiconKeyUi(text){
+  return String(text||'')
+    .toLocaleLowerCase('tr-TR')
+    .replace(/[’']/g,'')
+    .replace(/[^a-z0-9çğıöşü\s.-]/gi,' ')
+    .replace(/\s+/g,' ')
+    .trim()
+    .slice(0,240);
+}
+function escapeRegexLiteralUi(s){
+  const specials='\\.^$*+?()[]{}|';
+  return String(s||'').replace(/[.*+?^${}()|[\]\\]/g,'\\function canonicalJarvisCommand(input){
   const raw=String(input||'').trim();
-  const k=speechKey(raw);
-  if(!k)return raw;
+  const learned=applyLearnedSpeechAlias(raw);
+  const effective=String(learned.value||raw).trim();
+  const k=speechKey(effective);
+  if(!k)return effective;
 
   // Fast semantic repairs for the commands we intentionally allow to run
   // without confirmation. These absorb common Turkish ASR suffix/phonetic mistakes.
