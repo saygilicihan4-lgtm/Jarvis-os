@@ -88,6 +88,8 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const health=JSON.parse((await get('http://127.0.0.1:'+BRIDGE_PORT+'/health')).body);
     assert(health.ok===true,'health');
     assert(health.localStt&&health.localStt.adaptiveLexicon===true,'adaptive lexicon health metadata');
+    assert(health.localStt&&health.localStt.adaptiveDecode===true,'adaptive decode health metadata');
+    assert(health.localStt&&health.localStt.dynamicEndpointing===true,'dynamic endpointing health metadata');
 
     const learn=await post('http://127.0.0.1:'+BRIDGE_PORT+'/speech-lexicon',{
       heard:'yutup ac',intended:'youtube aç',source:'standalone-test'

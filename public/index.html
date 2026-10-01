@@ -148,6 +148,7 @@ let wakeWordMutedUntil=0;
 let wakeWordRestartTimer=null;
 let localSttListening=false;
 let localSttAvailable=null;
+let localSttHealthState={};
 let speechLexiconAliases={};
 let speechLexiconUpdatedAt='';
 let lastVoiceTranscript='';
@@ -639,6 +640,7 @@ async function localSttHealth(){
     const r=await fetch('http://127.0.0.1:8768/health',{signal:ctl.signal,cache:'no-store'});
     clearTimeout(timer);
     const j=await r.json().catch(()=>({}));
+    localSttHealthState=j&&typeof j==='object'?j:{};
     localSttAvailable=!!(r.ok&&j.ok);
     return localSttAvailable;
   }catch(_){
@@ -684,8 +686,9 @@ async function listenWithLocalStt(source='command'){
     voiceConversationActive=true;
     voiceConversationUntil=Date.now()+120000;
 
-    if(window.voiceState)voiceState.textContent='VOICE: LOCAL STT CAPTURED';
-    if(window.consoleStatus)consoleStatus.textContent='LOCAL STT · DUYULAN: '+heard+' · YORUM: '+normalized;
+    const decodeMode=String(j.meta&&j.meta.decode_mode||'fast').toUpperCase();
+    if(window.voiceState)voiceState.textContent='VOICE: LOCAL STT CAPTURED · '+decodeMode;
+    if(window.consoleStatus)consoleStatus.textContent='LOCAL STT · '+decodeMode+' · DUYULAN: '+heard+' · YORUM: '+normalized;
     cmd.value=normalized;
     await send();
     return true;
@@ -1667,7 +1670,10 @@ async function refreshLocalWorkerHealth(){
     }
     if(j.localStt){
       localSttHealth().then(ok=>{
-        if(ok&&window.voiceState)voiceState.textContent='VOICE: LOCAL STT READY · '+String(j.localStt.model||'base').toUpperCase();
+        if(ok&&window.voiceState){
+          const adaptive=localSttHealthState&&localSttHealthState.adaptive_decode?' · ADAPTIVE':'';
+          voiceState.textContent='VOICE: LOCAL STT READY · '+String(j.localStt.model||'base').toUpperCase()+adaptive;
+        }
       }).catch(()=>{});
     }
     if(ver&&/^2\.(?:3[8-9]|[4-9]\d|[1-9]\d{2,})\./.test(ver)){

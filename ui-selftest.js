@@ -8,6 +8,7 @@ for(const [i,s] of scripts.entries()){
 }
 const required=[
   'canonicalJarvisCommand',
+  'localSttHealthState',
   'listenWithLocalStt',
   'scheduleVoiceConversationFollowup',
   'askJarvisBrain',
@@ -29,3 +30,5 @@ for(const name of required){
 }
 if(!html.includes('SCREEN VISION: LOCAL READY · EXPLICIT ONLY'))throw new Error('Missing explicit-only screen vision UI state');
 console.log('UI SELFTEST PASS · '+scripts.length+' script block(s)');
+
+if(!html.includes('decode_mode'))throw new Error('Adaptive STT decode mode is not shown in UI');

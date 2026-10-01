@@ -41,5 +41,8 @@ if(!html.includes("loadLocalSpeechLexicon().catch(()=>{})")){
 if(!html.includes('screenVision')&&!html.includes('SCREEN VISION')){
   throw new Error('current main screen-vision UI was lost');
 }
+if(!html.includes('localSttHealthState')||!html.includes('decode_mode')){
+  throw new Error('adaptive STT v4 UI state is missing');
+}
 
 console.log('LEXICON UI SELFTEST PASS');

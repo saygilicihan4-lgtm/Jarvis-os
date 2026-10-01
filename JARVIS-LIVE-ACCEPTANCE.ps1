@@ -112,6 +112,10 @@ try {
   Add-Result "Local Turkish STT" $ok (($s.engine)+" · "+($s.model)+" · mic "+($s.microphone))
   $hotwordsOk=([string]$s.hotwords -match "Jarvis" -and [string]$s.hotwords -match "YouTube")
   Add-Result "STT command vocabulary bias" $hotwordsOk ([string]$s.hotwords)
+  $adaptiveDecodeOk=($s.adaptive_decode -eq $true -and [int]$s.fast_beam -ge 1 -and [int]$s.retry_beam -ge [int]$s.fast_beam)
+  Add-Result "STT adaptive decode" $adaptiveDecodeOk ("fast="+$s.fast_beam+" retry="+$s.retry_beam)
+  $endpointOk=($null -ne $s.endpointing -and [int]$s.endpointing.short_silence_ms -le 550 -and [int]$s.endpointing.long_silence_ms -le 750)
+  Add-Result "STT dynamic endpointing" $endpointOk ("short="+$s.endpointing.short_silence_ms+"ms long="+$s.endpointing.long_silence_ms+"ms")
 
   $sttLoaded=$false
   $sttDetail=""
