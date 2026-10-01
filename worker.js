@@ -1072,8 +1072,9 @@ function inferConversationSocialPolicy(text,recent=[],persona=brainPersona()){
   const repair=isConversationRepairQuery(raw);
   const work=shouldDeepReflect(raw)||/\b(?:kod|hata|debug|deploy|proje|rapor|analiz|iş|is|dosya|ayar|sistem)\b/.test(s);
   const playful=/\b(?:ahah|haha|hehe|gırgır|girgir|şaka|saka|komik|dalga|şamata|samimi)\b/.test(s)||/[😂🤣😄😅]/u.test(raw);
-  const story=/\b(?:bugün|bugun|dün|dun|az önce|az once|başıma|basima|bak ne oldu|şunu anlatayım|sunu anlatayim|bir şey oldu|bir sey oldu)\b/.test(s);
-  const celebrate=/\b(?:başardım|basardim|oldu|bitti|çalıştı|calisti|süper|super|harika|mükemmel|mukemmel|satış geldi|satis geldi|kazandım|kazandim)\b/.test(s);
+  const story=/\b(?:başıma|basima|bak ne oldu|şunu anlatayım|sunu anlatayim|bir şey oldu|bir sey oldu|az önce şöyle|az once soyle)\b/.test(s)
+    || /\b(?:bugün|bugun|dün|dun)\b.{0,80}\b(?:oldu|yaşadım|yasadim|başladı|basladi|gördüm|gordum)\b/.test(s);
+  const celebrate=/\b(?:başardım|basardim|çalıştı|calisti|süper|super|harika|mükemmel|mukemmel|satış geldi|satis geldi|kazandım|kazandim|çözüldü|cozuldu|halletti|hallettik)\b/.test(s);
   const vent=/\b(?:sinir oldum|canımı sıktı|canimi sikti|saçma|sacma|yoruldum|bıktım|biktim|delireceğim|delirecegim)\b/.test(s);
   const opinion=/\b(?:sence|ne dersin|fikrin ne|ne düşünüyorsun|ne dusunuyorsun|sen olsan|nasıl sence|nasil sence)\b/.test(s);
   const greeting=/^(?:selam|merhaba|naber|ne haber|nasılsın|nasilsin|napıyorsun|napion)\b/.test(s);
