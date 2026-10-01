@@ -27,9 +27,9 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.57.0';
+const WORKER_VERSION='2.58.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
-CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1');
+CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -1821,6 +1821,163 @@ async function finalizeToolReply(userMessage,toolResults,toneHint='focused'){
     return{ok:true,reply:rawReply,tone:toneHint,model:'tool-fallback',latencyMs:Date.now()-started,reflected:false};
   }
 }
+function isStreamableConversation(message){
+  const s=String(message||'').replace(/\s+/g,' ').trim();
+  if(!s||s.length>700)return false;
+  if(shouldDeepReflect(s)||isContextRecallQuery(s))return false;
+  if(isLocalSafeControlCommand(s))return false;
+  const k=s.toLocaleLowerCase('tr-TR');
+  if(/\b(?:hatırla|hatirla|unut|dediğimde|dedigimde|dersem|düzeltmesini|duzeltmesini)\b/.test(k))return false;
+  if(/\b(?:aç|ac|kapat|başlat|baslat|çalıştır|calistir|ayar|ayarlar|sesi|sesini|pil|batarya|disk|ağ|ag|wifi|bluetooth|dosya|klasör|klasor|ekran|kamera|görev yöneticisi|gorev yoneticisi|workspace|terminal|powershell)\b/.test(k))return false;
+  return true;
+}
+function streamingConversationSystem(text){
+  const persona=updateBrainPersonaFromUserText(text);
+  maybeRememberExplicitPreference(text);
+  const turnStyle=inferBrainTurnStyle(text,persona);
+  const memory=relevantBrainMemory(text,4);
+  const memoryText=memory.length
+    ?memory.map(x=>'- '+(x.role==='memory'?'Hatırlanan tercih':x.role==='episode'?'Eski sohbet özeti':'Önceki konuşma')+': '+x.text).join('\n')
+    :'- İlgili eski kayıt yok.';
+  return{
+    tone:turnStyle.mode,
+    temperature:turnStyle.temperature,
+    system:[
+      'Sen JARVIS\'sin; Cihan Bey\'in uzun süreli kişisel yerel yapay zeka asistanısın.',
+      'Bu kanal yalnızca doğal sohbet içindir. Bilgisayarda eylem yapma, eylem yaptığını söyleme veya araç kullandığını iddia etme.',
+      'Türkçe, doğal, sıcak ve akıcı konuş. Robotik kalıp açılışlardan, gereksiz resmiyetten ve her cevapta Cihan Bey demekten kaçın.',
+      'Kısa soruya kısa cevap ver. Kullanıcı şakalaşıyorsa hafif gırgır yap; ciddi soruda hızla ciddileş.',
+      'Sesli okunacağı için düz yazı kullan; gereksiz markdown, başlık ve uzun liste kullanma.',
+      'Bilmediğin şeyi uydurma. Yerel hafızadaki bilgiyi yalnızca ilgiliyse kullan.',
+      'Bu tur modu: '+turnStyle.mode+'. '+turnStyle.instruction,
+      'İlgili yerel hafıza:\n'+memoryText
+    ].join(' ')
+  };
+}
+async function streamLocalConversationHttp(message,res){
+  const original=String(message||'').replace(/\s+/g,' ').trim().slice(0,700);
+  const text=applySpeechLexicon(original);
+  if(!isStreamableConversation(text)){
+    const e=new Error('NOT_STREAMABLE');e.code='NOT_STREAMABLE';throw e;
+  }
+  const status=await localBrainStatus();
+  if(!status.ready){const e=new Error('OLLAMA_OFFLINE');e.code='OLLAMA_OFFLINE';throw e}
+  if(!status.installed){const e=new Error('MODEL_NOT_INSTALLED');e.code='MODEL_NOT_INSTALLED';throw e}
+
+  const recent=recentBrainHistory(10);
+  const cfg=streamingConversationSystem(text);
+  const ctl=new AbortController();
+  const timeout=setTimeout(()=>ctl.abort(),60000);
+  let upstream;
+  const started=Date.now();
+  try{
+    upstream=await fetch(LOCAL_BRAIN_URL+'/api/chat',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({
+        model:LOCAL_BRAIN_MODEL,
+        stream:true,
+        think:false,
+        keep_alive:LOCAL_BRAIN_KEEP_ALIVE,
+        options:{
+          temperature:cfg.temperature,
+          top_p:0.9,
+          repeat_penalty:1.08,
+          num_ctx:LOCAL_BRAIN_CTX,
+          num_predict:260
+        },
+        messages:[
+          {role:'system',content:cfg.system},
+          ...recent.map(x=>({role:x.role,content:x.content})),
+          {role:'user',content:text}
+        ]
+      }),
+      signal:ctl.signal
+    });
+    if(!upstream.ok)throw new Error('OLLAMA '+upstream.status);
+  }catch(e){
+    clearTimeout(timeout);
+    throw e;
+  }
+
+  res.writeHead(200,{
+    'content-type':'application/x-ndjson; charset=utf-8',
+    'cache-control':'no-store, no-transform',
+    'x-accel-buffering':'no'
+  });
+  const write=obj=>{
+    if(res.destroyed||res.writableEnded)return false;
+    try{return res.write(JSON.stringify(obj)+'\n')}catch(_){return false}
+  };
+  write({type:'meta',ok:true,model:LOCAL_BRAIN_MODEL,tone:cfg.tone,streaming:true});
+
+  let full='',buffer='',firstDeltaAt=0,doneSeen=false;
+  const decoder=new TextDecoder();
+  const onClose=()=>{if(!res.writableEnded)try{ctl.abort()}catch(_){}};
+  res.on('close',onClose);
+  try{
+    const reader=upstream.body.getReader();
+    while(true){
+      const {value,done}=await reader.read();
+      if(done)break;
+      buffer+=decoder.decode(value,{stream:true});
+      const rows=buffer.split(/\r?\n/);
+      buffer=rows.pop()||'';
+      for(const row of rows){
+        const line=row.trim();if(!line)continue;
+        let j;try{j=JSON.parse(line)}catch(_){continue}
+        const delta=String(j&&j.message&&j.message.content||'');
+        if(delta){
+          if(!firstDeltaAt)firstDeltaAt=Date.now();
+          full+=delta;
+          write({type:'delta',text:delta});
+        }
+        if(j&&j.done)doneSeen=true;
+      }
+    }
+    buffer+=decoder.decode();
+    if(buffer.trim()){
+      try{
+        const j=JSON.parse(buffer.trim());
+        const delta=String(j&&j.message&&j.message.content||'');
+        if(delta){
+          if(!firstDeltaAt)firstDeltaAt=Date.now();
+          full+=delta;
+          write({type:'delta',text:delta});
+        }
+        if(j&&j.done)doneSeen=true;
+      }catch(_){}
+    }
+    const final=String(full||'').replace(/\s+/g,' ').trim();
+    if(!final)throw new Error('EMPTY_STREAM_REPLY');
+    appendLocalBrainHistory('user',text);
+    appendLocalBrainHistory('assistant',final);
+    remember({
+      kind:'streaming_chat',
+      model:LOCAL_BRAIN_MODEL,
+      firstDeltaMs:firstDeltaAt?firstDeltaAt-started:null,
+      latencyMs:Date.now()-started,
+      chars:final.length,
+      doneSeen
+    });
+    write({
+      type:'done',
+      ok:true,
+      reply:final,
+      tone:cfg.tone,
+      model:LOCAL_BRAIN_MODEL,
+      firstDeltaMs:firstDeltaAt?firstDeltaAt-started:null,
+      latencyMs:Date.now()-started
+    });
+    if(!res.writableEnded)res.end();
+  }catch(e){
+    write({type:'error',ok:false,error:String(e.message||e).slice(0,220)});
+    if(!res.writableEnded)res.end();
+  }finally{
+    clearTimeout(timeout);
+    res.removeListener('close',onClose);
+  }
+}
 function startLocalTtsBridge(){
   if(!TTS_ENABLED&&!FORCE_LOCAL_BRIDGE&&!TEST_MODE)return;
   const port=Number(process.env.JARVIS_TTS_PORT||8765);
@@ -1865,6 +2022,25 @@ function startLocalTtsBridge(){
       });
       return;
     }
+    if(req.method==='POST'&&req.url==='/chat-stream'){
+      let body='',tooLarge=false;
+      req.on('data',chunk=>{body+=chunk;if(body.length>65536){tooLarge=true;req.destroy()}});
+      req.on('end',async()=>{
+        if(tooLarge){res.writeHead(413,{'content-type':'application/json'});return res.end(JSON.stringify({ok:false,error:'too large'}))}
+        try{
+          const d=JSON.parse(body||'{}');
+          const message=String(d.message||'').trim();
+          if(!message){res.writeHead(400,{'content-type':'application/json'});return res.end(JSON.stringify({ok:false,error:'message required'}))}
+          await streamLocalConversationHttp(message,res);
+        }catch(e){
+          if(res.headersSent)return;
+          const code=String(e.code||e.message)==='NOT_STREAMABLE'?409:503;
+          res.writeHead(code,{'content-type':'application/json'});
+          return res.end(JSON.stringify({ok:false,error:String(e.code||e.message||e)}));
+        }
+      });
+      return;
+    }
     if(req.method==='GET'&&req.url==='/health'){
       res.writeHead(200,{'content-type':'application/json'});
       return res.end(JSON.stringify({
@@ -1873,7 +2049,7 @@ function startLocalTtsBridge(){
         localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2',vision:isLocalVisionModel()},
         localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper',adaptiveLexicon:true,adaptiveDecode:true,dynamicEndpointing:true,lexiconCount:Object.keys(readSpeechLexicon().aliases||{}).length},
         adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',interruptible:true,offlineFallback:'windows-sapi',chunkedPipeline:true,prefetch:true,safeCache:true,backchannelPrewarm:true,backchannelState:ttsBackchannelPrewarmState,profiles:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']},
-        brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,toolReflection:true,multimodal:isLocalVisionModel(),screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true},
+        brainRuntime:{warm:brainWarmState,keepAlive:LOCAL_BRAIN_KEEP_ALIVE,context:LOCAL_BRAIN_CTX,toolReflection:true,multimodal:isLocalVisionModel(),screenVision:process.platform==='win32'&&isLocalVisionModel(),screenVisionExplicitOnly:true,nativeTools:true,maxToolRounds:4,selectiveReasoning:true,streamingChat:true,sentenceStreamTts:true},
         mobileRelay:{brain:true,tts:true,pollMs:650}
       }));
     }
