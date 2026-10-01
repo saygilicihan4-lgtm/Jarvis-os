@@ -1214,9 +1214,7 @@ async function callLocalBrain(message){
   maybeRememberExplicitPreference(text);
   const adjustedPersona=updateBrainPersonaFromUserText(text);
 
-  if(signal&&signal.aborted)return cancelledResult([],0);
   const status=await localBrainStatus();
-  if(signal&&signal.aborted)return cancelledResult([],0);
   if(!status.ready)return{ok:false,error:'OLLAMA_OFFLINE',model:LOCAL_BRAIN_MODEL};
   if(!status.installed)return{ok:false,error:'MODEL_NOT_INSTALLED',model:LOCAL_BRAIN_MODEL};
 
@@ -1734,7 +1732,9 @@ async function runNativeAgent(message,{maxRounds=4,signal=null}={}){
 
   const text=applySpeechLexicon(originalText);
 
+  if(signal&&signal.aborted)return cancelledResult([],0);
   const status=await localBrainStatus();
+  if(signal&&signal.aborted)return cancelledResult([],0);
   if(!status.ready)return{ok:false,error:'OLLAMA_OFFLINE',model:LOCAL_BRAIN_MODEL};
   if(!status.installed)return{ok:false,error:'MODEL_NOT_INSTALLED',model:LOCAL_BRAIN_MODEL};
 
