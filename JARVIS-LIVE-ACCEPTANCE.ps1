@@ -44,6 +44,8 @@ try {
   Add-Result "Natural spoken interruption" $bargeOk ("bargeIn="+(@($h.capabilities) -contains "natural_barge_in_v1")+" followup="+(@($h.capabilities) -contains "spoken_followup_interrupt_v1"))
   $repairCapabilityOk=(@($h.capabilities) -contains "conversation_repair_v1" -and @($h.capabilities) -contains "misunderstanding_recovery_v1" -and $h.brainRuntime.conversationRepair -eq $true)
   Add-Result "Conversation repair capability" $repairCapabilityOk ("runtime="+$h.brainRuntime.conversationRepair)
+  $modelRouterOk=(@($h.capabilities) -contains "adaptive_model_router_v1" -and @($h.capabilities) -contains "deep_model_fallback_v1" -and $h.brainRuntime.adaptiveModelRouter -eq $true)
+  Add-Result "Adaptive local model router" $modelRouterOk ("fast="+$h.brainRuntime.fastModel+" deep="+$h.brainRuntime.deepModel)
   $adaptiveOk=($null -ne $h.adaptiveTts -and $h.adaptiveTts.engine -eq "edge-neural" -and $h.adaptiveTts.profiles.Count -ge 4)
   Add-Result "Adaptive voice profiles" $adaptiveOk (($h.adaptiveTts.voice)+" · "+(($h.adaptiveTts.profiles -join ",")))
   $pipelineOk=($h.adaptiveTts.chunkedPipeline -eq $true -and $h.adaptiveTts.prefetch -eq $true -and $h.adaptiveTts.safeCache -eq $true)
@@ -83,6 +85,8 @@ try {
   Add-Result "Native tool runtime" $nativeToolsOk ("model="+$b.model+" maxRounds="+$b.maxToolRounds)
   $reasoningOk=($b.selectiveReasoning -eq $true -and [int]$b.context -ge 4096)
   Add-Result "Selective reasoning runtime" $reasoningOk ("context="+$b.context+" · fast/deep routing enabled")
+  $tierOk=($b.adaptiveModelRouter -eq $true -and -not [string]::IsNullOrWhiteSpace([string]$b.fastModel) -and -not [string]::IsNullOrWhiteSpace([string]$b.deepModel))
+  Add-Result "Fast/deep model tiers" $tierOk ("fast="+$b.fastModel+" deep="+$b.deepModel+" ram="+$b.ramGb+"GB")
   $screenPolicyOk=($b.screenVision -eq $true -and $b.screenVisionExplicitOnly -eq $true)
   Add-Result "Screen vision explicit-only capability" $screenPolicyOk ("screenVision="+$b.screenVision+" explicitOnly="+$b.screenVisionExplicitOnly+" · no automatic capture")
   Add-Result "Episodic memory engine" ($null -ne $b.memoryEpisodes) ("episodes="+$b.memoryEpisodes+" facts="+$b.memoryFacts)
@@ -359,6 +363,7 @@ $criticalFailed=($results | Where-Object {
     "Worker bridge",
     "Natural spoken interruption",
     "Conversation repair capability",
+    "Adaptive local model router",
     "Adaptive voice profiles",
     "Chunked voice pipeline",
     "Thinking backchannel runtime",
@@ -373,6 +378,7 @@ $criticalFailed=($results | Where-Object {
     "Local multimodal capability",
     "Native tool runtime",
     "Selective reasoning runtime",
+    "Fast/deep model tiers",
     "Screen vision explicit-only capability",
     "Local multimodal vision",
     "Local Turkish STT",
