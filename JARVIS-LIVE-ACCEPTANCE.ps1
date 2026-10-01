@@ -144,8 +144,9 @@ $acceptFile=Join-Path $Workspace ".jarvis-acceptance-search.txt"
 try {
   "safir marti 8472 yerel arama kabul testi" | Set-Content -Encoding UTF8 $acceptFile
   $ws=Invoke-Json "http://127.0.0.1:8765/control" "POST" @{command="dosyalarda ara safir marti 8472"} 10
-  $ok=($ws.ok -eq $true -and [string]$ws.message -match "jarvis-acceptance-search")
-  Add-Result "Workspace local search" $ok ([string]$ws.message).Substring(0,[Math]::Min(220,[string]$ws.message.Length))
+  $detail=[string]$ws.message
+  $ok=($ws.ok -eq $true -and $detail -match "jarvis-acceptance-search")
+  Add-Result "Workspace local search" $ok $detail.Substring(0,[Math]::Min(220,$detail.Length))
 } catch {
   Add-Result "Workspace local search" $false $_.Exception.Message
 } finally {
