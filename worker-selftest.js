@@ -171,7 +171,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.69.0','worker version');
+    assert(hj.version==='2.70.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localStt&&hj.localStt.adaptiveDecode===true,'adaptive STT decode health');
     assert(hj.localStt&&hj.localStt.dynamicEndpointing===true,'dynamic STT endpointing health');
@@ -193,6 +193,12 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.brainRuntime.contextualFollowup===true,'contextual follow-up runtime health');
     assert(hj.brainRuntime.dialogueFeedbackLearning===true,'dialogue feedback learning health');
     assert(hj.brainRuntime.socialPreferenceAdaptation===true,'social preference adaptation health');
+    assert(hj.brainRuntime.autoQualityEscalation===true,'auto quality escalation health');
+    assert(hj.brainRuntime.weakResponseEscalation===true,'weak response escalation health');
+    assert(hj.brainRuntime.repairQualityEscalation===true,'repair quality escalation health');
+    assert(hj.capabilities.includes('auto_quality_escalation_v1'),'auto quality escalation capability');
+    assert(hj.capabilities.includes('weak_response_escalation_v1'),'weak response escalation capability');
+    assert(hj.capabilities.includes('repair_quality_escalation_v1'),'repair quality escalation capability');
     assert(hj.capabilities.includes('dialogue_feedback_learning_v1'),'dialogue feedback capability');
     assert(hj.capabilities.includes('social_preference_adaptation_v1'),'social preference adaptation capability');
     assert(hj.capabilities.includes('social_dialogue_v1'),'social dialogue capability');
@@ -400,7 +406,11 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(repair.status===200,'conversation repair status');
     const repairj=JSON.parse(repair.body);
     assert(repairj.ok===true&&repairj.type==='chat'&&repairj.repairMode===true,'conversation repair mode missing');
+    assert(repairj.qualityEscalated===true,'repair quality escalation missing');
+    assert(repairj.qualityEscalationReason==='conversation-repair','repair quality escalation reason');
+    assert(repairj.qualityEscalationModel==='qwen3.5:4b','repair quality escalation model');
     const repairReqs=seen.slice(repairSeen);
+    assert(repairReqs.some(x=>x.model==='qwen3.5:4b'&&x.think===false),'repair was not escalated to stronger local model');
     const repairPrompt=repairReqs.map(x=>(x.messages||[]).map(m=>String(m.content||'')).join('\n')).join('\n');
     assert(/KONUŞMA ONARIM MODU/i.test(repairPrompt),'conversation repair system prompt missing');
     assert(/Bana sade bir uygulama fikri ver/i.test(repairPrompt),'previous user turn missing from repair context');
