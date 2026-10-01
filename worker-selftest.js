@@ -171,7 +171,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.71.0','worker version');
+    assert(hj.version==='2.72.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localStt&&hj.localStt.adaptiveDecode===true,'adaptive STT decode health');
     assert(hj.localStt&&hj.localStt.dynamicEndpointing===true,'dynamic STT endpointing health');
@@ -195,6 +195,12 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.brainRuntime.socialPreferenceAdaptation===true,'social preference adaptation health');
     assert(hj.brainRuntime.socialMomentum===true,'social momentum runtime health');
     assert(hj.brainRuntime.ellipticalTurnResolution===true,'elliptical turn resolution health');
+    assert(hj.brainRuntime.conversationCadence===true,'conversation cadence runtime health');
+    assert(hj.brainRuntime.brevityMirroring===true,'brevity mirroring runtime health');
+    assert(hj.brainRuntime.adaptiveResponseLength===true,'adaptive response length health');
+    assert(hj.capabilities.includes('conversation_cadence_v1'),'conversation cadence capability');
+    assert(hj.capabilities.includes('brevity_mirroring_v1'),'brevity mirroring capability');
+    assert(hj.capabilities.includes('adaptive_response_length_v1'),'adaptive response length capability');
     assert(hj.capabilities.includes('social_momentum_v1'),'social momentum capability');
     assert(hj.capabilities.includes('elliptical_turn_resolution_v1'),'elliptical turn capability');
     assert(hj.brainRuntime.autoQualityEscalation===true,'auto quality escalation health');
@@ -417,6 +423,24 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(resetMomentum.status===200,'social momentum reset status');
     const resetMomentumJ=JSON.parse(resetMomentum.body);
     assert(resetMomentumJ.socialMomentum!==true,'social momentum ignored explicit topic reset');
+
+    const compactSeen=seen.length;
+    const compactCadence=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Kısa cevap ver: bugün nasılsın?'});
+    assert(compactCadence.status===200,'compact cadence status');
+    const compactJ=JSON.parse(compactCadence.body);
+    assert(compactJ.ok===true&&compactJ.cadenceMode==='compact','compact cadence mode');
+    assert(Number(compactJ.targetWords)>0&&Number(compactJ.targetWords)<=50,'compact cadence target');
+    const compactReq=seen.slice(compactSeen).find(x=>!x.stream&&x.format);
+    assert(compactReq&&Number(compactReq.options&&compactReq.options.num_predict)===190,'compact cadence prediction budget');
+
+    const detailedSeen=seen.length;
+    const detailedCadence=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Detaylı anlat: iyi bir yapay zeka asistanı insan gibi nasıl konuşmalı?'});
+    assert(detailedCadence.status===200,'detailed cadence status');
+    const detailedJ=JSON.parse(detailedCadence.body);
+    assert(detailedJ.ok===true&&detailedJ.cadenceMode==='detailed','detailed cadence mode');
+    assert(Number(detailedJ.targetWords)>=120,'detailed cadence target');
+    const detailedReq=seen.slice(detailedSeen).find(x=>!x.stream&&x.format);
+    assert(detailedReq&&Number(detailedReq.options&&detailedReq.options.num_predict)===380,'detailed cadence prediction budget');
 
     const repairSeed=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Bana sade bir uygulama fikri ver.'});
     assert(repairSeed.status===200,'repair seed status');
