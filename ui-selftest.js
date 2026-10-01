@@ -27,4 +27,5 @@ const required=[
 for(const name of required){
   if(!html.includes(name))throw new Error('Missing UI capability: '+name);
 }
+if(!html.includes('SCREEN VISION: LOCAL READY · EXPLICIT ONLY'))throw new Error('Missing explicit-only screen vision UI state');
 console.log('UI SELFTEST PASS · '+scripts.length+' script block(s)');

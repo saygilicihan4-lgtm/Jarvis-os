@@ -75,6 +75,8 @@ try {
   Add-Result "Native tool runtime" $nativeToolsOk ("model="+$b.model+" maxRounds="+$b.maxToolRounds)
   $reasoningOk=($b.selectiveReasoning -eq $true -and [int]$b.context -ge 4096)
   Add-Result "Selective reasoning runtime" $reasoningOk ("context="+$b.context+" · fast/deep routing enabled")
+  $screenPolicyOk=($b.screenVision -eq $true -and $b.screenVisionExplicitOnly -eq $true)
+  Add-Result "Screen vision explicit-only capability" $screenPolicyOk ("screenVision="+$b.screenVision+" explicitOnly="+$b.screenVisionExplicitOnly+" · no automatic capture")
   Add-Result "Episodic memory engine" ($null -ne $b.memoryEpisodes) ("episodes="+$b.memoryEpisodes+" facts="+$b.memoryFacts)
 
   $warmSw=[Diagnostics.Stopwatch]::StartNew()
@@ -326,6 +328,7 @@ $criticalFailed=($results | Where-Object {
     "Local multimodal capability",
     "Native tool runtime",
     "Selective reasoning runtime",
+    "Screen vision explicit-only capability",
     "Local multimodal vision",
     "Local Turkish STT",
     "STT model preloaded",

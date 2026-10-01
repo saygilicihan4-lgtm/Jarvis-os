@@ -30,6 +30,9 @@ const mock=http.createServer(async(req,res)=>{
     const system=(body.messages||[]).filter(x=>x.role==='system').map(x=>String(x.content||'')).join('\n');
     const toolMessages=(body.messages||[]).filter(x=>x.role==='tool');
     if(Array.isArray(body.tools)&&body.tools.length){
+      if(/arka planda ne var/i.test(text)&&toolMessages.length===0){
+        return json(res,200,{message:{role:'assistant',content:'',tool_calls:[{function:{name:'screen_describe',arguments:{question:'Ekranda ne görüyorsun?'}}}]}});
+      }
       if(/gizli env/i.test(text)&&toolMessages.length===0){
         return json(res,200,{message:{role:'assistant',content:'',tool_calls:[{function:{name:'workspace_read',arguments:{path:'.env'}}}]}});
       }
@@ -124,12 +127,14 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.54.0','worker version');
+    assert(hj.version==='2.55.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localBrain.vision===true,'local multimodal health');
     assert(hj.brainRuntime&&hj.brainRuntime.nativeTools===true,'native tools health');
     assert(hj.brainRuntime.selectiveReasoning===true,'selective reasoning health');
     assert(Number(hj.brainRuntime.context)>=4096,'adaptive context health');
+    assert(hj.brainRuntime.screenVisionExplicitOnly===true,'screen vision consent health');
+    assert(hj.brainRuntime.screenVision===false,'CI must not claim Windows screen capture');
     assert(hj.adaptiveTts&&hj.adaptiveTts.interruptible===true,'interruptible TTS health');
     assert(hj.adaptiveTts.chunkedPipeline===true,'chunked TTS pipeline health');
     assert(hj.adaptiveTts.prefetch===true,'TTS prefetch health');
@@ -157,6 +162,18 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(Array.isArray(sg.actions)&&sg.actions.length>=1,'native secret guard action');
     assert(sg.actions[0].tool==='workspace_read'&&sg.actions[0].ok===false,'native secret read must be blocked');
     assert(/Hassas dosya erişimi engellendi/i.test(sg.actions[0].result),'native secret guard result');
+
+    const unauthorizedScreen=await post('http://127.0.0.1:'+BRIDGE_PORT+'/agent',{message:'Arka planda ne var?',maxRounds:2});
+    assert(unauthorizedScreen.status===200,'screen consent agent status');
+    const usj=JSON.parse(unauthorizedScreen.body);
+    assert(Array.isArray(usj.actions)&&usj.actions.length>=1,'screen consent action missing');
+    assert(usj.actions[0].tool==='screen_describe'&&usj.actions[0].ok===false,'screen capture without explicit request must be blocked');
+    assert(/yalnızca açık kullanıcı isteğiyle/i.test(usj.actions[0].result),'screen consent guard message');
+
+    const screenDirect=await post('http://127.0.0.1:'+BRIDGE_PORT+'/screen-vision',{question:'Ekranda ne görüyorsun?'});
+    assert(screenDirect.status===501,'screen vision must report WINDOWS_ONLY in CI');
+    const sdj=JSON.parse(screenDirect.body);
+    assert(sdj.ok===false&&sdj.error==='WINDOWS_ONLY','screen vision CI platform guard');
 
     const vision=await post('http://127.0.0.1:'+BRIDGE_PORT+'/vision',{
       image:'aGVsbG8=',
