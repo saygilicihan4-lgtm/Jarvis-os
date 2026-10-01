@@ -358,17 +358,69 @@ function speechKey(s){
     .replace(/\s+/g,' ').trim();
 }
 function speechLexiconKeyUi(text){
-  return String(text||'')
-    .toLocaleLowerCase('tr-TR')
-    .replace(/[’']/g,'')
-    .replace(/[^a-z0-9çğıöşü\s.-]/gi,' ')
-    .replace(/\s+/g,' ')
-    .trim()
-    .slice(0,240);
+  return String(text||'').toLocaleLowerCase('tr-TR').replace(/[’']/g,'').replace(/[^a-z0-9çğıöşü\s.-]/gi,' ').replace(/\s+/g,' ').trim().slice(0,240);
 }
 function escapeRegexLiteralUi(s){
   const specials='\\.^$*+?()[]{}|';
-  return String(s||'').replace(/[.*+?^${}()|[\]\\]/g,'\\function canonicalJarvisCommand(input){
+  return [...String(s||'')].map(ch=>specials.includes(ch)?'\\'+ch:ch).join('');
+}
+function applyLearnedSpeechAlias(text){
+  const raw=String(text||'').replace(/\s+/g,' ').trim(),key=speechLexiconKeyUi(raw);
+  if(!key)return{value:raw,changed:false};
+  if(speechLexiconAliases[key])return{value:String(speechLexiconAliases[key]),changed:true,heard:key};
+  const entries=Object.entries(speechLexiconAliases||{}).sort((a,b)=>b[0].length-a[0].length);let normalized=key,changed=false,lastHeard='';
+  for(const [from,to] of entries){
+    if(from.length<4)continue;
+    const re=new RegExp('(^|\\s)'+escapeRegexLiteralUi(from)+'(?=\\s|$)','i');
+    if(re.test(normalized)){normalized=normalized.replace(re,(m,prefix)=>prefix+String(to).toLocaleLowerCase('tr-TR'));changed=true;lastHeard=from}
+  }
+  return{value:changed?normalized:raw,changed,heard:lastHeard};
+}
+async function loadLocalSpeechLexicon(){
+  if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis())return false;
+  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),1400);
+  try{
+    const r=await fetch('http://127.0.0.1:8765/speech-lexicon',{signal:ctl.signal,cache:'no-store'});clearTimeout(timer);
+    const j=await r.json().catch(()=>({}));if(!r.ok||j.ok!==true)return false;
+    speechLexiconAliases=j.aliases&&typeof j.aliases==='object'?j.aliases:{};speechLexiconUpdatedAt=String(j.updatedAt||'');return true;
+  }catch(_){clearTimeout(timer);return false}
+}
+async function teachLocalSpeechAlias(heard,intended,source='voice-self-correction'){
+  const from=String(heard||'').replace(/\s+/g,' ').trim(),to=String(intended||'').replace(/\s+/g,' ').trim();if(!from||!to)return false;
+  try{
+    const r=await fetch('http://127.0.0.1:8765/speech-lexicon',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({heard:from,intended:to,source})});
+    const j=await r.json().catch(()=>({}));if(!r.ok||j.ok!==true)return false;
+    speechLexiconAliases[speechLexiconKeyUi(from)]=to;speechLexiconUpdatedAt=new Date().toISOString();return true;
+  }catch(_){return false}
+}
+async function normalizeWithWorkerSpeechLexicon(text){
+  const raw=String(text||'').replace(/\s+/g,' ').trim();
+  if(!raw||!/Windows/i.test(navigator.userAgent)||isMobileJarvis()){const local=applyLearnedSpeechAlias(raw);return{raw,normalized:String(local.value||raw),changed:!!local.changed}}
+  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),1200);
+  try{
+    const r=await fetch('http://127.0.0.1:8765/speech-normalize',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:raw}),signal:ctl.signal});clearTimeout(timer);
+    const j=await r.json().catch(()=>({}));if(!r.ok||j.ok!==true)throw new Error('normalize unavailable');
+    if(Number(j.lexiconCount||0)!==Object.keys(speechLexiconAliases||{}).length)loadLocalSpeechLexicon().catch(()=>{});
+    return{raw,normalized:String(j.normalized||raw).trim()||raw,changed:!!j.changed};
+  }catch(_){clearTimeout(timer);const local=applyLearnedSpeechAlias(raw);return{raw,normalized:String(local.value||raw),changed:!!local.changed}}
+}
+function voiceCorrectionIntent(text){
+  let s=String(text||'').replace(/\s+/g,' ').trim();const wake=parseJarvisWake(s);if(wake.wake&&wake.command)s=wake.command;s=s.replace(/[.!?]+$/g,'').trim();
+  let m=s.match(/^(?:hayır|hayir|yok)[, ]+(.+?)\s+(?:dedim|demiştim|demistim)$/i);if(m&&m[1])return m[1].trim();
+  m=s.match(/^(.+?)\s+(?:demek istedim|demek istemiştim|demek istemistim)$/i);if(m&&m[1])return m[1].trim();
+  m=s.match(/^(?:yanlış anladın|yanlis anladin)[, ]+(.+)$/i);return m&&m[1]?m[1].trim():'';
+}
+function correctionSourceText(text){const raw=String(text||'').replace(/\s+/g,' ').trim(),p=parseJarvisWake(raw);return p.wake&&p.command?p.command:raw}
+async function maybeLearnVoiceCorrection(text){
+  const intendedRaw=voiceCorrectionIntent(text);
+  if(intendedRaw&&lastVoiceTranscript){
+    const intended=canonicalJarvisCommand(intendedRaw),source=lastVoiceTranscript,ok=await teachLocalSpeechAlias(source,intended,'voice-self-correction');
+    lastVoiceTranscript=correctionSourceText(text);
+    if(ok){if(window.consoleStatus)consoleStatus.textContent='JARVIS · SES DÜZELTMESİ ÖĞRENİLDİ: '+source+' → '+intended;speak('Tamam. Bundan sonra onu '+intended+' olarak anlayacağım.','tr-TR','warm');return true}
+  }
+  lastVoiceTranscript=correctionSourceText(text);return false;
+}
+function canonicalJarvisCommand(input){
   const raw=String(input||'').trim();
   const learned=applyLearnedSpeechAlias(raw);
   const effective=String(learned.value||raw).trim();
@@ -424,7 +476,7 @@ function escapeRegexLiteralUi(s){
     if(ratio<bestRatio){bestRatio=ratio;best=x}
   }
   // Conservative threshold: repair only clearly close low-risk commands.
-  return best&&bestRatio<=0.30?best:raw;
+  return best&&bestRatio<=0.30?best:effective;
 }
 function recognitionCandidates(e){
   const groups=[];
