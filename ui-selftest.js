@@ -90,3 +90,5 @@ if(!html.includes('rememberJarvisSpeechEcho(spoken)'))throw new Error('JARVIS sp
 if(!html.includes('isLikelyJarvisEcho(captured)'))throw new Error('Barge-in transcript does not pass through speaker echo rejection');
 if(!html.includes('SELF-ECHO IGNORED'))throw new Error('Speaker echo rejection diagnostic state missing');
 if(!html.includes("if(/^jarvis\\b/.test(key))return false"))throw new Error('Explicit Jarvis interruption is not exempted from echo rejection');
+
+if(!html.includes("SOCIAL '+String(evt.socialMode"))throw new Error('Streaming social-mode diagnostics missing');
