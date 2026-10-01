@@ -159,6 +159,8 @@ let conversationLatencySamples=[];
 let lastThinkingBackchannel='';
 let currentChatStreamController=null;
 let currentChatStreamId=0;
+let currentBrainRequestController=null;
+let currentBrainRequestId=0;
 let bargeInMode=false;
 let bargeInRestartTimer=null;
 let clapStream=null,clapCtx=null,clapRAF=null,lastClap=0,clapArmed=false,clapCooldown=0;
@@ -605,6 +607,10 @@ async function stopJarvisSpeech(reason='voice-interrupt',{listenAfter=true}={}){
     try{currentChatStreamController.abort()}catch(_){}
     currentChatStreamController=null;
   }
+  if(currentBrainRequestController){
+    try{currentBrainRequestController.abort()}catch(_){}
+    currentBrainRequestController=null;
+  }
   try{
     if(recognition&&listening)recognition.stop();
   }catch(_){}
@@ -665,7 +671,7 @@ function armBargeInRecognition(delay=450){
     try{
       recognition.lang='tr-TR';
       recognition.start();
-      if(window.voiceState)voiceState.textContent='VOICE: JARVIS SPEAKING · DUR / BEKLE / JARVIS ...';
+      if(window.voiceState)voiceState.textContent='VOICE: INTERRUPT READY · DUR / BEKLE / JARVIS ...';
     }catch(_){
       bargeInRestartTimer=setTimeout(launch,300);
     }
@@ -2037,19 +2043,38 @@ async function streamLocalConversation(message){
     if(currentChatStreamId===id)currentChatStreamController=null;
   }
 }
+function beginLocalBrainRequest(timeoutMs=65000){
+  const id=++currentBrainRequestId;
+  const ctl=new AbortController();
+  currentBrainRequestController=ctl;
+  const timer=setTimeout(()=>{try{ctl.abort()}catch(_){}},timeoutMs);
+  return{
+    id,ctl,timer,
+    finish(){
+      clearTimeout(timer);
+      if(currentBrainRequestId===id&&currentBrainRequestController===ctl){
+        currentBrainRequestController=null;
+      }
+    }
+  };
+}
 async function askNativeLocalAgent(message){
   if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis())return {handled:false};
   const requestStarted=performance.now();
-  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),65000);
+  const reqState=beginLocalBrainRequest(65000);
+  if(voiceConversationActive&&desktopWakeWordEnabled)armBargeInRecognition(220);
   try{
     const r=await fetch('http://127.0.0.1:8765/agent',{
       method:'POST',
       headers:{'content-type':'application/json'},
       body:JSON.stringify({message:String(message||'').trim(),maxRounds:4}),
-      signal:ctl.signal
+      signal:reqState.ctl.signal
     });
-    clearTimeout(timer);
     const j=await r.json().catch(()=>({}));
+    if(r.status===499||j.cancelled===true){
+      if(window.consoleStatus)consoleStatus.textContent='LOCAL AGENT · KULLANICI TARAFINDAN KESİLDİ';
+      return{handled:true,interrupted:true,result:j};
+    }
     if(!r.ok||j.ok!==true||!j.reply)throw new Error(j.error||('LOCAL AGENT '+r.status));
     recordConversationLatency(performance.now()-requestStarted);
     const reply=String(j.reply||'').trim();
@@ -2063,9 +2088,14 @@ async function askNativeLocalAgent(message){
     scheduleVoiceConversationFollowup(reply);
     return{handled:true,result:j};
   }catch(e){
-    clearTimeout(timer);
+    if(e&&e.name==='AbortError'){
+      if(window.consoleStatus)consoleStatus.textContent='LOCAL AGENT · KESİLDİ · YENİ SÖZÜNÜZ BEKLENİYOR';
+      return{handled:true,interrupted:true};
+    }
     consoleStatus.textContent='LOCAL AGENT FALLBACK · '+String(e.message||e).slice(0,80);
     return{handled:false,error:e};
+  }finally{
+    reqState.finish();
   }
 }
 async function askMobileLocalBrain(message){
@@ -2138,14 +2168,15 @@ async function askJarvisBrainCore(message){
     if(native.handled)return native;
     try{
       const brainRequestStarted=performance.now();
-      const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),45000);
+      const reqState=beginLocalBrainRequest(45000);
+      if(voiceConversationActive&&desktopWakeWordEnabled)armBargeInRecognition(220);
       const lr=await fetch('http://127.0.0.1:8765/brain',{
         method:'POST',
         headers:{'content-type':'application/json'},
         body:JSON.stringify({message:String(message||'').trim()}),
-        signal:ctl.signal
+        signal:reqState.ctl.signal
       });
-      clearTimeout(timer);
+      reqState.finish();
       const lj=await lr.json().catch(()=>({}));
       if(lr.ok&&lj.ok===true){
         recordConversationLatency(performance.now()-brainRequestStarted);
@@ -2205,6 +2236,15 @@ async function askJarvisBrainCore(message){
         consoleStatus.textContent='LOCAL BRAIN · OLLAMA KAPALI';
       }
     }catch(e){
+      if(e&&e.name==='AbortError'){
+        if(window.consoleStatus)consoleStatus.textContent='LOCAL BRAIN · KESİLDİ · YENİ SÖZÜNÜZ BEKLENİYOR';
+        if(currentBrainRequestController){
+          try{currentBrainRequestController.abort()}catch(_){}
+          currentBrainRequestController=null;
+        }
+        return{handled:true,interrupted:true};
+      }
+      if(currentBrainRequestController)currentBrainRequestController=null;
       consoleStatus.textContent='LOCAL BRAIN FALLBACK · '+String(e.message||e).slice(0,80);
     }
   }
