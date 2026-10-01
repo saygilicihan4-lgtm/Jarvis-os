@@ -1926,7 +1926,8 @@ async function callLocalBrain(message){
       memoryHits:memory.length,personaVersion:persona.version,tone,
       workspaceSources:workspaceCtx.sources,deepReflected:deepRequested&&type==='chat',deepModel:deepRequested?deepModel:null,
       qualityEscalated,qualityEscalationReason,qualityEscalationModel,
-      repairMode:!!repairContext,socialMode:socialPolicy.mode,followupAllowed:socialPolicy.followupAllowed
+      repairMode:!!repairContext,socialMode:socialPolicy.mode,followupAllowed:socialPolicy.followupAllowed,
+      socialMomentum:socialPolicy.momentumCarried===true,momentumMode:socialPolicy.momentumMode||null,momentumStrength:Number(socialPolicy.momentumStrength||0)
     };
   }catch(e){
     return{ok:false,error:String(e.message||e),model:LOCAL_BRAIN_MODEL};
@@ -2543,6 +2544,9 @@ function streamingConversationSystem(text,recent=[]){
     repairMode:!!repairContext,
     socialMode:socialPolicy.mode,
     followupAllowed:socialPolicy.followupAllowed,
+    socialMomentum:socialPolicy.momentumCarried===true,
+    momentumMode:socialPolicy.momentumMode||null,
+    momentumStrength:Number(socialPolicy.momentumStrength||0),
     system:[
       'Sen JARVIS\'sin; Cihan Bey\'in uzun süreli kişisel yerel yapay zeka asistanısın.',
       'Bu kanal yalnızca doğal sohbet içindir. Bilgisayarda eylem yapma, eylem yaptığını söyleme veya araç kullandığını iddia etme.',
@@ -2612,7 +2616,7 @@ async function streamLocalConversationHttp(message,res){
     if(res.destroyed||res.writableEnded)return false;
     try{return res.write(JSON.stringify(obj)+'\n')}catch(_){return false}
   };
-  write({type:'meta',ok:true,model:LOCAL_BRAIN_MODEL,tone:cfg.tone,streaming:true,repairMode:cfg.repairMode===true,socialMode:cfg.socialMode,followupAllowed:cfg.followupAllowed===true});
+  write({type:'meta',ok:true,model:LOCAL_BRAIN_MODEL,tone:cfg.tone,streaming:true,repairMode:cfg.repairMode===true,socialMode:cfg.socialMode,followupAllowed:cfg.followupAllowed===true,socialMomentum:cfg.socialMomentum===true,momentumMode:cfg.momentumMode||null,momentumStrength:Number(cfg.momentumStrength||0)});
 
   let full='',buffer='',firstDeltaAt=0,doneSeen=false;
   const decoder=new TextDecoder();
@@ -2661,6 +2665,9 @@ async function streamLocalConversationHttp(message,res){
       repairMode:cfg.repairMode===true,
       socialMode:cfg.socialMode,
       followupAllowed:cfg.followupAllowed===true,
+      socialMomentum:cfg.socialMomentum===true,
+      momentumMode:cfg.momentumMode||null,
+      momentumStrength:Number(cfg.momentumStrength||0),
       firstDeltaMs:firstDeltaAt?firstDeltaAt-started:null,
       latencyMs:Date.now()-started,
       chars:final.length,
