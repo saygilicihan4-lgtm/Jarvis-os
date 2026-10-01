@@ -10,6 +10,11 @@ HOST = "127.0.0.1"
 PORT = int(os.environ.get("JARVIS_STT_PORT", "8768"))
 MODEL_NAME = os.environ.get("JARVIS_STT_MODEL", "base")
 LANGUAGE = os.environ.get("JARVIS_STT_LANGUAGE", "tr")
+HOTWORDS = os.environ.get(
+    "JARVIS_STT_HOTWORDS",
+    "Jarvis, Cihan Bey, YouTube, Google, GitHub, ChatGPT, Opera GX, Chrome, Edge, Bluetooth, Wi-Fi, "
+    "VAROVA, Fikir2App, LifeCV, sistem durumu, disk durumu, ağ durumu, pil durumu, sesi yükselt, sesi azalt"
+)
 ALLOWED_ORIGIN = os.environ.get("JARVIS_WEB_ORIGIN", "https://jarvis-os-1iuv.onrender.com")
 
 _model = None
@@ -153,12 +158,14 @@ def transcribe(audio):
     segments, info = model.transcribe(
         audio,
         language=LANGUAGE,
-        beam_size=3,
-        best_of=3,
+        beam_size=4,
+        best_of=4,
         temperature=0.0,
         vad_filter=True,
+        vad_parameters=dict(min_silence_duration_ms=500),
         condition_on_previous_text=False,
         word_timestamps=False,
+        hotwords=HOTWORDS,
     )
     text = " ".join(seg.text.strip() for seg in segments if seg.text and seg.text.strip()).strip()
     return text, {
@@ -220,6 +227,7 @@ class Handler(BaseHTTPRequestHandler):
                 "loaded": ready,
                 "engine": "faster-whisper",
                 "cost": 0,
+                "hotwords": HOTWORDS,
                 "microphone": mic,
                 "native_rate": native_rate,
             })
