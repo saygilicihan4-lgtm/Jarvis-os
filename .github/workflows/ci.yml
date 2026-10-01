@@ -21,7 +21,9 @@ jobs:
         run: |
           node --check server.js
           node --check worker.js
-          node --check public/index.html || true
+          python -m py_compile jarvis-local-stt-v1.py
+      - name: UI selftest
+        run: node ui-selftest.js
       - name: Server selftest
         run: node selftest.js
       - name: Local Brain integration selftest
