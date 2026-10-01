@@ -11,6 +11,7 @@ const required=[
   'listenWithLocalStt',
   'scheduleVoiceConversationFollowup',
   'askJarvisBrain',
+  'askNativeLocalAgent',
   'askMobileLocalBrain',
   'armMobileConversationFollowup',
   'finalizeLocalToolReply',

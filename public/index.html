@@ -1642,6 +1642,35 @@ function armMobileConversationFollowup(delay=350){
   },Math.max(150,delay));
   return true;
 }
+async function askNativeLocalAgent(message){
+  if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis())return {handled:false};
+  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),65000);
+  try{
+    const r=await fetch('http://127.0.0.1:8765/agent',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({message:String(message||'').trim(),maxRounds:4}),
+      signal:ctl.signal
+    });
+    clearTimeout(timer);
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||j.ok!==true||!j.reply)throw new Error(j.error||('LOCAL AGENT '+r.status));
+    const reply=String(j.reply||'').trim();
+    const actions=Array.isArray(j.actions)?j.actions:[];
+    consoleStatus.textContent='LOCAL AGENT · '+actions.length+' TOOL · '+String(j.model||'READY')+(j.recovered?' · RECOVERED':'');
+    coreSubtitle.textContent=reply.slice(0,220);
+    cmd.value='';
+    voiceConversationActive=true;
+    voiceConversationUntil=Date.now()+120000;
+    speak(reply,'tr-TR',String(j.tone||'balanced'));
+    scheduleVoiceConversationFollowup(reply);
+    return{handled:true,result:j};
+  }catch(e){
+    clearTimeout(timer);
+    consoleStatus.textContent='LOCAL AGENT FALLBACK · '+String(e.message||e).slice(0,80);
+    return{handled:false,error:e};
+  }
+}
 async function askMobileLocalBrain(message){
   if(!isMobileJarvis())return {handled:false};
   try{
@@ -1698,8 +1727,11 @@ async function askJarvisBrain(message){
     if(mobile.handled)return mobile;
   }
 
-  // PC first: use the zero-cost local Ollama brain through the Worker bridge.
+  // PC first: use the native local tool-calling loop. If this model/runtime
+  // cannot complete the turn, fall back to the older structured brain path.
   if(/Windows/i.test(navigator.userAgent)&&!isMobileJarvis()){
+    const native=await askNativeLocalAgent(message);
+    if(native.handled)return native;
     try{
       const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),45000);
       const lr=await fetch('http://127.0.0.1:8765/brain',{
