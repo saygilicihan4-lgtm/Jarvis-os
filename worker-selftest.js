@@ -182,7 +182,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.91.0','worker version');
+    assert(hj.version==='2.92.0','worker version');
     assert(hj.selfUpdate&&hj.selfUpdate.configured===true,'self-update health');
     assert(['not_checked','current','updated','check_failed'].includes(hj.selfUpdate.status),'self-update status');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
@@ -242,6 +242,8 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.capabilities.includes('creator_short_mission_v1'),'durable Creator Short mission capability');
     assert(hj.capabilities.includes('shopify_product_mission_v1'),'durable Shopify product mission capability');
     assert(hj.capabilities.includes('developer_project_mission_v1'),'durable Developer project mission capability');
+    assert(hj.capabilities.includes('approval_gate_v1'),'explicit approval gate capability');
+    assert(hj.capabilities.includes('shopify_publish_approval_v1'),'Shopify publish approval capability');
     assert(hj.missionRuntime&&hj.missionRuntime.autoResume===true,'mission runtime auto-resume health');
     assert(hj.capabilities.includes('conversation_cadence_v1'),'conversation cadence capability');
     assert(hj.capabilities.includes('brevity_mirroring_v1'),'brevity mirroring capability');
@@ -302,7 +304,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const acceptanceState=await get('http://127.0.0.1:'+BRIDGE_PORT+'/acceptance-snapshot');
     assert(acceptanceState.status===200,'acceptance snapshot endpoint');
     const asj=JSON.parse(acceptanceState.body);
-    assert(asj.ok===true&&asj.worker&&asj.worker.version==='2.91.0','acceptance snapshot worker metadata');
+    assert(asj.ok===true&&asj.worker&&asj.worker.version==='2.92.0','acceptance snapshot worker metadata');
     assert(asj.update&&asj.update.configured===true,'acceptance self-update configured');
     assert(asj.checks&&asj.checks.autoUpdateReady===true,'acceptance auto-update readiness');
     assert(asj.checks&&asj.checks.missionRuntime===true,'acceptance snapshot mission check');
