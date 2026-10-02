@@ -77,5 +77,15 @@ assert.ok(worker.includes("CAPS.includes('mission_cooperative_yield_v1')"),'PC a
 assert.ok(worker.includes('Batch hiçbir videoyu PUBLIC yayınlamaz.'),'native batch contract must state no PUBLIC publishing');
 assert.ok(worker.includes('Batch PUBLIC yayınlamaz'),'agent guidance must preserve draft-only batch policy');
 assert.ok(worker.includes('\"Devam et\" tek başına YouTube PUBLIC onayı değildir'),'YouTube explicit publish gate must remain');
+assert.ok(worker.includes('function creatorBatchActiveChild(mission)'),'batch Mission Control active-child helper missing');
+assert.ok(worker.includes('function cascadeCreatorBatchControl(mission,action)'),'batch Mission Control cascade helper missing');
+assert.ok(worker.includes("cascadeCreatorBatchControl(mission,'resume')"),'batch resume must cascade to paused child');
+assert.ok(worker.includes("cascadeCreatorBatchControl(mission,'cancel')"),'batch cancel must cascade to active child');
+assert.ok(worker.includes('cascadeCreatorBatchControl(mission,op)'),'batch pause/cancel must cascade to child without force-kill');
+const batchControlStart=worker.indexOf('function creatorBatchActiveChild(mission)');
+const batchControlEnd=worker.indexOf('function missionControlCandidates(action)',batchControlStart);
+assert.ok(batchControlStart>0&&batchControlEnd>batchControlStart,'batch control helper block missing');
+const batchControl=worker.slice(batchControlStart,batchControlEnd);
+assert.ok(!/killChildTree|taskkill|Stop-Process|process\.kill/.test(batchControl),'batch Mission Control must never force-kill child work');
 
 console.log('CREATOR BATCH V66 SELFTEST PASS');
