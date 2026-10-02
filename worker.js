@@ -5276,7 +5276,7 @@ function startupAcceptanceSnapshot(){
     if(fs.existsSync(file))logTail=fs.readFileSync(file,'utf8').split(/\r?\n/).filter(Boolean).slice(-12);
   }catch(_){}
   const canonicalOk=Object.values(canonicalFiles).every(Boolean);
-  const registrationOk=process.platform==='win32'?(taskRegistered||fallbackRegistered):null;
+  const registrationOk=process.platform==='win32'?((taskRegistered&&hiddenTaskAction)||fallbackRegistered):null;
   const silentOk=process.platform==='win32'?(canonicalOk&&registrationOk&&visibleShells.length===0):null;
   return{
     platform:process.platform,
@@ -5320,7 +5320,7 @@ async function buildPcAcceptanceSnapshot(){
   const snapshot={
     ok:true,
     generatedAt,
-    worker:{version:WORKER_VERSION,name:NAME,deviceId:DEVICE_ID,platform:process.platform,arch:process.arch},
+    worker:{version:WORKER_VERSION,name:NAME,platform:process.platform,arch:process.arch},
     checks,
     corePass,
     startup,
