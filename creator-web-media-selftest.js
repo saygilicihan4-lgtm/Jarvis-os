@@ -38,6 +38,31 @@ assert.strictEqual(wikimedia.length,1,'autonomous Commons import must fail close
 assert.strictEqual(wikimedia[0].license,'CC0 1.0');
 assert.strictEqual(web.candidateAllowed(wikimedia[0]).ok,true);
 
+const commonsImages={
+  query:{pages:[
+    {pageid:11,title:'File:Safe.jpg',imageinfo:[{
+      url:'https://upload.wikimedia.org/safe-original.jpg',
+      thumburl:'https://upload.wikimedia.org/safe-2400px.jpg',
+      mime:'image/jpeg',thumbmime:'image/jpeg',width:4000,height:2600,thumbwidth:2400,thumbheight:1560,
+      extmetadata:{
+        LicenseShortName:{value:'Public domain'},
+        LicenseUrl:{value:'https://creativecommons.org/publicdomain/mark/1.0/'},
+        Artist:{value:'Example Photographer'}
+      }
+    }]},
+    {pageid:12,title:'File:Blocked.jpg',imageinfo:[{
+      url:'https://upload.wikimedia.org/blocked.jpg',
+      mime:'image/jpeg',width:3000,height:2000,
+      extmetadata:{LicenseShortName:{value:'CC BY 4.0'}}
+    }]}
+  ]}
+};
+const wikimediaImages=web.normalizeWikimediaImages(commonsImages,'landscape');
+assert.strictEqual(wikimediaImages.length,1,'autonomous Commons still image fallback must stay Public Domain/CC0 only');
+assert.strictEqual(wikimediaImages[0].kind,'image');
+assert.ok(wikimediaImages[0].downloadUrl.includes('2400px'),'bounded Wikimedia thumbnail should be preferred');
+assert.strictEqual(web.imageExtensionFor(wikimediaImages[0]),'.jpg');
+
 const pexels=web.normalizePexels({videos:[{
   id:42,url:'https://www.pexels.com/video/42',duration:12,user:{name:'Creator'},
   video_files:[
@@ -79,7 +104,7 @@ const withCredits=web.appendAttribution('Video açıklaması',tmp,['creator-asse
 assert.ok(withCredits.startsWith('Video açıklaması'),'base YouTube description must be preserved');
 assert.ok(withCredits.includes('Görsel kaynakları / Visual sources:'),'YouTube attribution heading missing');
 
-for(const cap of ['creator_web_media_v1','creator_web_license_manifest_v1','creator_web_zero_key_v1','creator_youtube_attribution_v1']){
+for(const cap of ['creator_web_media_v1','creator_web_license_manifest_v1','creator_web_zero_key_v1','creator_youtube_attribution_v1','creator_image_motion_fallback_v1']){
   assert.ok(worker.includes("'"+cap+"'"),cap+' missing');
 }
 assert.ok(worker.includes("name:'creator_web_media'"),'native Creator web media tool missing');
@@ -93,6 +118,8 @@ assert.ok(worker.includes("manifestId:'daily-'"),'daily web-media manifest bindi
 assert.ok(worker.includes("orientation:'portrait'"),'Short web-media orientation missing');
 assert.ok(worker.includes("orientation:'landscape'"),'long-form web-media orientation missing');
 assert.ok(worker.includes("inspect:(rel)=>getCreatorEngine().inspectAsset(WORKSPACE,rel)"),'downloaded web media must pass Creator FFprobe inspection');
+assert.ok(worker.includes("animateImage:(rel,opts)=>getCreatorEngine().animateStillAsset(WORKSPACE,rel,opts)"),'licensed image fallback must use Creator still animator');
+assert.ok(worker.includes("creatorImageMotionReady:CAPS.includes('creator_image_motion_fallback_v1')"),'PC acceptance image-motion readiness missing');
 assert.ok(worker.includes('"Devam et" tek başına YouTube PUBLIC onayı değildir'),'YouTube explicit approval policy must remain');
 assert.ok(worker.includes('"Devam et" tek başına yayınlama onayı değildir'),'Shopify explicit approval policy must remain');
 
