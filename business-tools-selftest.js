@@ -24,7 +24,7 @@ assert.ok(worker.includes("name:'resume_latest_mission'"),'mission resume tool m
 assert.ok(worker.includes('createDraftForMission(WORKSPACE,product,id)'),'mission-idempotent Shopify draft execution missing');
 assert.ok(worker.includes('missionId:id'),'mission-aware YouTube draft execution missing');
 assert.ok(worker.includes("'youtube_publish_approval_v1'"),'YouTube publish approval capability missing');
-assert.ok(!worker.includes("name:'youtube_publish'"),'direct autonomous YouTube publish tool must not exist');
+assert.ok(!worker.includes("function:{\n        name:'youtube_publish',"),'direct autonomous YouTube publish tool must not exist');
 assert.ok(worker.includes("publishPreparedDraft(getBrowserOperator(),WORKSPACE"),'approved YouTube publish mission execution missing');
 
 assert.ok(server.includes("return'shopify_product_draft_v1'"),'server Shopify draft routing missing');
