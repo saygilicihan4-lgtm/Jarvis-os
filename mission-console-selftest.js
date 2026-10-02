@@ -22,6 +22,8 @@ assert.ok(!telemetry.includes('.input'),'cloud mission telemetry must not expose
 assert.ok(!telemetry.includes('TOKEN'),'cloud mission telemetry must not expose tokens');
 assert.ok(!telemetry.includes('DEVICE_TOKEN'),'cloud mission telemetry must not expose device token');
 assert.ok(telemetry.includes('queue:cleanQueue'),'sanitized mission queue missing');
+assert.ok(telemetry.includes('paused:Number(h.counts.paused||0)'),'paused mission count missing from cloud telemetry');
+assert.ok(server.includes('paused:Math.max(0,Math.min(10000,Number(counts.paused)||0))'),'server sanitizer drops paused mission count');
 
 assert.ok(server.includes('function sanitizeMissionTelemetry(raw)'),'server mission telemetry sanitizer missing');
 assert.ok(server.includes('.slice(0,160)'), 'server still truncates capability heartbeat too aggressively');
@@ -38,5 +40,7 @@ assert.ok(html.includes('pc.missions&&typeof pc.missions'),'cloud worker mission
 assert.ok(html.includes('const localCards=localQueue.map(localMissionCard)'),'local durable mission cards not rendered');
 assert.ok(css.includes('.local-mission'),'durable mission styling missing');
 assert.ok(css.includes('.status.waiting_dependency'),'waiting dependency styling missing');
+assert.ok(css.includes('.status.paused'),'paused durable mission styling missing');
+assert.ok(html.includes("paused=Number(c.paused||0)"),'paused count is not shown in Mission Console state');
 
 console.log('MISSION CONSOLE SELFTEST PASS');
