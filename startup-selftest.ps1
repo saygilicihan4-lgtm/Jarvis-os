@@ -16,6 +16,9 @@ Assert-Contains $startup '--autostart --silent' "Startup must launch Worker sile
 Assert-Contains $startup 'http://127.0.0.1:8765/health' "Startup must verify Worker health."
 Assert-Contains $startup 'http://127.0.0.1:8768/health' "Startup must verify voice health."
 Assert-Contains $startup 'JARVIS ONLINE' "Startup must expose a final online stage."
+Assert-Contains $startup 'jarvis-self-update.ps1' "Startup must run the unified updater before Worker launch."
+Assert-Contains $startup 'jarvis-self-update.next.ps1' "Startup must promote a validated pending updater."
+Assert-Contains $startup 'Move-Item -LiteralPath $pendingUpdater -Destination $updater -Force' "Pending updater promotion must be atomic at startup."
 
 Assert-Contains $vbs 'shell.Run cmd, 0, False' "VBS bootstrap must hide the PowerShell host."
 Assert-Contains $bat 'LAUNCHER_VERSION=4.1' "Launcher 4.1 is required."
