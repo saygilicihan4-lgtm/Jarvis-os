@@ -8,7 +8,7 @@ const startup=fs.readFileSync('./jarvis-startup.ps1','utf8');
 const updater=fs.readFileSync('./jarvis-self-update.ps1','utf8');
 const manifest=fs.readFileSync('./jarvis-update-manifest.json','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.102.0'"),'Worker 2.102.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.103.0'"),'Worker 2.103.0 required');
 assert.ok(worker.includes("const UPDATE_STATE_FILE=path.join(MEMORY_DIR,'update-state.json')"),'update state path missing');
 assert.ok(worker.includes('function selfUpdateState()'),'self-update state reader missing');
 assert.ok(worker.includes('selfUpdate:selfUpdateState()'),'local health does not expose updater state');
