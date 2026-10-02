@@ -4,7 +4,7 @@ const assert=require('assert');
 const worker=fs.readFileSync('./worker.js','utf8');
 const startup=fs.readFileSync('./jarvis-startup.ps1','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.77.0'"),'worker 2.77.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.78.0'"),'worker 2.78.0 required');
 assert.ok(worker.includes('bootstrap_migration_v2'),'bootstrap v2 capability missing');
 assert.ok(worker.includes('bootstrap_migration_v3'),'bootstrap v3 capability missing');
 assert.ok(worker.includes('function bootstrapRuntimeUpgrade()'),'bootstrap migration function missing');
