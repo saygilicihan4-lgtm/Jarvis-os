@@ -1,4 +1,4 @@
-const SEMANTIC_QUALITY_VERSION='1.0';
+const SEMANTIC_QUALITY_VERSION='1.1';
 
 const STOP=new Set([
   'bir','bu','su','şu','ve','veya','ile','icin','için','olan','olarak','daha','cok','çok','gibi',
@@ -47,12 +47,8 @@ function diversifySemanticRows(rows,{
   const threshold=Math.max(0.35,Math.min(0.95,Number(maxSimilarity)||0.72));
   const allowed=new Set((Array.isArray(allowPaths)?allowPaths:[]).map(x=>String(x||'')));
   const input=Array.isArray(rows)?rows.filter(Boolean):[];
-  let eligible=input.filter(row=>Number(row&&row.score||0)>=floor||allowed.has(String(row&&row.path||'')));
-  let fallbackUsed=false;
-  if(!eligible.length){
-    eligible=input.slice();
-    fallbackUsed=true;
-  }
+  const eligible=input.filter(row=>Number(row&&row.score||0)>=floor||allowed.has(String(row&&row.path||'')));
+  const relevanceFloorBlockedAll=input.length>0&&eligible.length===0;
   const selected=[],selectedTokens=[],rejectedSimilar=[],rejectedLowRelevance=[];
   for(const row of input){
     if(!eligible.includes(row)){
@@ -91,7 +87,8 @@ function diversifySemanticRows(rows,{
       maxSimilarity:threshold,
       minScore:floor,
       modelAllowlistCount:allowed.size,
-      fallbackUsed,
+      fallbackUsed:false,
+      relevanceFloorBlockedAll,
       rejectedSimilar:rejectedSimilar.slice(0,20),
       rejectedLowRelevance:rejectedLowRelevance.slice(0,20)
     }
