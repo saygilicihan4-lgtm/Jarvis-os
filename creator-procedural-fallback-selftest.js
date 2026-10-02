@@ -5,7 +5,7 @@ const worker=fs.readFileSync('./worker.js','utf8');
 const engine=fs.readFileSync('./jarvis-creator-engine.js','utf8');
 const semantic=require('./jarvis-creator-semantic-quality');
 
-assert.strictEqual(semantic.SEMANTIC_QUALITY_VERSION,'1.2','current semantic narrative digest quality must remain');
+assert.strictEqual(semantic.SEMANTIC_QUALITY_VERSION,'1.3','current semantic narrative digest quality must remain');
 
 function block(start,end){
   const a=worker.indexOf(start),b=worker.indexOf(end,a);

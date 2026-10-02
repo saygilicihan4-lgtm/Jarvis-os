@@ -1,4 +1,4 @@
-const SEMANTIC_QUALITY_VERSION='1.2';
+const SEMANTIC_QUALITY_VERSION='1.3';
 
 const STOP=new Set([
   'bir','bu','su','şu','ve','veya','ile','icin','için','olan','olarak','daha','cok','çok','gibi',
@@ -148,10 +148,49 @@ function diversifySemanticRows(rows,{
   };
 }
 
+
+function orderRowsByNarrativeSections(rows,sections){
+  const input=Array.isArray(rows)?rows.filter(Boolean):[];
+  const parts=Array.isArray(sections)?sections.filter(x=>x&&String(x.text||'').trim()):[];
+  if(input.length<2||parts.length<2)return{rows:input.slice(),evidence:{applied:false,sectionCount:parts.length,selectedCount:input.length,assignments:[]}};
+  const sectionTokens=parts.map(x=>semanticTokens(x.text));
+  const capacity=Math.max(1,Math.ceil(input.length/parts.length));
+  const used=new Array(parts.length).fill(0);
+  const assignments=input.map((row,index)=>{
+    const tokens=rowTokens(row);
+    const scores=sectionTokens.map(tokens2=>semanticSimilarity(tokens,tokens2));
+    let choices=scores.map((score,sectionIndex)=>({score,sectionIndex}))
+      .sort((a,b)=>b.score-a.score||a.sectionIndex-b.sectionIndex);
+    let chosen=choices.find(x=>used[x.sectionIndex]<capacity);
+    if(!chosen){
+      const fallback=Math.min(parts.length-1,Math.floor((index*parts.length)/input.length));
+      chosen={score:scores[fallback]||0,sectionIndex:fallback};
+    }
+    if(Math.max(...scores)<=0){
+      const proportional=Math.min(parts.length-1,Math.floor((index*parts.length)/input.length));
+      if(used[proportional]<capacity)chosen={score:0,sectionIndex:proportional};
+    }
+    used[chosen.sectionIndex]++;
+    return{row,index,sectionIndex:chosen.sectionIndex,sectionLabel:String(parts[chosen.sectionIndex].label||chosen.sectionIndex),similarity:Number((chosen.score||0).toFixed(3))};
+  });
+  assignments.sort((a,b)=>a.sectionIndex-b.sectionIndex||b.similarity-a.similarity||a.index-b.index);
+  return{
+    rows:assignments.map(x=>x.row),
+    evidence:{
+      applied:true,
+      sectionCount:parts.length,
+      selectedCount:input.length,
+      sectionLoads:used,
+      assignments:assignments.map(x=>({path:String(x.row&&x.row.path||''),section:x.sectionLabel,similarity:x.similarity}))
+    }
+  };
+}
+
 module.exports={
   SEMANTIC_QUALITY_VERSION,
   semanticTokens,
   buildNarrativeDigest,
   semanticSimilarity,
-  diversifySemanticRows
+  diversifySemanticRows,
+  orderRowsByNarrativeSections
 };

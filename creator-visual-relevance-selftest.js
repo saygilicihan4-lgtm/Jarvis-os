@@ -12,7 +12,8 @@ for(const cap of [
   'creator_relevance_preserving_fallback_v1',
   'creator_semantic_relevance_floor_v1',
   'creator_semantic_narrative_digest_v1',
-  'creator_procedural_fallback_v1'
+  'creator_procedural_fallback_v1',
+  'creator_scene_semantic_order_v1'
 ]){
   assert.ok(worker.includes("'"+cap+"'"),cap+' missing');
 }
@@ -45,7 +46,8 @@ assert.ok(worker.includes("getCreatorSemanticQuality().diversifySemanticRows(ord
 assert.ok(worker.includes("maxSimilarity:0.72"),'semantic near-duplicate threshold missing');
 assert.ok(worker.includes("minScore:1"),'semantic minimum lexical relevance floor missing');
 assert.ok(worker.includes("kind:'creator_semantic_diversity'"),'semantic diversity evidence missing');
-assert.ok(worker.includes("SEMANTIC_QUALITY_VERSION='1.2'"),'semantic quality runtime signature missing');
+assert.ok(worker.includes("SEMANTIC_QUALITY_VERSION='1.3'"),'semantic quality runtime signature missing');
+assert.ok(worker.includes('orderRowsByNarrativeSections(diversity.rows,narrativeDigest.sections)'),'scene-semantic timeline ordering missing');
 assert.ok(worker.includes('function mergeCreatorAssetBaselines(primary,fallback,maxItems=12)'),'safe deterministic fallback merge missing');
 
 const dailyStart=worker.indexOf('async function serviceCreatorDailyPlan');
