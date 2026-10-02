@@ -71,7 +71,9 @@ assert.ok(source.includes("duration>=11.8&&duration<=18.8"),'Shorts duration qua
 assert.ok(source.includes("audio:!!audio"),'audio stream quality check missing');
 assert.strictEqual(typeof engine.thumbnailTitleLines,'function','thumbnail title helper export missing');
 assert.strictEqual(typeof engine.createThumbnail,'function','thumbnail renderer export missing');
+assert.strictEqual(typeof engine.buildShortSfxEvents,'function','Short SFX event planner export missing');
+assert.strictEqual(typeof engine.renderShortSfxBed,'function','Short SFX renderer export missing');
 assert.ok(source.includes("quality=probeRenderedShort(outFile,status.ffprobe)"),'post-render quality gate missing');
-assert.ok(source.includes("quality,\n    visualEdit,\n    thumbnail:thumbnail&&thumbnail.ok?thumbnail.path:null,\n    thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),\n    output:path.relative(workspace,outFile)"),'quality + visual edit + thumbnail metadata missing');
+assert.ok(source.includes("quality,\n    visualEdit,\n    thumbnail:thumbnail&&thumbnail.ok?thumbnail.path:null,\n    thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),\n    soundDesign,\n    output:path.relative(workspace,outFile)"),'quality + visual edit + thumbnail + sound design metadata missing');
 
 console.log('CREATOR ENGINE SELFTEST PASS');
