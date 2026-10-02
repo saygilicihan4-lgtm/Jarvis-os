@@ -38,10 +38,10 @@ const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
 const UPDATE_STATE_FILE=path.join(MEMORY_DIR,'update-state.json');
-const WORKER_VERSION='2.94.0';
+const WORKER_VERSION='2.95.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
 CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1','adaptive_model_router_v1','deep_model_fallback_v1','dynamic_chunk_prosody_v1','natural_pause_timing_v1','adaptive_turn_pacing_v1','latency_learning_v1','full_duplex_interrupt_v1','cancellable_agent_v1','adaptive_voice_profile_v1','spoken_voice_preference_v1','speaker_echo_rejection_v1','social_dialogue_v1','response_variation_v1','contextual_followup_v1','dialogue_feedback_learning_v1','social_preference_adaptation_v1','dynamic_wake_ack_v1','wake_ack_turn_timing_v1','auto_quality_escalation_v1','weak_response_escalation_v1','repair_quality_escalation_v1','social_momentum_v1','elliptical_turn_resolution_v1','conversation_cadence_v1','brevity_mirroring_v1','adaptive_response_length_v1','interruption_continuity_v1','spoken_resume_v1','partial_stream_resume_v1');
-CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1','mission_auto_resume_v1','mission_health_v1','pc_acceptance_snapshot_v1','silent_startup_diagnostics_v1','pc_acceptance_hardened_v1','bootstrap_migration_v6','mission_fair_scheduler_v1','pc_self_repair_v1','creator_multiscene_v2','creator_burned_captions_v1','cloud_mission_telemetry_v1','creator_short_mission_v1','shopify_product_mission_v1','developer_project_mission_v1','approval_gate_v1','shopify_publish_approval_v1','browser_form_mission_v1','browser_form_prepare_v1','browser_click_approval_v1','youtube_publish_approval_v1','youtube_publish_receipt_v1');
+CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1','mission_auto_resume_v1','mission_health_v1','pc_acceptance_snapshot_v1','silent_startup_diagnostics_v1','pc_acceptance_hardened_v1','bootstrap_migration_v6','mission_fair_scheduler_v1','pc_self_repair_v1','creator_multiscene_v2','creator_burned_captions_v1','cloud_mission_telemetry_v1','creator_short_mission_v1','shopify_product_mission_v1','developer_project_mission_v1','approval_gate_v1','shopify_publish_approval_v1','browser_form_mission_v1','browser_form_prepare_v1','browser_click_approval_v1','youtube_publish_approval_v1','youtube_publish_receipt_v1','developer_patch_mission_v1','developer_patch_rollback_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -2507,6 +2507,36 @@ function nativeAgentTools(){
     {
       type:'function',
       function:{
+        name:'developer_patch_mission',
+        description:'Mevcut bir JARVIS workspace projesindeki güvenli metin kaynak dosyalarını kalıcı görev olarak güncelle. Görev başlatılırken her dosyanın mevcut SHA-256 özeti baseline olarak kilitlenir; dosya dışarıdan değişirse üzerine yazılmaz. Her değişiklikten önce rollback yedeği alınır ve final hash/syntax doğrulaması başarısız olursa JARVIS değişiklikleri geri alınır. Yeni dosya oluşturmaz, hassas dosyalara dokunmaz ve deploy etmez.',
+        parameters:{
+          type:'object',
+          properties:{
+            projectName:{type:'string',description:'Workspace içindeki mevcut proje klasör adı.'},
+            summary:{type:'string',description:'Değişikliğin kısa amacı.'},
+            patches:{
+              type:'array',
+              minItems:1,
+              maxItems:12,
+              items:{
+                type:'object',
+                properties:{
+                  path:{type:'string',description:'Proje köküne göre mevcut güvenli kaynak dosyası.'},
+                  content:{type:'string',description:'Dosyanın tam yeni metin içeriği; önce workspace_read ile mevcut içeriği oku.'}
+                },
+                required:['path','content'],
+                additionalProperties:false
+              }
+            }
+          },
+          required:['projectName','patches'],
+          additionalProperties:false
+        }
+      }
+    },
+    {
+      type:'function',
+      function:{
         name:'developer_project_mission',
         description:'Kullanıcı açıkça bir uygulama, site veya yazılım projesi oluşturmanı istediğinde kalıcı ve yeniden başlatılabilir geliştirici görevi başlat. Yalnızca JARVIS workspace içinde güvenli metin kaynak dosyaları oluşturur; mevcut farklı dosyaların üstüne otomatik yazmaz ve deploy etmez.',
         parameters:{
@@ -2821,6 +2851,21 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
     }catch(e){
       return{ok:false,message:'Kalıcı browser görevi başlatılamadı: '+String(e.message||e).slice(0,600)};
     }
+  }else if(n==='developer_patch_mission'){
+    const intent=String(userText||'').toLocaleLowerCase('tr-TR');
+    if(!/(?:uygulama|site|web|yazılım|yazilim|proje|app|kod|dosya)/i.test(intent)||!/(?:güncelle|guncelle|düzelt|duzelt|değiştir|degistir|revize|patch|onar|iyileştir|iyilestir|geliştir|gelistir)/i.test(intent)){
+      return{ok:false,message:'Kalıcı proje patch görevi yalnızca açık güncelleme/düzeltme isteğiyle başlatılır.'};
+    }
+    try{
+      const mission=createDeveloperPatchMission(a);
+      const out=await runDurableMission(mission.id);
+      return{
+        ok:out.status==='completed',
+        message:missionSummaryText(out)+(out.status==='completed'?' · SHA-256 doğrulandı ve rollback yedeği korundu':out.status==='failed'?' · çakışmada otomatik üzerine yazma yapılmadı; JARVIS değişiklikleri güvenli rollback kurallarına göre geri alındı':'')
+      };
+    }catch(e){
+      return{ok:false,message:'Kalıcı proje patch görevi başlatılamadı: '+String(e.message||e).slice(0,700)};
+    }
   }else if(n==='developer_project_mission'){
     const intent=String(userText||'').toLocaleLowerCase('tr-TR');
     if(!/(?:uygulama|site|web|yazılım|yazilim|proje|app|kod)/i.test(intent)||!/(?:oluştur|olustur|geliştir|gelistir|hazırla|hazirla|yap|kur)/i.test(intent)){
@@ -2977,6 +3022,7 @@ async function runNativeAgent(message,{maxRounds=4,signal=null}={}){
     'Mağaza işlerinde önce shopify_status ile bağlantıyı kontrol edebilirsin. shopify_create_draft yalnızca DRAFT ürün oluşturur; eksik fiyat, SKU veya görseli uydurma.',
     'Kullanıcı bir ürünü mağazaya ekleme işinin tamamlanana kadar sürmesini istiyorsa shopify_product_mission kullan; görev disk üzerinde kalır, bağlantı yoksa bekler ve aynı ürünü mission etiketiyle kopya oluşturmadan sürdürür.',
     'Kullanıcı uygulama/site/yazılım geliştirmeyi istediğinde developer_project_mission kullan. Bu araç kaynak dosyaları yalnızca JARVIS workspace içine yazar, mevcut farklı dosyanın üzerine otomatik yazmaz ve deploy etmez; böylece geliştirme görevi kesintiden sonra güvenle devam eder.',
+    'Kullanıcı mevcut bir workspace projesini düzeltmek/güncellemek istediğinde önce workspace_search/workspace_read ile gerçek dosyayı oku, sonra developer_patch_mission kullan. Tam yeni dosya içeriğini ver; araç başlangıç SHA-256 hashini kilitler, dış değişiklikte üzerine yazmaz, rollback yedeği alır ve JS/JSON için güvenli syntax doğrulaması yapar. .env, secret, credential gibi hassas yolları patch etme ve bu araçla deploy yapma.',
     'İzinli bir web sayfasında alanları doldurup işi kesintiden sonra sürdürülebilir hazırlamak için browser_form_mission kullan. Hassas şifre/token/kart alanlarını göreve koyma. finalClick varsa görev approval gate üzerinde durur; public publish, ödeme, silme veya hesap kapatma gibi yüksek riskli eylemler generic browser göreviyle yapılmaz.',
     'Shopify ürününü halka açık mağazada yayınlama iki aşamalıdır: shopify_product_mission publish=true yalnızca yayınlama isteğini sıraya koyar ve approval gate üzerinde durur. Kullanıcı daha sonra aynı turda açıkça "onayla" veya "yayınla" demeden approve_mission_action çağırma. "Devam et" tek başına yayınlama onayı değildir.',
     'YouTube için youtube_prepare_draft_upload yalnızca dosyayı Studio yükleme ekranına koyar ve metadata hazırlar; doğrudan PUBLIC yayın aracı değildir.',
@@ -4115,6 +4161,93 @@ function developerMissionTarget(input,file){
   if(!(target===root||target.startsWith(root+path.sep)))throw new Error('Proje kökü dışına yazma engellendi.');
   return{root,target,relative:path.relative(WORKSPACE,target)};
 }
+function createDeveloperPatchMission(args={}){
+  const projectName=developerProjectSlug(args.projectName||args.name);
+  const raw=Array.isArray(args.patches)?args.patches.slice(0,12):[];
+  if(!raw.length)throw new Error('En az bir mevcut proje dosyası patch için gerekli.');
+  const root=safeFile(projectName);
+  if(!fs.existsSync(root)||!fs.statSync(root).isDirectory())throw new Error('Patch uygulanacak mevcut proje klasörü bulunamadı: '+projectName);
+  const normalized=normalizeDeveloperFiles({files:raw},projectName);
+  const patches=normalized.map(file=>{
+    const loc=developerMissionTarget({projectName},file);
+    if(!fs.existsSync(loc.target)||!fs.statSync(loc.target).isFile())throw new Error('Patch yalnızca mevcut dosyalara uygulanır: '+file.path);
+    return{...file,expectedSha256:fileHash(loc.target)};
+  });
+  const summary=String(args.summary||'').replace(/[\r\n]+/g,' ').trim().slice(0,1200);
+  const steps=[{name:'dev_patch_prepare'}];
+  patches.forEach((file,i)=>steps.push({name:'dev_patch_file_'+String(i+1).padStart(2,'0'),meta:{fileIndex:i}}));
+  steps.push({name:'dev_patch_verify'});
+  return getMissionEngine().createMission(WORKSPACE,{
+    type:'developer_patch',
+    label:projectName,
+    input:{projectName,summary,patches},
+    steps
+  });
+}
+function developerPatchBackupLocation(missionId,input,file){
+  const missionKey=String(missionId||'').replace(/[^A-Za-z0-9_-]/g,'_').slice(0,100);
+  if(!missionKey)throw new Error('Patch mission id gerekli.');
+  const rel=String(file&&file.path||'').replace(/\\/g,'/').replace(/^\/+/, '').trim();
+  const root=path.resolve(MEMORY_DIR,'developer-patches',missionKey);
+  const target=path.resolve(root,rel+'.bak');
+  if(!(target===root||target.startsWith(root+path.sep)))throw new Error('Patch backup yolu güvenli değil.');
+  return{root,target,relative:path.relative(WORKSPACE,target)};
+}
+function validateDeveloperPatchedFile(target){
+  const ext=path.extname(target).toLowerCase();
+  if(ext==='.json'){
+    JSON.parse(fs.readFileSync(target,'utf8'));
+    return{ok:true,validator:'json-parse'};
+  }
+  if(new Set(['.js','.cjs','.mjs']).has(ext)){
+    childProcess.execFileSync(process.execPath,['--check',target],{encoding:'utf8',windowsHide:true,timeout:10000,maxBuffer:512*1024});
+    return{ok:true,validator:'node-check'};
+  }
+  return{ok:true,validator:'hash'};
+}
+function rollbackDeveloperPatchMission(mission){
+  const actions=[];
+  if(!mission||mission.type!=='developer_patch')return{ok:true,actions};
+  const input=mission.input||{};
+  const patches=Array.isArray(input.patches)?input.patches:[];
+  for(const patch of patches){
+    try{
+      const loc=developerMissionTarget(input,patch);
+      const backup=developerPatchBackupLocation(mission.id,input,patch);
+      const baseline=String(patch.expectedSha256||'');
+      const desired=String(patch.sha256||'');
+      if(!fs.existsSync(loc.target)||!fs.statSync(loc.target).isFile()){
+        if(fs.existsSync(backup.target)){
+          fs.mkdirSync(path.dirname(loc.target),{recursive:true});
+          fs.copyFileSync(backup.target,loc.target);
+          const restored=fileHash(loc.target);
+          actions.push({file:loc.relative,restored:restored===baseline,reason:'target_missing'});
+        }else actions.push({file:loc.relative,restored:false,reason:'backup_missing'});
+        continue;
+      }
+      const current=fileHash(loc.target);
+      if(current===baseline){
+        actions.push({file:loc.relative,restored:true,reused:true});
+        continue;
+      }
+      if(current!==desired){
+        actions.push({file:loc.relative,restored:false,reason:'external_conflict'});
+        continue;
+      }
+      if(!fs.existsSync(backup.target)||!fs.statSync(backup.target).isFile()){
+        actions.push({file:loc.relative,restored:false,reason:'backup_missing'});
+        continue;
+      }
+      fs.copyFileSync(backup.target,loc.target);
+      const restored=fileHash(loc.target);
+      actions.push({file:loc.relative,restored:restored===baseline});
+    }catch(e){
+      actions.push({file:String(patch&&patch.path||''),restored:false,reason:String(e.message||e).slice(0,220)});
+    }
+  }
+  return{ok:actions.every(x=>x.restored===true),actions};
+}
+
 function approveMissionGate({missionId=''}={}){
   const engine=getMissionEngine();
   let mission=null;
@@ -4166,6 +4299,33 @@ async function verifyUncertainCampaignStep(mission){
     return engine.resolveUncertainStep(WORKSPACE,mission.id,{completed:false,note:'Browser preparation/verification is safe to retry'});
   }
   if(step.name==='browser_click'){
+    return mission;
+  }
+
+  if(step.name==='dev_patch_prepare'||step.name==='dev_patch_verify'){
+    return engine.resolveUncertainStep(WORKSPACE,mission.id,{completed:false,note:'Developer patch prepare/verify is safe to retry'});
+  }
+  if(/^dev_patch_file_\d+$/.test(step.name)){
+    const patches=Array.isArray(input.patches)?input.patches:[];
+    const index=Math.max(0,Number(step.meta&&step.meta.fileIndex)||0);
+    const patch=patches[index];
+    if(!patch)return mission;
+    const loc=developerMissionTarget(input,patch);
+    if(!fs.existsSync(loc.target)||!fs.statSync(loc.target).isFile())return mission;
+    const current=fileHash(loc.target);
+    const desired=String(patch.sha256||'');
+    const baseline=String(patch.expectedSha256||'');
+    if(current===desired){
+      const backup=developerPatchBackupLocation(mission.id,input,patch);
+      return engine.resolveUncertainStep(WORKSPACE,mission.id,{
+        completed:true,
+        artifact:{file:loc.relative,beforeSha256:baseline,afterSha256:desired,backup:backup.relative,changed:true,recovered:true},
+        note:'Patched file hash verified after interruption'
+      });
+    }
+    if(current===baseline){
+      return engine.resolveUncertainStep(WORKSPACE,mission.id,{completed:false,note:'Patch write did not persist; safe retry'});
+    }
     return mission;
   }
 
@@ -4465,6 +4625,121 @@ async function runDurableMission(id){
         continue;
       }
 
+      if(step.name==='dev_patch_prepare'){
+        const input=mission.input||{};
+        const patches=Array.isArray(input.patches)?input.patches:[];
+        if(!patches.length){
+          mission=engine.failStep(WORKSPACE,id,{code:'DEV_PATCH_EMPTY',message:'Patch dosyası bulunamadı.',retryable:false});
+          return mission;
+        }
+        const checked=[];
+        for(const patch of patches){
+          const loc=developerMissionTarget(input,patch);
+          if(!fs.existsSync(loc.target)||!fs.statSync(loc.target).isFile()){
+            mission=engine.failStep(WORKSPACE,id,{code:'DEV_PATCH_TARGET_MISSING',message:'Patch hedefi bulunamadı: '+patch.path,retryable:false});
+            return mission;
+          }
+          const current=fileHash(loc.target);
+          if(current!==String(patch.expectedSha256||'')){
+            mission=engine.failStep(WORKSPACE,id,{code:'PROJECT_FILE_CONFLICT',message:'Patch başlamadan dosya değişmiş; otomatik üzerine yazma engellendi: '+patch.path,retryable:false});
+            return mission;
+          }
+          checked.push(loc.relative);
+        }
+        const backupRoot=path.resolve(MEMORY_DIR,'developer-patches',String(id).replace(/[^A-Za-z0-9_-]/g,'_'));
+        fs.mkdirSync(backupRoot,{recursive:true});
+        mission=engine.completeStep(WORKSPACE,id,{artifact:{project:developerProjectSlug(input.projectName),files:checked,baselineVerified:true,backupRoot:path.relative(WORKSPACE,backupRoot)}});
+        continue;
+      }
+
+      if(/^dev_patch_file_\d+$/.test(step.name)){
+        const input=mission.input||{};
+        const patches=Array.isArray(input.patches)?input.patches:[];
+        const index=Math.max(0,Number(step.meta&&step.meta.fileIndex)||0);
+        const patch=patches[index];
+        if(!patch){
+          const rollback=rollbackDeveloperPatchMission(engine.loadMission(WORKSPACE,id));
+          mission=engine.failStep(WORKSPACE,id,{code:'DEV_PATCH_FILE_MISSING',message:'Patch dosya girdisi bulunamadı. rollback='+(rollback.ok?'ok':'check'),retryable:false});
+          return mission;
+        }
+        const loc=developerMissionTarget(input,patch);
+        const baseline=String(patch.expectedSha256||'');
+        const desired=String(patch.sha256||crypto.createHash('sha256').update(String(patch.content||''),'utf8').digest('hex'));
+        if(!fs.existsSync(loc.target)||!fs.statSync(loc.target).isFile()){
+          const rollback=rollbackDeveloperPatchMission(engine.loadMission(WORKSPACE,id));
+          mission=engine.failStep(WORKSPACE,id,{code:'DEV_PATCH_TARGET_MISSING',message:'Patch hedefi kayboldu: '+patch.path+' · rollback='+(rollback.ok?'ok':'check'),retryable:false});
+          return mission;
+        }
+        const current=fileHash(loc.target);
+        if(current===desired){
+          const backup=developerPatchBackupLocation(id,input,patch);
+          mission=engine.completeStep(WORKSPACE,id,{artifact:{file:loc.relative,beforeSha256:baseline,afterSha256:desired,backup:backup.relative,reused:true,recovered:true}});
+          continue;
+        }
+        if(current!==baseline){
+          const rollback=rollbackDeveloperPatchMission(engine.loadMission(WORKSPACE,id));
+          mission=engine.failStep(WORKSPACE,id,{code:'PROJECT_FILE_CONFLICT',message:'Dosya patch baseline sonrası değişmiş; üzerine yazma durduruldu: '+patch.path+' · rollback='+(rollback.ok?'ok':'check'),retryable:false});
+          return mission;
+        }
+        const backup=developerPatchBackupLocation(id,input,patch);
+        fs.mkdirSync(path.dirname(backup.target),{recursive:true});
+        if(fs.existsSync(backup.target)){
+          if(!fs.statSync(backup.target).isFile()||fileHash(backup.target)!==baseline){
+            const rollback=rollbackDeveloperPatchMission(engine.loadMission(WORKSPACE,id));
+            mission=engine.failStep(WORKSPACE,id,{code:'DEV_PATCH_BACKUP_CONFLICT',message:'Rollback yedeği doğrulanamadı: '+patch.path+' · rollback='+(rollback.ok?'ok':'check'),retryable:false});
+            return mission;
+          }
+        }else{
+          fs.copyFileSync(loc.target,backup.target);
+          if(fileHash(backup.target)!==baseline){
+            mission=engine.failStep(WORKSPACE,id,{code:'DEV_PATCH_BACKUP_VERIFY_FAILED',message:'Rollback yedeği doğrulanamadı: '+patch.path,retryable:false});
+            return mission;
+          }
+        }
+        const tmp=loc.target+'.jarvis-patch-'+process.pid+'-'+Date.now()+'.tmp';
+        fs.writeFileSync(tmp,String(patch.content||''),'utf8');
+        if(fileHash(tmp)!==desired){
+          try{fs.unlinkSync(tmp)}catch(_){}
+          const rollback=rollbackDeveloperPatchMission(engine.loadMission(WORKSPACE,id));
+          mission=engine.failStep(WORKSPACE,id,{code:'DEV_PATCH_TEMP_VERIFY_FAILED',message:'Geçici patch dosyası doğrulanamadı: '+patch.path+' · rollback='+(rollback.ok?'ok':'check'),retryable:false});
+          return mission;
+        }
+        fs.copyFileSync(tmp,loc.target);
+        try{fs.unlinkSync(tmp)}catch(_){}
+        const actual=fileHash(loc.target);
+        if(actual!==desired){
+          try{fs.copyFileSync(backup.target,loc.target)}catch(_){}
+          const rollback=rollbackDeveloperPatchMission(engine.loadMission(WORKSPACE,id));
+          mission=engine.failStep(WORKSPACE,id,{code:'DEV_PATCH_WRITE_VERIFY_FAILED',message:'Patch yazımı doğrulanamadı: '+patch.path+' · rollback='+(rollback.ok?'ok':'check'),retryable:false});
+          return mission;
+        }
+        mission=engine.completeStep(WORKSPACE,id,{artifact:{file:loc.relative,beforeSha256:baseline,afterSha256:actual,backup:backup.relative,changed:true,reused:false}});
+        continue;
+      }
+
+      if(step.name==='dev_patch_verify'){
+        const input=mission.input||{};
+        const patches=Array.isArray(input.patches)?input.patches:[];
+        const verified=[];
+        try{
+          for(const patch of patches){
+            const loc=developerMissionTarget(input,patch);
+            const desired=String(patch.sha256||'');
+            if(!fs.existsSync(loc.target)||!fs.statSync(loc.target).isFile()||fileHash(loc.target)!==desired){
+              throw new Error('Patch final hash doğrulaması başarısız: '+String(patch.path||''));
+            }
+            const validation=validateDeveloperPatchedFile(loc.target);
+            verified.push({file:loc.relative,validator:validation.validator});
+          }
+        }catch(e){
+          const rollback=rollbackDeveloperPatchMission(engine.loadMission(WORKSPACE,id));
+          mission=engine.failStep(WORKSPACE,id,{code:'DEV_PATCH_VERIFY_FAILED',message:String(e.message||e).slice(0,700)+' · rollback='+(rollback.ok?'ok':'check'),retryable:false});
+          return mission;
+        }
+        mission=engine.completeStep(WORKSPACE,id,{artifact:{project:developerProjectSlug(input.projectName),files:verified,verified:true,rollbackAvailable:true}});
+        continue;
+      }
+
       if(step.name==='dev_prepare'){
         const input=mission.input||{};
         const projectName=developerProjectSlug(input.projectName||mission.label);
@@ -4532,7 +4807,11 @@ async function runDurableMission(id){
       mission=engine.failStep(WORKSPACE,id,{code:'UNKNOWN_MISSION_STEP',message:'Bilinmeyen görev adımı: '+step.name,retryable:false});
       return mission;
     }catch(e){
-      const message=String(e&&e.message||e).slice(0,1000);
+      let message=String(e&&e.message||e).slice(0,1000);
+      if(mission&&mission.type==='developer_patch'){
+        const rollback=rollbackDeveloperPatchMission(engine.loadMission(WORKSPACE,id));
+        message=(message+' · rollback='+(rollback.ok?'ok':'check')).slice(0,1000);
+      }
       if(message==='SHOPIFY_NOT_CONNECTED'){
         mission=engine.failStep(WORKSPACE,id,{code:'SHOPIFY_NOT_CONNECTED',message:'Shopify yerel bağlantısı kurulmalı.',retryable:true,dependency:'shopify'});
         return mission;
@@ -4698,7 +4977,7 @@ async function buildPcAcceptanceSnapshot(){
   try{commerce=await getCommerceEngine().status(WORKSPACE)}catch(e){commerce={ok:false,connected:false,error:String(e.message||e).slice(0,240)}}
   try{youtube=await getYoutubeStudio().status(getBrowserOperator(),WORKSPACE)}catch(e){youtube={ok:false,running:false,loggedIn:false,error:String(e.message||e).slice(0,240)}}
   const missions=missionHealthSnapshot();
-  const checks={workerVersion:WORKER_VERSION==='2.94.0',missionRuntime:!!(missions&&missions.ok&&missions.autoResume),creatorEngineLoaded:!!(creator&&!creator.error),browserOperatorLoaded:!!(browser&&!browser.error),commerceEngineLoaded:!!(commerce&&!commerce.error),youtubeStudioLoaded:!!(youtube&&!youtube.error),silentStartup:process.platform==='win32'?startup.silentOk:true,autoUpdateReady:!!(startup.selfUpdate&&startup.selfUpdate.configured)};
+  const checks={workerVersion:WORKER_VERSION==='2.95.0',missionRuntime:!!(missions&&missions.ok&&missions.autoResume),creatorEngineLoaded:!!(creator&&!creator.error),browserOperatorLoaded:!!(browser&&!browser.error),commerceEngineLoaded:!!(commerce&&!commerce.error),youtubeStudioLoaded:!!(youtube&&!youtube.error),silentStartup:process.platform==='win32'?startup.silentOk:true,autoUpdateReady:!!(startup.selfUpdate&&startup.selfUpdate.configured)};
   const corePass=Object.values(checks).every(Boolean);
   const accountSetup={shopifyConnected:!!(commerce&&commerce.ok&&commerce.connected),youtubeLoggedIn:!!(youtube&&youtube.ok&&youtube.loggedIn)};
   const snapshot={ok:true,generatedAt,worker:{version:WORKER_VERSION,name:NAME,platform:process.platform,arch:process.arch},checks,corePass,startup,update:startup.selfUpdate,creator:{ready:!!(creator&&creator.ok),assets:Number(creator&&creator.assets||0),outputDir:creator&&creator.outputDir||null,installable:!!(creator&&creator.installable)},browser:{running:!!(browser&&browser.running),browser:browser&&browser.browser||null,tabs:Array.isArray(browser&&browser.tabs)?browser.tabs.length:0,profile:browser&&browser.profile||null},commerce:{connected:accountSetup.shopifyConnected,shop:commerce&&commerce.shop||null,apiVersion:commerce&&commerce.apiVersion||null,message:String(commerce&&commerce.message||'').slice(0,300)},youtube:{running:!!(youtube&&youtube.running),loggedIn:accountSetup.youtubeLoggedIn,title:youtube&&youtube.title||null,url:youtube&&youtube.url||null,message:String(youtube&&youtube.message||'').slice(0,300)},missions,accountSetup};
