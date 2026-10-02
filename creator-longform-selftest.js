@@ -21,7 +21,7 @@ for(const cap of [
   assert.ok(worker.includes("'"+cap+"'"),cap+' missing');
 }
 
-assert.ok(source.includes('function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId=\'\',assetHashes=[]})'),'long-form renderer missing');
+assert.ok(source.includes('function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId=\'\',assetHashes=[],professionalMode=false})'),'long-form renderer missing');
 assert.ok(source.includes('function probeRenderedLongform(file,ffprobe)'),'long-form probe missing');
 assert.ok(source.includes("codec:String(video&&video.codec_name||'').toLowerCase()==='h264'"),'H.264 long-form gate missing');
 assert.ok(source.includes("width:Number(video&&video.width)===1920"),'1920 long-form width gate missing');
