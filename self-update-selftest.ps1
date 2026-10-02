@@ -22,6 +22,7 @@ $required=@(
   'worker.js',
   'jarvis-commerce-engine.js',
   'jarvis-shopify-connect.ps1',
+  'jarvis-youtube-studio.js',
   'jarvis-startup.ps1',
   'JARVIS-STARTUP-HIDDEN.vbs',
   'install-jarvis-startup.ps1',

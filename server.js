@@ -260,6 +260,8 @@ function requiredCapability(command){
   if(/^(?:creator motor durumu|creator engine status|video motor durumu|creator motorunu hazırla|creator motorunu hazirla|creator engine hazırla|creator engine hazirla)/.test(c))return'creator_video_v2';
   if(/^(?:shorts oluştur|shorts olustur|video oluştur|video olustur)(?:\s+[^:]+)?\s*:\s*[\s\S]+$/.test(c))return'creator_video_v2';
   if(/^(?:browser operatör durumu|browser operator durumu|browser operator status|browser profilini aç|browser profilini ac|browser operator aç|browser operator ac|youtube studio aç|youtube studio ac|shopify admin aç|shopify admin ac|browser sayfasını oku|browser sayfasini oku|browser sayfasını analiz et|browser sayfasini analiz et)$/.test(c))return'browser_operator_v1';
+  if(/^(?:youtube yükleme durumu|youtube yukleme durumu|youtube taslak durumu|youtube upload status)$/.test(c))return'youtube_studio_draft_v1';
+  if(/^(?:youtube taslak yükle|youtube taslak yukle|youtube studio taslak yükle|youtube studio taslak yukle)\s+.+/.test(c))return'youtube_upload_prepare_v1';
   if(/^(?:mağaza durumu|magaza durumu|shopify durumu|shopify status|varova mağaza durumu|varova magaza durumu|shopify bağlantısını kur|shopify baglantisini kur|mağaza bağlantısını kur|magaza baglantisini kur|shopify bağla|shopify bagla)$/.test(c))return'commerce_engine_v1';
   if(/^(?:ürün taslağını hazırla|urun taslagini hazirla|yerel ürün taslağı oluştur|yerel urun taslagi olustur)\s*:\s*\{[\s\S]+\}$/.test(c))return'commerce_engine_v1';
   if(/^(?:shopify ürün taslağı ekle|shopify urun taslagi ekle|mağazaya taslak ürün ekle|magazaya taslak urun ekle|varova taslak ürün ekle|varova taslak urun ekle)(?:\s*:\s*\{[\s\S]+\}|\s+.+)$/.test(c))return'shopify_product_draft_v1';
@@ -295,7 +297,7 @@ const SAFE_AUTO_CAPS=new Set([
   'system_status','local_memory','process_list_v1','disk_status_v1',
   'network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1',
   'desktop_launch_v1','media_control_v1','power_status_v1','workspace_search_v1',
-  'creator_tts_v1','creator_video_v2','browser_operator_v1','commerce_engine_v1'
+  'creator_tts_v1','creator_video_v2','browser_operator_v1','commerce_engine_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1'
 ]);
 function deviceAllows(w,agent,need){
   if(!w||!w.approved||!workerOnline(w))return false;

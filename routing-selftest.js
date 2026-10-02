@@ -11,7 +11,9 @@ assert.ok(worker.includes("'browser_operator_v1'"),'worker browser capability mi
 assert.ok(server.includes("return'commerce_engine_v1'"),'commerce status/setup routing missing');
 assert.ok(server.includes("return'shopify_product_draft_v1'"),'Shopify draft routing missing');
 assert.ok(server.includes("return'shopify_publish_v1'"),'Shopify publish routing missing');
-assert.ok(server.includes("'creator_tts_v1','creator_video_v2','browser_operator_v1','commerce_engine_v1'"),'safe local commerce status promotion missing');
+assert.ok(server.includes("return'youtube_studio_draft_v1'"),'YouTube Studio status routing missing');
+assert.ok(server.includes("return'youtube_upload_prepare_v1'"),'YouTube draft upload routing missing');
+assert.ok(server.includes("'creator_tts_v1','creator_video_v2','browser_operator_v1','commerce_engine_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1'"),'safe local commerce status promotion missing');
 assert.ok(worker.includes("getBrowserOperator().pageSnapshot(WORKSPACE)"),'browser snapshot command missing');
 assert.ok(worker.includes("getBrowserOperator().start(WORKSPACE,{url:'https://studio.youtube.com/'})"),'YouTube Studio browser command missing');
 assert.ok(worker.includes("getBrowserOperator().start(WORKSPACE,{url:'https://admin.shopify.com/'})"),'Shopify Admin browser command missing');
