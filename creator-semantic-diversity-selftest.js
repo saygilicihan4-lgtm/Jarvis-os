@@ -1,7 +1,7 @@
 const assert=require('assert');
 const semantic=require('./jarvis-creator-semantic-quality');
 
-assert.strictEqual(semantic.SEMANTIC_QUALITY_VERSION,'1.0');
+assert.strictEqual(semantic.SEMANTIC_QUALITY_VERSION,'1.1');
 
 const rows=[
   {
@@ -60,8 +60,9 @@ const zeroRows=rows.slice(0,2).map((x,i)=>({...x,path:'creator-assets/zero-'+i+'
 const fallback=semantic.diversifySemanticRows(zeroRows,{
   maxItems:12,minScore:1,maxSimilarity:0.72
 });
-assert.strictEqual(fallback.evidence.fallbackUsed,true,'all-zero catalog must retain deterministic fallback rather than returning nothing solely due lexical floor');
-assert.ok(fallback.rows.length>=1);
+assert.strictEqual(fallback.evidence.fallbackUsed,false,'semantic selector must not invent a low-relevance fallback');
+assert.strictEqual(fallback.evidence.relevanceFloorBlockedAll,true,'all-zero catalog must record relevance-floor rejection');
+assert.deepStrictEqual(fallback.rows,[],'all-zero semantic catalog must fail relevance closed');
 
 console.log('CREATOR SEMANTIC DIVERSITY V95 SELFTEST PASS',JSON.stringify({
   duplicateScore:Number(duplicateScore.toFixed(3)),
