@@ -77,7 +77,7 @@ const LOCAL_BRAIN_PERSONA_FILE=path.join(MEMORY_DIR,'brain-persona.json');
 const SPEECH_LEXICON_FILE=path.join(MEMORY_DIR,'speech-lexicon.json');
 const VOICE_PREFS_FILE=path.join(MEMORY_DIR,'voice-preferences.json');
 const DIALOGUE_FEEDBACK_FILE=path.join(MEMORY_DIR,'dialogue-feedback.json');
-const CREATOR_DAILY_PLAN_FILE=path.join(MEMORY_DIR,'creator-daily-longform-plan.json');
+const CREATOR_DAILY_PLAN_FILE=path.join(MEMORY_DIR,'creator-daily-longform.json');
 const TEST_MODE=process.env.JARVIS_TEST_MODE==='1';
 const FORCE_LOCAL_BRIDGE=process.env.JARVIS_LOCAL_BRIDGE_FORCE==='1';
 const LOCAL_STT_PORT=Number(process.env.JARVIS_STT_PORT||8768);
@@ -4705,6 +4705,16 @@ function findCreatorDailyMission(planId,dateKey){
     String(m.input&&m.input.dailyDate||'')===day
   )||null;
 }
+function creatorDailyAutoAssetBaselines(dateKey,maxItems=12){
+  const all=getCreatorEngine().listAssets(WORKSPACE);
+  if(!all.length)return[];
+  const seed=crypto.createHash('sha256').update('daily-longform-assets|'+String(dateKey||'')).digest().readUInt32BE(0);
+  const offset=seed%all.length;
+  const rotated=all.slice(offset).concat(all.slice(0,offset));
+  const selected=rotated.slice(0,Math.min(Math.max(1,Number(maxItems)||12),12,rotated.length))
+    .map(full=>path.relative(WORKSPACE,full).replace(/\\/g,'/'));
+  return normalizeCreatorLongformAssets(selected);
+}
 function creatorDailyTheme(dateKey){
   const themes=[
     'teknoloji ve yapay zeka','bilim ve uzay','tarih ve şaşırtıcı olaylar','insan davranışı ve psikoloji',
@@ -4801,7 +4811,9 @@ async function serviceCreatorDailyPlan({force=false}={}){
         creatorVoice:plan.creatorVoice,
         includeYouTube:plan.includeYouTube!==false,
         publish:false,
-        _creatorAssetBaselines:Array.isArray(plan.creatorAssets)?plan.creatorAssets:[],
+        _creatorAssetBaselines:Array.isArray(plan.creatorAssets)&&plan.creatorAssets.length
+          ?verifyCreatorLongformBaselines(plan.creatorAssets)
+          :creatorDailyAutoAssetBaselines(dateKey,12),
         _dailyPlanId:plan.planId,
         _dailyDate:dateKey
       });
