@@ -40,6 +40,9 @@ jobs:
           node --check mission-alerts-selftest.js
           node --check pc-acceptance-selftest.js
           node --check pc-mission-selftest.js
+          node --check jarvis-workspace-file-engine.js
+          node --check workspace-file-engine-selftest.js
+          node --check workspace-file-mission-selftest.js
           node --check pc-self-repair-selftest.js
           node --check youtube-studio-selftest.js
           node --check commerce-engine-selftest.js
