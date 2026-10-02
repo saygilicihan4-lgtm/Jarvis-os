@@ -4,7 +4,7 @@ const os=require('os');
 const childProcess=require('child_process');
 const crypto=require('crypto');
 
-const ENGINE_VERSION='1.3';
+const ENGINE_VERSION='1.4';
 const CREATOR_PROFILE_VERSION='2.0';
 
 function execFile(exe,args,opts={}){
@@ -129,14 +129,14 @@ function pickAsset(workspace,name){
 function selectAssets(workspace,name,maxScenes=5){
   const assets=listAssets(workspace);
   if(!assets.length)return[];
-  const limit=Math.max(1,Math.min(5,Number(maxScenes)||5,assets.length));
+  const limit=Math.max(1,Math.min(24,Number(maxScenes)||5,assets.length));
   const h=crypto.createHash('sha1').update('storyboard:'+String(name||'')).digest();
   const offset=h.readUInt32BE(0)%assets.length;
   const rotated=assets.slice(offset).concat(assets.slice(0,offset));
   return rotated.slice(0,limit);
 }
 function resolveAssetSelection(workspace,assetFiles,maxScenes=5){
-  const rows=Array.isArray(assetFiles)?assetFiles.filter(Boolean).slice(0,Math.max(1,Math.min(5,Number(maxScenes)||5))):[];
+  const rows=Array.isArray(assetFiles)?assetFiles.filter(Boolean).slice(0,Math.max(1,Math.min(24,Number(maxScenes)||5))):[];
   if(!rows.length)return[];
   const dirs=creatorDirs(workspace);
   const assetRoot=fs.realpathSync(dirs.assets);
@@ -283,6 +283,60 @@ function probeRenderedShort(file,ffprobe){
     return{ok:false,code:'CREATOR_QUALITY_PROBE_FAILED',message:String(e.message||e).slice(0,500)};
   }
 }
+function probeRenderedLongform(file,ffprobe){
+  if(!ffprobe)return{ok:false,code:'FFPROBE_MISSING',message:'Long-form kalite doğrulaması için FFprobe gerekli.'};
+  if(!file||!fs.existsSync(file))return{ok:false,code:'CREATOR_LONGFORM_OUTPUT_MISSING',message:'Long-form MP4 bulunamadı.'};
+  try{
+    const raw=execFile(ffprobe,[
+      '-v','error',
+      '-show_entries','stream=index,codec_type,codec_name,width,height,r_frame_rate:format=duration,size,format_name',
+      '-of','json',
+      file
+    ],{timeout:30000,maxBuffer:1024*1024*2}).trim();
+    const data=JSON.parse(raw||'{}');
+    const streams=Array.isArray(data.streams)?data.streams:[];
+    const video=streams.find(x=>x&&x.codec_type==='video');
+    const audio=streams.find(x=>x&&x.codec_type==='audio');
+    const format=data&&data.format||{};
+    const duration=Number(format.duration);
+    const declaredSize=Number(format.size);
+    const actualSize=Number(fs.statSync(file).size||0);
+    const rate=String(video&&video.r_frame_rate||'0/1').split('/');
+    const fpsDen=Number(rate[1]||1),fpsNum=Number(rate[0]||0);
+    const fps=fpsDen?fpsNum/fpsDen:0;
+    const checks={
+      video:!!video,
+      audio:!!audio,
+      codec:String(video&&video.codec_name||'').toLowerCase()==='h264',
+      width:Number(video&&video.width)===1920,
+      height:Number(video&&video.height)===1080,
+      fps:Number.isFinite(fps)&&Math.abs(fps-30)<=0.05,
+      duration:Number.isFinite(duration)&&duration>=540&&duration<=660,
+      container:String(format.format_name||'').toLowerCase().split(',').includes('mp4'),
+      size:Number.isFinite(actualSize)&&actualSize>=1024*1024&&(!Number.isFinite(declaredSize)||Math.abs(declaredSize-actualSize)<=16)
+    };
+    const ok=Object.values(checks).every(Boolean);
+    return{
+      ok,
+      code:ok?'CREATOR_LONGFORM_QUALITY_PASS':'CREATOR_LONGFORM_QUALITY_FAILED',
+      checks,
+      measured:{
+        videoCodec:String(video&&video.codec_name||''),
+        audioCodec:String(audio&&audio.codec_name||''),
+        width:Number(video&&video.width||0),
+        height:Number(video&&video.height||0),
+        fps:Number(Number(fps||0).toFixed(3)),
+        duration:Number(Number(duration||0).toFixed(3)),
+        bytes:actualSize,
+        container:String(format.format_name||'')
+      },
+      message:ok?'Creator long-form kalite kapısı geçti.':'Creator long-form teknik kalite kapısı başarısız.'
+    };
+  }catch(e){
+    return{ok:false,code:'CREATOR_LONGFORM_QUALITY_PROBE_FAILED',message:String(e.message||e).slice(0,500)};
+  }
+}
+
 function splitCaptionSegments(text){
   const clean=String(text||'').replace(/\s+/g,' ').trim();
   if(!clean)return[];
@@ -484,6 +538,168 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
   };
 }
 
+function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId='',assetHashes=[]}){
+  if(!workspace)throw new Error('workspace required');
+  if(!voicePath||!fs.existsSync(voicePath))throw new Error('creator long-form voice file missing');
+  const status=ffmpegStatus(workspace);
+  if(!status.ok||!status.ffprobe){
+    const e=new Error('Long-form Creator için FFmpeg + FFprobe gerekli.');
+    e.code=!status.ok?'FFMPEG_MISSING':'FFPROBE_MISSING';
+    throw e;
+  }
+
+  const cleanScript=String(script||'').replace(/\s+/g,' ').trim();
+  if(!cleanScript)throw new Error('script required');
+
+  const measured=audioDurationSeconds(voicePath,status.ffprobe);
+  if(!measured||measured<539.5||measured>659.5){
+    const e=new Error('Long-form anlatım süresi 9-11 dakika aralığında olmalı; ölçülen '+Number(measured||0).toFixed(1)+' sn.');
+    e.code='LONGFORM_VOICE_DURATION_OUT_OF_RANGE';
+    e.duration=measured||0;
+    throw e;
+  }
+  const duration=Math.max(540,Math.min(660,measured+0.35));
+  const dirs=creatorDirs(workspace);
+  const base=safeName(name);
+  const jobDir=ensureDir(path.join(dirs.jobs,base));
+  const outFile=path.join(dirs.output,base+'.mp4');
+  const srtFile=path.join(jobDir,base+'.srt');
+  const metaFile=path.join(jobDir,'job.json');
+
+  const explicitAssets=Array.isArray(assetFiles)&&assetFiles.length>0;
+  const assets=explicitAssets?resolveAssetSelection(workspace,assetFiles,20):selectAssets(workspace,base,12);
+  const transition=assets.length>1?0.35:0;
+  const storyboard=buildStoryboard(assets,duration,transition);
+  const captionsBurned=supportsSubtitles(status.ffmpeg);
+  fs.writeFileSync(srtFile,buildSrt(cleanScript,duration),'utf8');
+
+  let args=[];
+  if(assets.length){
+    args=['-y','-hide_banner','-loglevel','error'];
+    for(const asset of assets)args.push('-stream_loop','-1','-i',asset);
+    args.push('-i',voicePath);
+
+    const filters=[];
+    storyboard.forEach((scene,i)=>{
+      filters.push(
+        '['+i+':v]'+
+        'scale=1920:1080:force_original_aspect_ratio=increase,'+
+        'crop=1920:1080,'+
+        'fps=30,setsar=1,'+
+        'trim=duration='+scene.duration.toFixed(3)+','+
+        'setpts=PTS-STARTPTS,'+
+        'format=yuv420p[v'+i+']'
+      );
+    });
+
+    let videoLabel='v0';
+    if(storyboard.length>1){
+      for(let i=1;i<storyboard.length;i++){
+        const out='lx'+i;
+        const offset=i*(storyboard[0].duration-transition);
+        filters.push('['+videoLabel+'][v'+i+']xfade=transition=fade:duration='+transition.toFixed(3)+':offset='+offset.toFixed(3)+'['+out+']');
+        videoLabel=out;
+      }
+    }
+
+    if(captionsBurned){
+      const subtitlePath=ffmpegFilterPath(srtFile);
+      filters.push(
+        '['+videoLabel+']subtitles=filename=\''+subtitlePath+'\':'+
+        "force_style='FontName=Arial,FontSize=26,PrimaryColour=&H00FFFFFF,OutlineColour=&H90000000,BorderStyle=1,Outline=3,Shadow=0,Alignment=2,MarginV=62'"+
+        '[lvout]'
+      );
+      videoLabel='lvout';
+    }
+
+    args.push(
+      '-t',duration.toFixed(3),
+      '-filter_complex',filters.join(';'),
+      '-map','['+videoLabel+']',
+      '-map',String(assets.length)+':a:0',
+      '-c:v','libx264','-preset','veryfast','-crf','20','-pix_fmt','yuv420p',
+      '-c:a','aac','-b:a','192k','-af','apad=pad_dur=1',
+      '-movflags','+faststart',
+      outFile
+    );
+  }else{
+    const graph='color=c=0x030712:s=1920x1080:r=30:d='+duration.toFixed(3)+',noise=alls=7:allf=t+u';
+    args=[
+      '-y','-hide_banner','-loglevel','error',
+      '-f','lavfi','-i',graph,
+      '-i',voicePath,
+      '-t',duration.toFixed(3)
+    ];
+    if(captionsBurned){
+      args.push(
+        '-vf',"subtitles=filename='"+ffmpegFilterPath(srtFile)+"':force_style='FontName=Arial,FontSize=26,PrimaryColour=&H00FFFFFF,OutlineColour=&H90000000,BorderStyle=1,Outline=3,Shadow=0,Alignment=2,MarginV=62'"
+      );
+    }
+    args.push(
+      '-map','0:v:0','-map','1:a:0',
+      '-c:v','libx264','-preset','veryfast','-crf','20','-pix_fmt','yuv420p',
+      '-c:a','aac','-b:a','192k','-af','apad=pad_dur=1',
+      '-movflags','+faststart',
+      outFile
+    );
+  }
+
+  try{
+    execFile(status.ffmpeg,args,{timeout:45*60*1000,maxBuffer:1024*1024*48});
+  }catch(err){
+    const message=String((err&&err.stderr)||err.message||err).slice(-4000);
+    throw new Error('FFmpeg long-form render başarısız: '+message);
+  }
+
+  if(!fs.existsSync(outFile)||fs.statSync(outFile).size<1024*1024)throw new Error('Rendered long-form MP4 verification failed');
+  const quality=probeRenderedLongform(outFile,status.ffprobe);
+  if(!quality.ok){
+    const e=new Error(String(quality.message||'Creator long-form quality gate failed')+' · '+String(quality.code||'CREATOR_LONGFORM_QUALITY_FAILED'));
+    e.code=String(quality.code||'CREATOR_LONGFORM_QUALITY_FAILED');
+    e.quality=quality;
+    throw e;
+  }
+
+  const meta={
+    engine:'JARVIS_CREATOR_ENGINE',
+    version:ENGINE_VERSION,
+    profileVersion:CREATOR_PROFILE_VERSION,
+    mode:'longform',
+    createdAt:new Date().toISOString(),
+    missionId:String(missionId||'').trim().slice(0,100)||null,
+    name:base,
+    script:cleanScript,
+    assetSelection:explicitAssets?'explicit':'automatic',
+    sourceAssetHashes:Array.isArray(assetHashes)?assetHashes.map(x=>String(x||'').slice(0,64)).filter(Boolean).slice(0,20):[],
+    voicePath:path.relative(workspace,voicePath),
+    sourceAsset:assets[0]?path.relative(workspace,assets[0]):null,
+    sourceAssets:assets.map(x=>path.relative(workspace,x)),
+    storyboard:storyboard.map(x=>({...x,file:path.relative(workspace,x.file)})),
+    captionsBurned,
+    quality,
+    output:path.relative(workspace,outFile),
+    subtitle:path.relative(workspace,srtFile),
+    profile:{width:1920,height:1080,fps:30,codec:'H.264',audio:'AAC',durationTarget:'9-11m',multiScene:true,transition:'fade'}
+  };
+  fs.writeFileSync(metaFile,JSON.stringify(meta,null,2),'utf8');
+
+  return{
+    ok:true,
+    message:'Long-form video hazır: '+outFile+' · 1920x1080 · 30 FPS · H.264 · '+Number(duration/60).toFixed(1)+' dk · '+(assets.length?assets.length+' sahne':'procedural hareketli arka plan')+(captionsBurned?' · altyazı videoya işlendi':' · altyazı ayrı SRT'),
+    output:outFile,
+    subtitle:srtFile,
+    metadata:metaFile,
+    asset:assets[0]||null,
+    assets,
+    storyboard,
+    sceneCount:assets.length,
+    captionsBurned,
+    duration,
+    quality,
+    profileVersion:CREATOR_PROFILE_VERSION
+  };
+}
+
 module.exports={
   ENGINE_VERSION,
   CREATOR_PROFILE_VERSION,
@@ -496,7 +712,9 @@ module.exports={
   supportsSubtitles,
   ffmpegFilterPath,
   renderShort,
+  renderLongform,
   probeRenderedShort,
+  probeRenderedLongform,
   listAssets,
   resolveAssetSelection,
   inspectAsset,
