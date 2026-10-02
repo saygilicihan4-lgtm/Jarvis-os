@@ -3857,6 +3857,75 @@ function createShopifyProductMission(args={}){
     steps:['shopify_draft']
   });
 }
+
+function developerProjectSlug(value){
+  const s=String(value||'').trim().replace(/\s+/g,'-').replace(/[^A-Za-z0-9._-]/g,'-').replace(/-+/g,'-').replace(/^[-.]+|[-.]+$/g,'').slice(0,80);
+  if(!s||s==='.'||s==='..')throw new Error('Geçerli proje adı gerekli.');
+  return s;
+}
+function normalizeDeveloperFiles(args={},projectName='project'){
+  const allowedExt=new Set(['.html','.css','.js','.mjs','.cjs','.ts','.tsx','.jsx','.json','.md','.txt','.py','.yml','.yaml']);
+  const raw=Array.isArray(args.files)?args.files.slice(0,12):[];
+  let files=raw.map(x=>({
+    path:String(x&&x.path||'').replace(/\\/g,'/').replace(/^\/+/, '').trim(),
+    content:String(x&&x.content||'')
+  }));
+  if(!files.length){
+    const title=String(args.title||args.projectName||projectName).replace(/[<>]/g,'').trim().slice(0,100)||projectName;
+    const summary=String(args.summary||'JARVIS tarafından oluşturulan yerel web uygulaması.').replace(/[<>]/g,'').trim().slice(0,1200);
+    const features=Array.isArray(args.features)?args.features.map(x=>String(x||'').replace(/[<>]/g,'').trim()).filter(Boolean).slice(0,8):[];
+    const featureHtml=features.length?features.map(x=>'<li>'+x.replace(/&/g,'&amp;')+'</li>').join(''):'<li>Başlangıç sürümü hazır</li>';
+    files=[
+      {path:'index.html',content:'<!doctype html>\n<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+title+'</title><link rel="stylesheet" href="styles.css"></head><body><main><h1>'+title+'</h1><p>'+summary.replace(/&/g,'&amp;')+'</p><ul>'+featureHtml+'</ul><button id="jarvisAction">Çalıştır</button><p id="status"></p></main><script src="app.js"></script></body></html>\n'},
+      {path:'styles.css',content:'*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:#07111f;color:#eaf7ff}main{max-width:760px;margin:10vh auto;padding:32px;border:1px solid #2a607d;border-radius:18px;background:#0b1c2e}h1{margin-top:0}button{padding:12px 18px;border:0;border-radius:10px;cursor:pointer}#status{opacity:.8}\n'},
+      {path:'app.js',content:"document.getElementById('jarvisAction').addEventListener('click',()=>{document.getElementById('status').textContent='JARVIS proje başlangıcı çalışıyor.'})\n"},
+      {path:'README.md',content:'# '+title+'\n\n'+summary+'\n\n## Çalıştırma\n\nindex.html dosyasını tarayıcıda açın.\n'}
+    ];
+  }
+  let total=0;
+  const seen=new Set();
+  files=files.map((x,i)=>{
+    const rel=String(x.path||'').replace(/\\/g,'/').replace(/^\/+/, '').trim();
+    if(!rel||rel.includes('..')||path.isAbsolute(rel))throw new Error('Geçersiz proje dosya yolu: '+rel);
+    if(isSensitiveWorkspacePath(projectName+'/'+rel))throw new Error('Hassas proje dosya yolu engellendi: '+rel);
+    const ext=path.extname(rel).toLowerCase();
+    if(!allowedExt.has(ext))throw new Error('Bu proje dosya türüne izin verilmiyor: '+ext);
+    const key=rel.toLowerCase();
+    if(seen.has(key))throw new Error('Tekrarlanan proje dosyası: '+rel);
+    seen.add(key);
+    const content=String(x.content||'');
+    const bytes=Buffer.byteLength(content,'utf8');
+    if(bytes>60000)throw new Error('Proje dosyası 60KB sınırını aşıyor: '+rel);
+    total+=bytes;
+    return{path:rel,content,sha256:crypto.createHash('sha256').update(content,'utf8').digest('hex'),index:i};
+  });
+  if(total>240000)throw new Error('Proje toplam içerik sınırı 240KB.');
+  return files;
+}
+function createDeveloperProjectMission(args={}){
+  const projectName=developerProjectSlug(args.projectName||args.name);
+  const files=normalizeDeveloperFiles(args,projectName);
+  if(!files.length)throw new Error('En az bir proje dosyası gerekli.');
+  const summary=String(args.summary||'').replace(/[\r\n]+/g,' ').trim().slice(0,1200);
+  const steps=[{name:'dev_prepare'}];
+  files.forEach((file,i)=>steps.push({name:'dev_file_'+String(i+1).padStart(2,'0'),meta:{fileIndex:i}}));
+  steps.push({name:'dev_verify'});
+  return getMissionEngine().createMission(WORKSPACE,{
+    type:'developer_project',
+    label:projectName,
+    input:{projectName,summary,files},
+    steps
+  });
+}
+function developerMissionTarget(input,file){
+  const projectName=developerProjectSlug(input&&input.projectName||'project');
+  const rel=String(file&&file.path||'').replace(/\\/g,'/').replace(/^\/+/, '').trim();
+  if(!rel||rel.includes('..')||isSensitiveWorkspacePath(projectName+'/'+rel))throw new Error('Geçersiz geliştirici dosya yolu.');
+  const root=safeFile(projectName);
+  const target=path.resolve(root,rel);
+  if(!(target===root||target.startsWith(root+path.sep)))throw new Error('Proje kökü dışına yazma engellendi.');
+  return{root,target,relative:path.relative(WORKSPACE,target)};
+}
 function missionSummaryText(m){
   if(!m)return'Kayıtlı görev bulunamadı.';
   const x=getMissionEngine().summarizeMission(m),step=x&&x.step;
