@@ -4,7 +4,7 @@ const assert=require('assert');
 const worker=fs.readFileSync('./worker.js','utf8');
 const startup=fs.readFileSync('./jarvis-startup.ps1','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.96.0'"),'worker 2.96.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.97.0'"),'worker 2.97.0 required');
 assert.ok(worker.includes('bootstrap_migration_v2'),'bootstrap v2 capability missing');
 assert.ok(worker.includes('bootstrap_migration_v3'),'bootstrap v3 capability missing');
 assert.ok(worker.includes('bootstrap_migration_v4'),'bootstrap v4 capability missing');
@@ -31,4 +31,5 @@ assert.ok(worker.includes("try{bootstrapRuntimeUpgrade()}catch(e)"),'runtime mig
 assert.ok(startup.includes('jarvis-self-update.ps1'),'canonical startup updater missing');
 assert.ok(startup.includes('jarvis-self-update.next.ps1'),'pending updater handoff missing');
 
+assert.ok(worker.includes("['jarvis-workspace-file-engine.js',\"WORKSPACE_FILE_ENGINE_VERSION='1.0'\"]"),'workspace file engine must be included in repair/bootstrap sync');
 console.log('BOOTSTRAP BRIDGE SELFTEST PASS');

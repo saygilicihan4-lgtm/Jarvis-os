@@ -2,7 +2,7 @@ const fs=require('fs');
 const assert=require('assert');
 
 const worker=fs.readFileSync('./worker.js','utf8');
-assert.ok(worker.includes("const WORKER_VERSION='2.96.0'"),'Worker 2.96.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.97.0'"),'Worker 2.97.0 required');
 assert.ok(worker.includes("name:'pc_acceptance_snapshot'"),'native acceptance tool missing');
 assert.ok(worker.includes("req.url==='/acceptance-snapshot'"),'acceptance endpoint missing');
 assert.ok(worker.includes("'pc_acceptance_snapshot_v1'"),'acceptance capability missing');
@@ -29,4 +29,5 @@ assert.ok(!block.includes('DEVICE_TOKEN'),'acceptance snapshot must not expose d
 assert.ok(!block.includes('deviceId'),'acceptance snapshot must not expose stable device id');
 assert.ok(worker.includes("(taskRegistered&&hiddenTaskAction)||fallbackRegistered"),'scheduled task must prove hidden launcher action');
 
+assert.ok(worker.includes("workspaceFileMissionReady:CAPS.includes('workspace_file_mission_v1')"),'workspace file mission readiness missing from acceptance');
 console.log('PC ACCEPTANCE SNAPSHOT SELFTEST PASS');

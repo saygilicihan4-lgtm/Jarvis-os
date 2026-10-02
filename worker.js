@@ -14,6 +14,8 @@ let youtubeStudio=null;
 try{youtubeStudio=require('./jarvis-youtube-studio')}catch(_){}
 let missionEngine=null;
 try{missionEngine=require('./jarvis-mission-engine')}catch(_){}
+let workspaceFileEngine=null;
+try{workspaceFileEngine=require('./jarvis-workspace-file-engine')}catch(_){}
 
 const BASE=(process.env.JARVIS_URL||'https://jarvis-os-1iuv.onrender.com').replace(/\/$/,'');
 const TOKEN=process.env.JARVIS_TOKEN||'';
@@ -38,10 +40,10 @@ const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
 const UPDATE_STATE_FILE=path.join(MEMORY_DIR,'update-state.json');
-const WORKER_VERSION='2.96.0';
+const WORKER_VERSION='2.97.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
 CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1','adaptive_model_router_v1','deep_model_fallback_v1','dynamic_chunk_prosody_v1','natural_pause_timing_v1','adaptive_turn_pacing_v1','latency_learning_v1','full_duplex_interrupt_v1','cancellable_agent_v1','adaptive_voice_profile_v1','spoken_voice_preference_v1','speaker_echo_rejection_v1','social_dialogue_v1','response_variation_v1','contextual_followup_v1','dialogue_feedback_learning_v1','social_preference_adaptation_v1','dynamic_wake_ack_v1','wake_ack_turn_timing_v1','auto_quality_escalation_v1','weak_response_escalation_v1','repair_quality_escalation_v1','social_momentum_v1','elliptical_turn_resolution_v1','conversation_cadence_v1','brevity_mirroring_v1','adaptive_response_length_v1','interruption_continuity_v1','spoken_resume_v1','partial_stream_resume_v1');
-CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1','mission_auto_resume_v1','mission_health_v1','pc_acceptance_snapshot_v1','silent_startup_diagnostics_v1','pc_acceptance_hardened_v1','bootstrap_migration_v6','mission_fair_scheduler_v1','pc_self_repair_v1','creator_multiscene_v2','creator_burned_captions_v1','cloud_mission_telemetry_v1','creator_short_mission_v1','shopify_product_mission_v1','developer_project_mission_v1','approval_gate_v1','shopify_publish_approval_v1','browser_form_mission_v1','browser_form_prepare_v1','browser_click_approval_v1','youtube_publish_approval_v1','youtube_publish_receipt_v1','developer_patch_mission_v1','developer_patch_rollback_v1','pc_safe_mission_v1','pc_safe_action_catalog_v1','pc_mission_resume_v1');
+CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1','mission_auto_resume_v1','mission_health_v1','pc_acceptance_snapshot_v1','silent_startup_diagnostics_v1','pc_acceptance_hardened_v1','bootstrap_migration_v6','mission_fair_scheduler_v1','pc_self_repair_v1','creator_multiscene_v2','creator_burned_captions_v1','cloud_mission_telemetry_v1','creator_short_mission_v1','shopify_product_mission_v1','developer_project_mission_v1','approval_gate_v1','shopify_publish_approval_v1','browser_form_mission_v1','browser_form_prepare_v1','browser_click_approval_v1','youtube_publish_approval_v1','youtube_publish_receipt_v1','developer_patch_mission_v1','developer_patch_rollback_v1','pc_safe_mission_v1','pc_safe_action_catalog_v1','pc_mission_resume_v1','workspace_file_mission_v1','workspace_file_hash_guard_v1','workspace_file_no_overwrite_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -2478,6 +2480,35 @@ function nativeAgentTools(){
     {
       type:'function',
       function:{
+        name:'workspace_file_mission',
+        description:'JARVIS workspace içindeki mevcut dosyaları kalıcı görev olarak güvenli biçimde kopyala veya taşı. Workspace dışına çıkmaz, internal/hassas yolları kullanmaz, hedefin üzerine yazmaz ve restart sonrası SHA-256 durumunu doğrulamadan tekrar etmez. move işlemi hedef doğrulandıktan sonra kaynağı kaldırır; bağımsız delete işlemi yoktur.',
+        parameters:{
+          type:'object',
+          properties:{
+            label:{type:'string',description:'Görev için kısa açıklama.'},
+            operations:{
+              type:'array',
+              maxItems:12,
+              items:{
+                type:'object',
+                properties:{
+                  operation:{type:'string',enum:['copy','move']},
+                  source:{type:'string',description:'Workspace köküne göre mevcut kaynak dosya yolu.'},
+                  destination:{type:'string',description:'Workspace köküne göre yeni hedef dosya yolu; hedef klasörü önceden var olmalı.'}
+                },
+                required:['operation','source','destination'],
+                additionalProperties:false
+              }
+            }
+          },
+          required:['operations'],
+          additionalProperties:false
+        }
+      }
+    },
+    {
+      type:'function',
+      function:{
         name:'mission_status',
         description:'En son kalıcı JARVIS iş görevinin durumunu getir. Dış sistemlerde değişiklik yapmaz.',
         parameters:{type:'object',properties:{},additionalProperties:false}
@@ -2854,6 +2885,21 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
     }catch(e){
       return{ok:false,message:'Kalıcı PC görevi başlatılamadı: '+String(e.message||e).slice(0,650)};
     }
+  }else if(n==='workspace_file_mission'){
+    const intent=String(userText||'').toLocaleLowerCase('tr-TR');
+    if(!/(?:dosya|file|workspace|çalışma alanı|calisma alani|kopyala|copy|taşı|tasi|move|yeniden adlandır|yeniden adlandir)/i.test(intent)){
+      return{ok:false,message:'Kalıcı workspace dosya görevi yalnızca açık dosya kopyalama/taşıma isteğiyle başlatılır.'};
+    }
+    try{
+      const mission=createWorkspaceFileMission(a);
+      const out=await runDurableMission(mission.id);
+      return{
+        ok:out.status==='completed',
+        message:missionSummaryText(out)+(out.status==='needs_verification'?' · dosya durumu belirsiz; otomatik overwrite/silme yapılmadı':'')
+      };
+    }catch(e){
+      return{ok:false,message:'Kalıcı workspace dosya görevi başlatılamadı: '+String(e.message||e).slice(0,650)};
+    }
   }else if(n==='mission_status'){
     const latest=getMissionEngine().latestOpenMission(WORKSPACE)||getMissionEngine().listMissions(WORKSPACE,{limit:1})[0]||null;
     return{ok:true,message:missionSummaryText(latest)};
@@ -3074,6 +3120,7 @@ async function runNativeAgent(message,{maxRounds=4,signal=null}={}){
     'Kullanıcı aynı istekte Short üretip YouTube taslağına yüklemenizi isterse önce creator_render_short sonucundaki gerçek output yolunu al, sonra youtube_prepare_draft_upload çağır. Dosya yolu uydurma.',
     'Bir istek VAROVA ürünü + reklam videosu + YouTube taslağı gibi birden fazla dış adım içeriyorsa ayrı ayrı araç çağırmak yerine varova_campaign_mission kullan; böylece görev disk üzerinde kalıcı olur ve kesintiden sonra devam eder.',
     'Birden fazla güvenli yerel PC işi sırayla yapılacaksa veya iş restart sonrası sürmeliyse pc_safe_mission kullan. Yalnızca durum sorgusu, allowlist uygulama/site açma ve medya kontrollerini sıraya koy; shell/PowerShell, keyfi exe/path, silme, ödeme, public publish veya hesap değişikliği ekleme.',
+    'Workspace içindeki mevcut dosyaları kopyalama/taşıma işi restart sonrası sürmeli veya birden fazla dosyayı kapsıyorsa workspace_file_mission kullan. Hedefin üzerine yazma, workspace/internal/hassas yolları kullanma, bağımsız silme işlemi yapma. move yalnızca hedef hash doğrulandıktan sonra kaynak kaldırma anlamına gelir.',
     'Kullanıcı yarım işi "devam et", "kaldığın yerden sürdür" gibi ifadeyle sürdürmek isterse önce mission_status veya doğrudan resume_latest_mission kullan. Tamamlanmış adımı yeniden yapma.',
     'Kalıcı görev needs_verification durumundaysa belirsiz dış yan etkiyi otomatik tekrar etme; kopya ürün veya kopya video riski yerine doğrulamayı bekle.',
     'Kullanıcı bilgisayar testi, JARVIS testi, hazır mı veya kabul testi isterse pc_acceptance_snapshot kullan; bu salt-okunur denetimdir ve dış hesaplarda değişiklik yapmaz.',
@@ -3981,6 +4028,18 @@ function getMissionEngine(){
     throw new Error('Mission Engine load failed: '+e.message);
   }
 }
+function getWorkspaceFileEngine(){
+  if(workspaceFileEngine)return workspaceFileEngine;
+  const file=syncRepoRuntimeFile('jarvis-workspace-file-engine.js',"WORKSPACE_FILE_ENGINE_VERSION='1.0'");
+  if(!file)throw new Error('Workspace File Engine module could not be prepared');
+  try{
+    delete require.cache[require.resolve(file)];
+    workspaceFileEngine=require(file);
+    return workspaceFileEngine;
+  }catch(e){
+    throw new Error('Workspace File Engine load failed: '+e.message);
+  }
+}
 function cleanCampaignArgs(args={}){
   const tags=Array.isArray(args.tags)?args.tags.map(x=>String(x||'').trim()).filter(Boolean).slice(0,30):[];
   const images=Array.isArray(args.images)?args.images.map(x=>String(x||'').trim()).filter(x=>/^https:\/\//i.test(x)).slice(0,12):[];
@@ -4113,6 +4172,18 @@ function createPcSafeMission(args={}){
     type:'pc_safe',
     label,
     input:{actions},
+    steps
+  });
+}
+
+function createWorkspaceFileMission(args={}){
+  const operations=getWorkspaceFileEngine().normalizeOperations(WORKSPACE,args.operations);
+  const label=String(args.label||'Workspace dosya görevi').replace(/[\r\n]+/g,' ').trim().slice(0,160)||'Workspace dosya görevi';
+  const steps=operations.map((_,i)=>({name:'workspace_file_'+String(i+1).padStart(2,'0'),meta:{operationIndex:i}}));
+  return getMissionEngine().createMission(WORKSPACE,{
+    type:'workspace_file',
+    label,
+    input:{operations},
     steps
   });
 }
@@ -4403,6 +4474,25 @@ async function verifyUncertainCampaignStep(mission){
   if(!step||step.status!=='uncertain')return mission;
   const input=mission.input||{};
 
+  if(/^workspace_file_\d+$/.test(step.name)){
+    const operations=Array.isArray(input.operations)?input.operations:[];
+    const index=Math.max(0,Number(step.meta&&step.meta.operationIndex)||0);
+    const op=operations[index];
+    if(!op)return mission;
+    const check=getWorkspaceFileEngine().recoveryDecision(WORKSPACE,op);
+    if(check.decision==='completed'){
+      return engine.resolveUncertainStep(WORKSPACE,mission.id,{
+        completed:true,
+        artifact:{operation:op.operation,source:op.source,destination:op.destination,sha256:op.expectedSha256,bytes:Number(op.bytes||0),recovered:true},
+        note:'Workspace file operation verified by source/destination hashes'
+      });
+    }
+    if(check.decision==='retry'){
+      return engine.resolveUncertainStep(WORKSPACE,mission.id,{completed:false,note:'Workspace file operation did not start; baseline still safe to retry'});
+    }
+    return mission;
+  }
+
   if(/^pc_action_\d+$/.test(step.name)){
     const actions=Array.isArray(input.actions)?input.actions:[];
     const index=Math.max(0,Number(step.meta&&step.meta.actionIndex)||0);
@@ -4535,6 +4625,35 @@ async function runDurableMission(id){
     if(!step)throw new Error('Mission current step missing');
 
     try{
+      if(/^workspace_file_\d+$/.test(step.name)){
+        const input=mission.input||{};
+        const operations=Array.isArray(input.operations)?input.operations:[];
+        const index=Math.max(0,Number(step.meta&&step.meta.operationIndex)||0);
+        const op=operations[index];
+        if(!op){
+          mission=engine.failStep(WORKSPACE,id,{code:'WORKSPACE_FILE_OP_MISSING',message:'Workspace dosya operation girdisi bulunamadı.',retryable:false});
+          return mission;
+        }
+        const out=getWorkspaceFileEngine().applyOperation(WORKSPACE,op);
+        if(!out||out.ok!==true){
+          mission=engine.failStep(WORKSPACE,id,{
+            code:String(out&&out.code||'WORKSPACE_FILE_OP_FAILED'),
+            message:String(out&&out.message||'Workspace dosya işlemi doğrulanamadı.').slice(0,900),
+            retryable:false,
+            uncertain:!!(out&&out.uncertain)
+          });
+          return mission;
+        }
+        mission=engine.completeStep(WORKSPACE,id,{artifact:{
+          operation:out.operation,
+          source:out.source,
+          destination:out.destination,
+          sha256:out.sha256,
+          bytes:Number(out.bytes||0)
+        }});
+        continue;
+      }
+
       if(/^pc_action_\d+$/.test(step.name)){
         const input=mission.input||{};
         const actions=Array.isArray(input.actions)?input.actions:[];
@@ -5127,7 +5246,7 @@ async function buildPcAcceptanceSnapshot(){
   try{commerce=await getCommerceEngine().status(WORKSPACE)}catch(e){commerce={ok:false,connected:false,error:String(e.message||e).slice(0,240)}}
   try{youtube=await getYoutubeStudio().status(getBrowserOperator(),WORKSPACE)}catch(e){youtube={ok:false,running:false,loggedIn:false,error:String(e.message||e).slice(0,240)}}
   const missions=missionHealthSnapshot();
-  const checks={workerVersion:WORKER_VERSION==='2.96.0',pcMissionReady:CAPS.includes('pc_safe_mission_v1')&&CAPS.includes('pc_safe_action_catalog_v1'),missionRuntime:!!(missions&&missions.ok&&missions.autoResume),creatorEngineLoaded:!!(creator&&!creator.error),browserOperatorLoaded:!!(browser&&!browser.error),commerceEngineLoaded:!!(commerce&&!commerce.error),youtubeStudioLoaded:!!(youtube&&!youtube.error),silentStartup:process.platform==='win32'?startup.silentOk:true,autoUpdateReady:!!(startup.selfUpdate&&startup.selfUpdate.configured)};
+  const checks={workerVersion:WORKER_VERSION==='2.97.0',pcMissionReady:CAPS.includes('pc_safe_mission_v1')&&CAPS.includes('pc_safe_action_catalog_v1'),workspaceFileMissionReady:CAPS.includes('workspace_file_mission_v1')&&CAPS.includes('workspace_file_hash_guard_v1')&&CAPS.includes('workspace_file_no_overwrite_v1'),missionRuntime:!!(missions&&missions.ok&&missions.autoResume),creatorEngineLoaded:!!(creator&&!creator.error),browserOperatorLoaded:!!(browser&&!browser.error),commerceEngineLoaded:!!(commerce&&!commerce.error),youtubeStudioLoaded:!!(youtube&&!youtube.error),silentStartup:process.platform==='win32'?startup.silentOk:true,autoUpdateReady:!!(startup.selfUpdate&&startup.selfUpdate.configured)};
   const corePass=Object.values(checks).every(Boolean);
   const accountSetup={shopifyConnected:!!(commerce&&commerce.ok&&commerce.connected),youtubeLoggedIn:!!(youtube&&youtube.ok&&youtube.loggedIn)};
   const snapshot={ok:true,generatedAt,worker:{version:WORKER_VERSION,name:NAME,platform:process.platform,arch:process.arch},checks,corePass,startup,update:startup.selfUpdate,creator:{ready:!!(creator&&creator.ok),assets:Number(creator&&creator.assets||0),outputDir:creator&&creator.outputDir||null,installable:!!(creator&&creator.installable)},browser:{running:!!(browser&&browser.running),browser:browser&&browser.browser||null,tabs:Array.isArray(browser&&browser.tabs)?browser.tabs.length:0,profile:browser&&browser.profile||null},commerce:{connected:accountSetup.shopifyConnected,shop:commerce&&commerce.shop||null,apiVersion:commerce&&commerce.apiVersion||null,message:String(commerce&&commerce.message||'').slice(0,300)},youtube:{running:!!(youtube&&youtube.running),loggedIn:accountSetup.youtubeLoggedIn,title:youtube&&youtube.title||null,url:youtube&&youtube.url||null,message:String(youtube&&youtube.message||'').slice(0,300)},missions,accountSetup};
@@ -5158,6 +5277,7 @@ async function repairLocalRuntime(){
     ['jarvis-shopify-connect.ps1','SHOPIFY SECURE CONNECT'],
     ['jarvis-youtube-studio.js',"YOUTUBE_STUDIO_VERSION='1.1'"],
     ['jarvis-mission-engine.js',"MISSION_ENGINE_VERSION='1.0'"],
+    ['jarvis-workspace-file-engine.js',"WORKSPACE_FILE_ENGINE_VERSION='1.0'"],
     ['JARVIS-PC-ACCEPTANCE.ps1','JARVIS PC ACCEPTANCE V1']
   ];
 
@@ -5337,6 +5457,7 @@ function bootstrapRuntimeUpgrade(){
     ['jarvis-shopify-connect.ps1','SHOPIFY SECURE CONNECT'],
     ['jarvis-youtube-studio.js',"YOUTUBE_STUDIO_VERSION='1.1'"],
     ['jarvis-mission-engine.js',"MISSION_ENGINE_VERSION='1.0'"],
+    ['jarvis-workspace-file-engine.js',"WORKSPACE_FILE_ENGINE_VERSION='1.0'"],
     ['JARVIS-PC-ACCEPTANCE.ps1','JARVIS PC ACCEPTANCE V1']
   ];
   const synced=[];

@@ -182,7 +182,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.96.0','worker version');
+    assert(hj.version==='2.97.0','worker version');
     assert(hj.selfUpdate&&hj.selfUpdate.configured===true,'self-update health');
     assert(['not_checked','current','updated','check_failed'].includes(hj.selfUpdate.status),'self-update status');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
@@ -308,7 +308,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const acceptanceState=await get('http://127.0.0.1:'+BRIDGE_PORT+'/acceptance-snapshot');
     assert(acceptanceState.status===200,'acceptance snapshot endpoint');
     const asj=JSON.parse(acceptanceState.body);
-    assert(asj.ok===true&&asj.worker&&asj.worker.version==='2.96.0','acceptance snapshot worker metadata');
+    assert(asj.ok===true&&asj.worker&&asj.worker.version==='2.97.0','acceptance snapshot worker metadata');
     assert(asj.update&&asj.update.configured===true,'acceptance self-update configured');
     assert(asj.checks&&asj.checks.autoUpdateReady===true,'acceptance auto-update readiness');
     assert(asj.checks&&asj.checks.missionRuntime===true,'acceptance snapshot mission check');
