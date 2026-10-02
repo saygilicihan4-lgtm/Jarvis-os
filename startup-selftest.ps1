@@ -18,7 +18,7 @@ Assert-Contains $startup 'http://127.0.0.1:8768/health' "Startup must verify voi
 Assert-Contains $startup 'JARVIS ONLINE' "Startup must expose a final online stage."
 
 Assert-Contains $vbs 'shell.Run cmd, 0, False' "VBS bootstrap must hide the PowerShell host."
-Assert-Contains $bat 'LAUNCHER_VERSION=4.0' "Launcher 4.0 is required."
+Assert-Contains $bat 'LAUNCHER_VERSION=4.1' "Launcher 4.1 is required."
 Assert-Contains $bat '--silent' "Launcher must support silent startup."
 Assert-Contains $bat 'node worker.js >>"%JARVIS_WORKER_LOG%" 2>&1' "Silent Worker output must go to a log instead of a console."
 
