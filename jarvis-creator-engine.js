@@ -566,9 +566,13 @@ function audioDurationSeconds(file,ffprobe){
     return Number.isFinite(n)&&n>0?n:null;
   }catch(_){return null}
 }
-function probeNarrationActivity(file,ffmpeg){
-  if(!ffmpeg)return{ok:false,code:'FFMPEG_MISSING',meanDb:null,maxDb:null};
-  if(!file||!fs.existsSync(file))return{ok:false,code:'CREATOR_NARRATION_MISSING',meanDb:null,maxDb:null};
+function probeNarrationActivity(file,ffmpeg,{minMeanDb=-85,minPeakDb=-80}={}){
+  const thresholds={
+    meanDb:Number.isFinite(Number(minMeanDb))?Number(minMeanDb):-85,
+    maxDb:Number.isFinite(Number(minPeakDb))?Number(minPeakDb):-80
+  };
+  if(!ffmpeg)return{ok:false,code:'FFMPEG_MISSING',meanDb:null,maxDb:null,thresholds};
+  if(!file||!fs.existsSync(file))return{ok:false,code:'CREATOR_NARRATION_MISSING',meanDb:null,maxDb:null,thresholds};
   try{
     const run=childProcess.spawnSync(ffmpeg,[
       '-hide_banner','-nostats','-i',file,
@@ -587,7 +591,8 @@ function probeNarrationActivity(file,ffmpeg){
         code:'CREATOR_NARRATION_PROBE_FAILED',
         meanDb:null,
         maxDb:null,
-        detail:String((run.error&&run.error.message)||run.stderr||'').slice(-400)
+        detail:String((run.error&&run.error.message)||run.stderr||'').slice(-400),
+        thresholds
       };
     }
     const text=String(run.stderr||'');
@@ -603,17 +608,17 @@ function probeNarrationActivity(file,ffmpeg){
     const maxDb=parse(maxMatch);
     // Reject digital silence/noise-floor-only files while still allowing very
     // quiet but recoverable narration to proceed into the loudness master.
-    const ok=Number.isFinite(maxDb)&&Number.isFinite(meanDb)&&maxDb>-80&&meanDb>-85;
+    const ok=Number.isFinite(maxDb)&&Number.isFinite(meanDb)&&maxDb>thresholds.maxDb&&meanDb>thresholds.meanDb;
     return{
       ok,
       code:ok?'CREATOR_NARRATION_ACTIVITY_PASS':'CREATOR_NARRATION_SILENT',
       meanDb,
       maxDb,
-      thresholds:{meanDb:-85,maxDb:-80},
+      thresholds,
       method:'ffmpeg-volumedetect'
     };
   }catch(e){
-    return{ok:false,code:'CREATOR_NARRATION_PROBE_FAILED',meanDb:null,maxDb:null,detail:String(e.message||e).slice(0,400)};
+    return{ok:false,code:'CREATOR_NARRATION_PROBE_FAILED',meanDb:null,maxDb:null,detail:String(e.message||e).slice(0,400),thresholds};
   }
 }
 
@@ -712,6 +717,89 @@ function creatorAudioMasterFilter({pad=true}={}){
 }
 function creatorAudioMasterProfile(){
   return{...CREATOR_AUDIO_MASTER_PROFILE};
+}
+
+function probeRenderedAudioLoudness(file,ffmpeg,{targetLufs=-16,toleranceLufs=3,maxTruePeakDb=-0.5}={}){
+  const target=Number.isFinite(Number(targetLufs))?Number(targetLufs):-16;
+  const tolerance=Math.max(0.5,Math.min(6,Number(toleranceLufs)||3));
+  const peakCeiling=Number.isFinite(Number(maxTruePeakDb))?Number(maxTruePeakDb):-0.5;
+  if(!ffmpeg)return{ok:false,code:'FFMPEG_MISSING',integratedLufs:null,truePeakDb:null};
+  if(!file||!fs.existsSync(file))return{ok:false,code:'CREATOR_AUDIO_OUTPUT_MISSING',integratedLufs:null,truePeakDb:null};
+  try{
+    const run=childProcess.spawnSync(ffmpeg,[
+      '-hide_banner','-nostats','-i',file,
+      '-map','0:a:0',
+      '-af','loudnorm=I='+target+':LRA=7:TP=-1.5:print_format=json',
+      '-f','null','-'
+    ],{
+      encoding:'utf8',
+      windowsHide:true,
+      timeout:90000,
+      maxBuffer:1024*1024*8
+    });
+    if(run.error||run.status!==0){
+      return{ok:false,code:'CREATOR_AUDIO_LOUDNESS_PROBE_FAILED',integratedLufs:null,truePeakDb:null,detail:String((run.error&&run.error.message)||run.stderr||'').slice(-500)};
+    }
+    const text=String(run.stderr||'');
+    const integratedMatch=/"input_i"\s*:\s*"(-?inf|-?[0-9]+(?:\.[0-9]+)?)"/i.exec(text);
+    const peakMatch=/"input_tp"\s*:\s*"(-?inf|-?[0-9]+(?:\.[0-9]+)?)"/i.exec(text);
+    const lraMatch=/"input_lra"\s*:\s*"(-?inf|-?[0-9]+(?:\.[0-9]+)?)"/i.exec(text);
+    const parse=(match)=>{
+      if(!match)return null;
+      if(/inf/i.test(match[1]))return -Infinity;
+      const n=Number(match[1]);
+      return Number.isFinite(n)?n:null;
+    };
+    const integratedLufs=parse(integratedMatch);
+    const truePeakDb=parse(peakMatch);
+    const lra=parse(lraMatch);
+    const inBand=Number.isFinite(integratedLufs)&&integratedLufs>=target-tolerance&&integratedLufs<=target+tolerance;
+    const peakSafe=Number.isFinite(truePeakDb)&&truePeakDb<=peakCeiling;
+    const ok=inBand&&peakSafe;
+    return{
+      ok,
+      code:ok?'CREATOR_AUDIO_LOUDNESS_PASS':'CREATOR_AUDIO_LOUDNESS_OUT_OF_RANGE',
+      integratedLufs,
+      truePeakDb,
+      lra,
+      targetLufs:target,
+      toleranceLufs:tolerance,
+      maxTruePeakDb:peakCeiling,
+      method:'ffmpeg-loudnorm-analysis'
+    };
+  }catch(e){
+    return{ok:false,code:'CREATOR_AUDIO_LOUDNESS_PROBE_FAILED',integratedLufs:null,truePeakDb:null,detail:String(e.message||e).slice(0,500)};
+  }
+}
+
+function applyRenderedAudioQuality(quality,file,ffmpeg,{mode='short'}={}){
+  const result=quality&&typeof quality==='object'?quality:{ok:false,code:'CREATOR_QUALITY_FAILED',message:'Creator quality result missing.'};
+  if(!result.checks||typeof result.checks!=='object')result.checks={};
+  if(!result.measured||typeof result.measured!=='object')result.measured={};
+  const baseOk=!!result.ok;
+  const outputAudioActivity=probeNarrationActivity(file,ffmpeg,{minMeanDb:-45,minPeakDb:-30});
+  const outputLoudness=probeRenderedAudioLoudness(file,ffmpeg);
+  result.checks.audioSignal=outputAudioActivity.ok;
+  result.checks.audioLoudness=outputLoudness.ok;
+  result.measured.audioMeanDb=outputAudioActivity.meanDb;
+  result.measured.audioPeakDb=outputAudioActivity.maxDb;
+  result.measured.audioIntegratedLufs=outputLoudness.integratedLufs;
+  result.measured.audioTruePeakDb=outputLoudness.truePeakDb;
+  result.audioSignal=outputAudioActivity;
+  result.audioLoudness=outputLoudness;
+  result.ok=baseOk&&outputAudioActivity.ok&&outputLoudness.ok;
+  if(baseOk&&!outputAudioActivity.ok){
+    result.code='CREATOR_AUDIO_SIGNAL_MISSING';
+    result.message=mode==='longform'
+      ?'Creator long-form final ses sinyali kalite kapısı başarısız.'
+      :'Creator Shorts final ses sinyali kalite kapısı başarısız.';
+  }else if(baseOk&&!outputLoudness.ok){
+    result.code='CREATOR_AUDIO_LOUDNESS_OUT_OF_RANGE';
+    result.message=mode==='longform'
+      ?'Creator long-form final loudness kalite kapısı başarısız.'
+      :'Creator Shorts final loudness kalite kapısı başarısız.';
+  }
+  return result;
 }
 
 function streamTimelineCoverage(stream,containerDuration){
@@ -1120,7 +1208,12 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
   }
 
   if(!fs.existsSync(outFile)||fs.statSync(outFile).size<10000)throw new Error('Rendered MP4 verification failed');
-  const quality=probeRenderedShort(outFile,status.ffprobe);
+  const quality=applyRenderedAudioQuality(
+    probeRenderedShort(outFile,status.ffprobe),
+    outFile,
+    status.ffmpeg,
+    {mode:'short'}
+  );
   if(!quality.ok){
     const e=new Error(String(quality.message||'Creator Shorts quality gate failed')+' · '+String(quality.code||'CREATOR_QUALITY_FAILED'));
     e.code=String(quality.code||'CREATOR_QUALITY_FAILED');
@@ -1335,7 +1428,12 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
   }
 
   if(!fs.existsSync(outFile)||fs.statSync(outFile).size<1024*1024)throw new Error('Rendered long-form MP4 verification failed');
-  const quality=probeRenderedLongform(outFile,status.ffprobe);
+  const quality=applyRenderedAudioQuality(
+    probeRenderedLongform(outFile,status.ffprobe),
+    outFile,
+    status.ffmpeg,
+    {mode:'longform'}
+  );
   if(!quality.ok){
     const e=new Error(String(quality.message||'Creator long-form quality gate failed')+' · '+String(quality.code||'CREATOR_LONGFORM_QUALITY_FAILED'));
     e.code=String(quality.code||'CREATOR_LONGFORM_QUALITY_FAILED');
@@ -1430,6 +1528,8 @@ module.exports={
   creatorAudioMasterFilter,
   creatorAudioMasterProfile,
   probeNarrationActivity,
+  probeRenderedAudioLoudness,
+  applyRenderedAudioQuality,
   probeHookMotion,
   findHookMotionWindow,
   listAssets,
