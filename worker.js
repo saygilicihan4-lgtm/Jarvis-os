@@ -5148,6 +5148,35 @@ async function verifyUncertainCampaignStep(mission){
     return mission;
   }
 
+  if(step.name==='render_longform'){
+    const creator=getCreatorEngine();
+    const status=creator.ffmpegStatus(WORKSPACE);
+    const base=creator.safeName(input.campaignName);
+    const expected=path.join(status.outputDir,base+'.mp4');
+    const metaFile=path.join(WORKSPACE,'creator-jobs',base,'job.json');
+    if(fs.existsSync(expected)&&fs.statSync(expected).size>=1024*1024&&fs.existsSync(metaFile)){
+      try{
+        const meta=JSON.parse(fs.readFileSync(metaFile,'utf8'));
+        if(String(meta&&meta.missionId||'')===String(mission.id)&&String(meta&&meta.mode||'')==='longform'){
+          const quality=creator.probeRenderedLongform(expected,status.ffprobe);
+          if(quality.ok){
+            return engine.resolveUncertainStep(WORKSPACE,mission.id,{
+              completed:true,
+              artifact:{output:expected,metadata:metaFile,quality,recovered:true},
+              note:'long-form output + mission-bound metadata + quality gate verified on disk'
+            });
+          }
+          return mission;
+        }
+      }catch(_){}
+      return mission;
+    }
+    if(!fs.existsSync(expected)&&!fs.existsSync(metaFile)){
+      return engine.resolveUncertainStep(WORKSPACE,mission.id,{completed:false,note:'long-form render output absent; safe retry'});
+    }
+    return mission;
+  }
+
   if(step.name==='render_short'){
     const creator=getCreatorEngine();
     const status=creator.ffmpegStatus(WORKSPACE);
@@ -5529,6 +5558,63 @@ async function runDurableMission(id){
         continue;
       }
 
+      if(step.name==='render_longform'){
+        const input=mission.input||{};
+        const ready=getCreatorEngine().prepare(WORKSPACE,{allowInstall:true});
+        if(!ready.ok||!ready.ffprobe){
+          mission=engine.failStep(WORKSPACE,id,{
+            code:!ready.ok?'FFMPEG_NOT_READY':'FFPROBE_MISSING',
+            message:'Long-form Creator için FFmpeg + FFprobe hazır olmalı.',
+            retryable:true,
+            dependency:!ready.ok?'ffmpeg':'creator_probe'
+          });
+          return mission;
+        }
+        const selected=Array.isArray(input.creatorAssets)?input.creatorAssets:[];
+        for(const asset of selected){
+          const rel=String(asset&&asset.path||'');
+          const current=getWorkspaceFileEngine().hashFile(safeFile(rel));
+          if(!current||current!==String(asset&&asset.sha256||'')){
+            mission=engine.failStep(WORKSPACE,id,{code:'CREATOR_LONGFORM_ASSET_HASH_CONFLICT',message:'Seçili long-form Creator asset hash değişti: '+rel,retryable:false});
+            return mission;
+          }
+          const inspected=getCreatorEngine().inspectAsset(WORKSPACE,rel);
+          if(!inspected.ok){
+            if(inspected.code==='FFPROBE_MISSING'){
+              mission=engine.failStep(WORKSPACE,id,{code:'FFPROBE_MISSING',message:'Long-form storyboard doğrulaması için FFprobe gerekli.',retryable:true,dependency:'creator_probe'});
+              return mission;
+            }
+            mission=engine.failStep(WORKSPACE,id,{code:String(inspected.code||'CREATOR_LONGFORM_INVALID_ASSET'),message:'Seçili long-form Creator asset geçersiz: '+rel,retryable:false});
+            return mission;
+          }
+        }
+        const voice=await renderCreatorLongformVoiceFile(
+          String(input.script||''),
+          String(input.campaignName||'longform')+'-voice',
+          String(input.creatorVoice||CREATOR_TTS_VOICE)
+        );
+        const out=getCreatorEngine().renderLongform({
+          workspace:WORKSPACE,
+          name:String(input.campaignName||'longform'),
+          script:String(input.script||''),
+          voicePath:voice,
+          assetFiles:selected.map(x=>x.path),
+          assetHashes:selected.map(x=>x.sha256),
+          missionId:id
+        });
+        mission=engine.completeStep(WORKSPACE,id,{artifact:{
+          output:out.output,
+          subtitle:out.subtitle,
+          metadata:out.metadata,
+          duration:out.duration,
+          quality:out.quality,
+          assets:out.assets.map(x=>path.relative(WORKSPACE,x).replace(/\\/g,'/')),
+          assetSelection:selected.length?'explicit':'automatic',
+          creatorVoice:String(input.creatorVoice||CREATOR_TTS_VOICE)
+        }});
+        continue;
+      }
+
       if(step.name==='render_short'){
         const input=mission.input||{};
         const ready=getCreatorEngine().prepare(WORKSPACE,{allowInstall:true});
@@ -5615,7 +5701,7 @@ async function runDurableMission(id){
       }
 
       if(step.name==='youtube_draft'){
-        const rendered=mission.artifacts&&mission.artifacts.render_short;
+        const rendered=mission.artifacts&&(mission.artifacts.render_longform||mission.artifacts.render_short);
         const file=rendered&&rendered.output;
         if(!file){
           mission=engine.failStep(WORKSPACE,id,{code:'VIDEO_ARTIFACT_MISSING',message:'YouTube adımı için render çıktısı bulunamadı.',retryable:false});
