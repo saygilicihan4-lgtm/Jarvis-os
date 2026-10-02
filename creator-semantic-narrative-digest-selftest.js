@@ -2,7 +2,7 @@ const fs=require('fs');
 const assert=require('assert');
 const semantic=require('./jarvis-creator-semantic-quality');
 
-assert.strictEqual(semantic.SEMANTIC_QUALITY_VERSION,'1.3');
+assert.strictEqual(semantic.SEMANTIC_QUALITY_VERSION,'1.4');
 
 const longNarrative=[
   'OPENING_ROBOT '+('alpha '.repeat(700)),
@@ -51,7 +51,7 @@ assert.ok(worker.includes("ANLATIM ÖZETİ (başlangıç / orta / kapanış):"),
 assert.ok(worker.includes("narrativeDigestSections:Array.isArray(narrativeDigest.sections)?narrativeDigest.sections.length:0"),'digest evidence missing');
 assert.ok(worker.includes("narrativeDigestTruncated:!!narrativeDigest.truncated"),'digest truncation evidence missing');
 assert.ok(!worker.includes("String(query||'').slice(0,3200)"),'opening-only 3200-char semantic truncation must be removed');
-assert.ok(worker.includes("SEMANTIC_QUALITY_VERSION='1.3'"),'runtime sync must require semantic quality v1.3');
+assert.ok(worker.includes("SEMANTIC_QUALITY_VERSION='1.4'"),'runtime sync must require semantic quality v1.3');
 assert.ok(worker.includes('\"Devam et\" tek başına YouTube PUBLIC onayı değildir'),'YouTube approval policy regressed');
 assert.ok(worker.includes('\"Devam et\" tek başına yayınlama onayı değildir'),'Shopify approval policy regressed');
 
