@@ -76,7 +76,9 @@ try{
   assert.ok(source.includes('audioMaster:creatorAudioMasterProfile(),\n    narrationActivity,\n    profile:{width:1920,height:1080'),'long-form metadata must retain narration activity evidence');
   assert.ok(source.includes("const outputAudioActivity=probeNarrationActivity(file,ffmpeg,{minMeanDb:-45,minPeakDb:-30});"),'central final audio guard must verify mastered audio activity');
   assert.ok(source.includes('result.checks.audioSignal=outputAudioActivity.ok;'),'final audio activity evidence must be retained in quality payloads');
-  assert.strictEqual((source.match(/applyRenderedAudioQuality\(/g)||[]).length>=3,true,'Short and long-form must both use the central final audio guard');
+  assert.ok(source.includes('function applyRenderedAudioQuality('),'central final audio guard must remain');
+  assert.ok(source.includes('applyRenderedAudioQuality(quality,file,ffmpeg,{mode})'),'final media guard must preserve central audio guard');
+  assert.strictEqual((source.match(/const quality=applyRenderedMediaQuality\(/g)||[]).length,2,'Short and long-form must both use the final media guard');
 
   console.log('CREATOR NARRATION ACTIVITY V90 SELFTEST PASS',JSON.stringify({silent:silentProbe,quiet:quietProbe,recoverable:recoverableProbe,normal:normalProbe,quietFinal:quietFinalProbe,recoverableFinal:recoverableFinalProbe}));
 }finally{
