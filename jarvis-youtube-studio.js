@@ -27,6 +27,19 @@ function resolveWorkspaceVideo(workspace,filePath){
   if(size<1024)throw new Error('Video file is empty or too small');
   return{full,size,ext};
 }
+function resolveWorkspaceImage(workspace,filePath){
+  if(!workspace)throw new Error('workspace required');
+  const raw=safeText(filePath,1200);
+  if(!raw)throw new Error('thumbnail file required');
+  const full=path.isAbsolute(raw)?path.resolve(raw):path.resolve(workspace,raw);
+  if(!isInside(workspace,full))throw new Error('YouTube thumbnail is limited to the JARVIS workspace');
+  if(!fs.existsSync(full)||!fs.statSync(full).isFile())throw new Error('Thumbnail file not found: '+raw);
+  const ext=path.extname(full).toLowerCase();
+  if(!new Set(['.jpg','.jpeg','.png','.webp']).has(ext))throw new Error('Unsupported thumbnail file type: '+ext);
+  const size=fs.statSync(full).size;
+  if(size<1024||size>5*1024*1024)throw new Error('Thumbnail file size is invalid');
+  return{full,size,ext};
+}
 function parseUploadSpec(text){
   const parts=String(text||'').split('|').map(x=>x.trim()).filter(Boolean);
   if(!parts.length)return null;
@@ -106,6 +119,26 @@ async function setAnyField(operator,workspace,labels,value){
   }
   return{ok:false};
 }
+async function thumbnailInputExists(operator,workspace){
+  try{return !!(await operator.evaluate(workspace,"!!document.querySelector('input[type=file][accept*=image]')"))}catch(_){return false}
+}
+async function tryUploadThumbnail(operator,workspace,thumbnail){
+  if(!thumbnail)return{ok:false,skipped:true,reason:'missing'};
+  const start=Date.now();
+  while(Date.now()-start<4500){
+    if(await thumbnailInputExists(operator,workspace)){
+      try{
+        await operator.uploadFile(workspace,'input[type=file][accept*=image]',thumbnail.full);
+        await sleep(700);
+        return{ok:true};
+      }catch(e){
+        return{ok:false,reason:String(e.message||e).slice(0,220)};
+      }
+    }
+    await sleep(350);
+  }
+  return{ok:false,skipped:true,reason:'image-input-not-found'};
+}
 function missionReceiptFile(workspace,missionId){
   const id=String(missionId||'').trim().replace(/[^A-Za-z0-9_-]/g,'_').slice(0,100);
   if(!id)return null;
@@ -128,11 +161,16 @@ function writeReceipt(file,record){
   fs.writeFileSync(tmp,JSON.stringify(record,null,2),'utf8');
   fs.renameSync(tmp,file);
 }
-async function prepareDraft(operator,workspace,{file,title='',description='',missionId=''}={}){
+async function prepareDraft(operator,workspace,{file,title='',description='',thumbnail='',missionId=''}={}){
   if(!operator)throw new Error('browser operator required');
   const video=resolveWorkspaceVideo(workspace,file);
   const cleanTitle=safeText(title||path.basename(video.full,path.extname(video.full)),100);
   const cleanDescription=safeText(description,5000);
+  let thumb=null,thumbnailError=null;
+  if(String(thumbnail||'').trim()){
+    try{thumb=resolveWorkspaceImage(workspace,thumbnail)}
+    catch(e){thumbnailError=String(e.message||e).slice(0,240)}
+  }
   const receipt=receiptFile(workspace,cleanTitle,missionId);
   const existing=missionId?readReceipt(workspace,missionId):null;
   if(existing&&existing.state==='draft_prepared'&&existing.file===video.full){
@@ -145,6 +183,8 @@ async function prepareDraft(operator,workspace,{file,title='',description='',mis
       title:existing.title||cleanTitle,
       titleSet:!!existing.titleSet,
       descriptionSet:!!existing.descriptionSet,
+      thumbnailSet:!!existing.thumbnailSet,
+      thumbnail:existing.thumbnail||null,
       receipt,
       message:'YouTube Studio mission taslağı zaten hazırlanmış · '+path.basename(video.full)+' · yeniden yüklenmedi'
     };
@@ -202,6 +242,9 @@ async function prepareDraft(operator,workspace,{file,title='',description='',mis
     bytes:video.size,
     title:cleanTitle,
     description:cleanDescription,
+    thumbnail:thumb&&thumb.full||null,
+    thumbnailSet:false,
+    thumbnailError,
     published:false
   };
   writeReceipt(receipt,preflight);
@@ -211,6 +254,7 @@ async function prepareDraft(operator,workspace,{file,title='',description='',mis
 
   const titleSet=await setAnyField(operator,workspace,['Başlık','Baslik','Title'],cleanTitle);
   const descriptionSet=await setAnyField(operator,workspace,['Açıklama','Aciklama','Description'],cleanDescription);
+  const thumbnailSet=thumb?await tryUploadThumbnail(operator,workspace,thumb):{ok:false,skipped:true,reason:thumbnailError||'missing'};
   snap=await snapshot(operator,workspace);
 
   const record={
@@ -219,6 +263,9 @@ async function prepareDraft(operator,workspace,{file,title='',description='',mis
     state:'draft_prepared',
     titleSet:!!titleSet.ok,
     descriptionSet:!!descriptionSet.ok,
+    thumbnailSet:!!thumbnailSet.ok,
+    thumbnail:thumb&&thumb.full||null,
+    thumbnailError:thumbnailSet.ok?null:String(thumbnailSet.reason||thumbnailError||'').slice(0,240)||null,
     studioUrl:snap&&snap.url||STUDIO_URL,
     published:false
   };
@@ -232,8 +279,10 @@ async function prepareDraft(operator,workspace,{file,title='',description='',mis
     title:cleanTitle,
     titleSet:!!titleSet.ok,
     descriptionSet:!!descriptionSet.ok,
+    thumbnailSet:!!thumbnailSet.ok,
+    thumbnail:thumb&&thumb.full||null,
     receipt,
-    message:'YouTube Studio taslak yüklemesi başlatıldı · '+path.basename(video.full)+' · PUBLIC/YAYINLA adımına dokunulmadı'
+    message:'YouTube Studio taslak yüklemesi başlatıldı · '+path.basename(video.full)+(thumb?(thumbnailSet.ok?' · thumbnail eklendi':' · thumbnail yüklenemedi, taslak devam etti'):'')+' · PUBLIC/YAYINLA adımına dokunulmadı'
   };
 }
 
