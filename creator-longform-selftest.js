@@ -95,6 +95,11 @@ assert.ok(worker.includes("m&&m.type==='creator_longform'"),'daily dedupe must b
 assert.ok(worker.includes("String(m.input&&m.input.dailyDate||'')===day"),'daily dedupe must bind calendar date');
 assert.ok(worker.includes("listMissions(WORKSPACE,{limit:1000})"),'daily dedupe horizon missing');
 assert.ok(worker.includes("async function serviceCreatorDailyPlan"),'daily plan service missing');
+assert.strictEqual((worker.match(/async function serviceCreatorDailyPlan/g)||[]).length,1,'daily planner must have exactly one service implementation');
+assert.ok(/function creatorDailyDefaultPlan\(\)[\s\S]{0,500}enabled:true/.test(worker),'requested daily long-form plan must default enabled');
+assert.ok(worker.includes('function creatorDailyAutoAssetBaselines(dateKey,maxItems=12)'),'daily auto asset baseline helper missing');
+assert.ok(worker.includes('creatorDailyAutoAssetBaselines(dateKey,12)'),'daily automatic storyboard must be selected and hash-locked before mission creation');
+assert.ok(worker.includes('verifyCreatorLongformBaselines(plan.creatorAssets)'),'configured daily storyboard baselines must be reverified before reuse');
 assert.ok(worker.includes("setInterval(()=>serviceCreatorDailyPlan().catch(()=>{}),60000)"),'daily plan restart service interval missing');
 assert.ok(worker.includes("name:'creator_daily_longform_plan'"),'native daily plan tool missing');
 assert.ok(worker.includes("else if(n==='creator_daily_longform_plan')"),'native daily plan handler missing');
