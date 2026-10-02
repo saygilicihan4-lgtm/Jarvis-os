@@ -31,4 +31,5 @@ assert.ok(worker.includes("try{bootstrapRuntimeUpgrade()}catch(e)"),'runtime mig
 assert.ok(startup.includes('jarvis-self-update.ps1'),'canonical startup updater missing');
 assert.ok(startup.includes('jarvis-self-update.next.ps1'),'pending updater handoff missing');
 
+assert.ok(worker.includes("['jarvis-workspace-file-engine.js',\"WORKSPACE_FILE_ENGINE_VERSION='1.0'\"]"),'workspace file engine must be included in repair/bootstrap sync');
 console.log('BOOTSTRAP BRIDGE SELFTEST PASS');
