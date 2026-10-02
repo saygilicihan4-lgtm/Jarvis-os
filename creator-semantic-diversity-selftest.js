@@ -1,7 +1,7 @@
 const assert=require('assert');
 const semantic=require('./jarvis-creator-semantic-quality');
 
-assert.strictEqual(semantic.SEMANTIC_QUALITY_VERSION,'1.3');
+assert.strictEqual(semantic.SEMANTIC_QUALITY_VERSION,'1.4');
 
 const rows=[
   {
@@ -36,6 +36,16 @@ const differentScore=semantic.semanticSimilarity(rows[0],rows[2]);
 assert.ok(duplicateScore>=0.72,'near-duplicate robot clips must exceed semantic similarity threshold');
 assert.ok(differentScore<0.35,'unrelated robot/rocket clips must stay semantically distinct');
 
+const sparseA={tags:['robot'],summary:''};
+const sparseB={tags:['robot','kahve','sahil','günbatımı','seyahat'],summary:'Kahve ile sahilde gün batımı ve seyahat görüntüsü.'};
+const sparseScore=semantic.semanticSimilarity(sparseA,sparseB);
+assert.ok(sparseScore<0.35,'one shared token must not create a sparse near-duplicate false positive');
+
+const subsetA={tags:['robot','fabrika','otomasyon'],summary:''};
+const subsetB={tags:['robot','fabrika','otomasyon','montaj','üretim'],summary:''};
+const subsetScore=semantic.semanticSimilarity(subsetA,subsetB);
+assert.ok(subsetScore>=0.72,'multi-token semantic subset must remain detectable as near-duplicate');
+
 const diversified=semantic.diversifySemanticRows(rows,{
   maxItems:12,minScore:1,maxSimilarity:0.72
 });
@@ -67,6 +77,7 @@ assert.deepStrictEqual(fallback.rows,[],'all-zero semantic catalog must fail rel
 console.log('CREATOR SEMANTIC DIVERSITY V95 SELFTEST PASS',JSON.stringify({
   duplicateScore:Number(duplicateScore.toFixed(3)),
   differentScore:Number(differentScore.toFixed(3)),
+  sparseScore:Number(sparseScore.toFixed(3)),subsetScore:Number(subsetScore.toFixed(3)),
   evidence:diversified.evidence,
   selected:paths
 }));

@@ -1,4 +1,4 @@
-const SEMANTIC_QUALITY_VERSION='1.3';
+const SEMANTIC_QUALITY_VERSION='1.4';
 
 const STOP=new Set([
   'bir','bu','su','şu','ve','veya','ile','icin','için','olan','olarak','daha','cok','çok','gibi',
@@ -83,11 +83,14 @@ function semanticSimilarity(a,b){
   for(const token of aa)if(bb.has(token))intersection++;
   const union=aa.size+bb.size-intersection;
   const jaccard=union?intersection/union:0;
-  const overlap=intersection/Math.min(aa.size,bb.size);
-  // Overlap coefficient catches near-duplicates where one caption/tag set is
-  // effectively a more verbose subset of the other. Jaccard still handles
-  // similarly sized descriptions well.
-  return Math.max(jaccard,overlap);
+  const smaller=Math.min(aa.size,bb.size);
+  const overlap=intersection/smaller;
+  // Sparse overlap is noisy: one shared generic token can otherwise make a
+  // one-token description look identical to a much richer, unrelated row.
+  // Trust overlap only with at least two shared semantic tokens, or when both
+  // sides are genuinely tiny and Jaccard itself already carries the match.
+  const overlapTrusted=intersection>=2&&smaller>=2?overlap:0;
+  return Math.max(jaccard,overlapTrusted);
 }
 function diversifySemanticRows(rows,{
   maxItems=12,

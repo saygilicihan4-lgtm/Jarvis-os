@@ -48,7 +48,7 @@ assert.ok(worker.includes("getCreatorSemanticQuality().diversifySemanticRows(ord
 assert.ok(worker.includes("maxSimilarity:0.72"),'semantic near-duplicate threshold missing');
 assert.ok(worker.includes("minScore:1"),'semantic minimum lexical relevance floor missing');
 assert.ok(worker.includes("kind:'creator_semantic_diversity'"),'semantic diversity evidence missing');
-assert.ok(worker.includes("SEMANTIC_QUALITY_VERSION='1.3'"),'semantic quality runtime signature missing');
+assert.ok(worker.includes("SEMANTIC_QUALITY_VERSION='1.4'"),'semantic quality runtime signature missing');
 assert.ok(worker.includes('orderRowsByNarrativeSections(diversity.rows,narrativeDigest.sections)'),'scene-semantic timeline ordering missing');
 assert.ok(worker.includes('function mergeCreatorAssetBaselines(primary,fallback,maxItems=12)'),'safe deterministic fallback merge missing');
 
