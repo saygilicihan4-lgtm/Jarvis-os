@@ -2,7 +2,7 @@ const fs=require('fs');
 const assert=require('assert');
 
 const worker=fs.readFileSync('./worker.js','utf8');
-assert.ok(worker.includes("const WORKER_VERSION='2.99.0'"),'Worker 2.99.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.100.0'"),'Worker 2.100.0 required');
 assert.ok(worker.includes("name:'pc_acceptance_snapshot'"),'native acceptance tool missing');
 assert.ok(worker.includes("req.url==='/acceptance-snapshot'"),'acceptance endpoint missing');
 assert.ok(worker.includes("'pc_acceptance_snapshot_v1'"),'acceptance capability missing');
@@ -31,5 +31,6 @@ assert.ok(worker.includes("(taskRegistered&&hiddenTaskAction)||fallbackRegistere
 
 assert.ok(worker.includes("workspaceFileMissionReady:CAPS.includes('workspace_file_mission_v1')"),'workspace file mission readiness missing from acceptance');
 assert.ok(worker.includes("missionControlReady:CAPS.includes('mission_control_v1')"),'mission control readiness missing from acceptance');
+assert.ok(worker.includes("creatorBatchMissionReady:CAPS.includes('creator_batch_mission_v1')"),'creator batch mission readiness missing from acceptance');
 assert.ok(worker.includes("creatorAssetMissionReady:CAPS.includes('creator_asset_mission_v1')"),'creator asset mission readiness missing from acceptance');
 console.log('PC ACCEPTANCE SNAPSHOT SELFTEST PASS');
