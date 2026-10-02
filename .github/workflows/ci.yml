@@ -49,6 +49,7 @@ jobs:
           node --check creator-scene-web-selftest.js
           node --check creator-narrative-sync-selftest.js
           node --check creator-kinetic-captions-selftest.js
+          node --check creator-web-freshness-selftest.js
           node --check shopify-mission-selftest.js
           node --check approval-gate-selftest.js
           node --check developer-mission-selftest.js
@@ -128,6 +129,8 @@ jobs:
         run: node creator-narrative-sync-selftest.js
       - name: Creator kinetic captions selftest
         run: node creator-kinetic-captions-selftest.js
+      - name: Creator web freshness selftest
+        run: node creator-web-freshness-selftest.js
       - name: Shopify mission selftest
         run: node shopify-mission-selftest.js
       - name: Approval gate selftest
