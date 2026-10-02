@@ -4076,6 +4076,8 @@ async function runDurableMission(id){
     if(mission.status==='completed'||mission.status==='failed')return mission;
 
     if(mission.status==='waiting_dependency'){
+      const blocked=engine.currentStep(mission);
+      if(blocked&&blocked.error&&blocked.error.dependency==='approval')return mission;
       mission=engine.retryBlockedStep(WORKSPACE,id);
     }
     if(mission.status==='needs_verification'){
@@ -4120,6 +4122,33 @@ async function runDurableMission(id){
           product:out.product,
           missionTag:out.missionTag,
           reused:!!out.reused
+        }});
+        continue;
+      }
+
+      if(step.name==='shopify_publish'){
+        if(!(step.meta&&step.meta.approvedAt)){
+          mission=engine.failStep(WORKSPACE,id,{
+            code:'EXPLICIT_APPROVAL_REQUIRED',
+            message:'Shopify ürününü Online Store kanalında yayınlamak için açık kullanıcı onayı gerekli.',
+            retryable:true,
+            dependency:'approval'
+          });
+          return mission;
+        }
+        const draft=mission.artifacts&&mission.artifacts.shopify_draft;
+        const product=draft&&draft.product;
+        const productId=String(product&&product.id||'').trim();
+        if(!productId){
+          mission=engine.failStep(WORKSPACE,id,{code:'SHOPIFY_PRODUCT_ID_MISSING',message:'Yayınlanacak Shopify ürün kimliği bulunamadı.',retryable:false});
+          return mission;
+        }
+        const out=await getCommerceEngine().publishProduct(WORKSPACE,productId);
+        mission=engine.completeStep(WORKSPACE,id,{artifact:{
+          product:out.product,
+          publication:out.publication,
+          published:true,
+          approvedAt:String(step.meta.approvedAt)
         }});
         continue;
       }
