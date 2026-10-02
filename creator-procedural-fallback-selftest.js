@@ -47,7 +47,7 @@ assert.ok(engine.includes("const assetCandidates=proceduralAssets?[]:"),
 assert.ok(engine.includes("const assetSelection=proceduralAssets?'procedural':"),
   'renderer must record procedural selection evidence');
 assert.ok(engine.includes('const proceduralSceneSeconds=30;'),'v102 procedural phase cadence missing');
-assert.ok(engine.includes("hue=H='18*sin(2*PI*t/90)'"),'v102 animated hue motion missing');
+assert.ok(engine.includes("hue=H='\"+narrativeHueShift+\"*sin(2*PI*t/\"+narrativeCycleSeconds+\")'"),'v103 narrative-aware animated hue motion missing');
 assert.ok(engine.includes("eq=brightness='0.018*sin(2*PI*t/30)'"),'v102 animated luminance phase missing');
 assert.ok(engine.includes("profile:'narrative-phased-hue-noise-vignette'"),'v103 procedural narrative evidence missing');
 assert.ok(engine.includes("buildNarrativeDigest(cleanScript,{maxChars:3200})"),'v103 narrative digest binding missing');
