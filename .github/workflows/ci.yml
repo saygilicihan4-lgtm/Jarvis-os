@@ -21,6 +21,7 @@ jobs:
           node --check server.js
           node --check worker.js
           node --check jarvis-creator-engine.js
+          node --check jarvis-creator-web-media.js
           node --check jarvis-browser-operator.js
           node --check browser-operator-selftest.js
           node --check browser-mission-selftest.js
@@ -39,6 +40,7 @@ jobs:
           node --check creator-quality-selftest.js
           node --check creator-longform-selftest.js
           node --check creator-duration-fit-selftest.js
+          node --check creator-web-media-selftest.js
           node --check shopify-mission-selftest.js
           node --check approval-gate-selftest.js
           node --check developer-mission-selftest.js
@@ -100,6 +102,8 @@ jobs:
         run: node creator-longform-selftest.js
       - name: Creator long-form duration fit selftest
         run: node creator-duration-fit-selftest.js
+      - name: Creator web media selftest
+        run: node creator-web-media-selftest.js
       - name: Shopify mission selftest
         run: node shopify-mission-selftest.js
       - name: Approval gate selftest
