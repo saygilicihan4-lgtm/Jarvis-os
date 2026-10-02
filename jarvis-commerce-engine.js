@@ -249,12 +249,12 @@ async function updateDefaultVariant(creds,productId,variantId,p){
   const variant={id:variantId};
   if(p.price!==null)variant.price=p.price;
   if(p.compareAtPrice!==null)variant.compareAtPrice=p.compareAtPrice;
-  if(p.sku)variant.sku=p.sku;
+  if(p.sku)variant.inventoryItem={sku:p.sku};
   if(Object.keys(variant).length===1)return null;
   const query=`mutation JarvisVariantUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
     productVariantsBulkUpdate(productId: $productId, variants: $variants) {
       product { id }
-      productVariants { id title price compareAtPrice sku }
+      productVariants { id title price compareAtPrice inventoryItem { sku } }
       userErrors { field message }
     }
   }`;
@@ -341,14 +341,15 @@ async function publishProduct(workspace,productId){
 
   const publication=await findOnlineStorePublication(creds);
   if(!publication)throw new Error('Online Store publication bulunamadı');
-  const pub=await graphQLRequest(creds,`mutation JarvisPublishProduct($id: ID!, $input: [PublicationInput!]!) {
+  const pub=await graphQLRequest(creds,`mutation JarvisPublishProduct($id: ID!, $input: [PublicationInput!]!, $publicationId: ID!) {
     publishablePublish(id: $id, input: $input) {
       publishable { publishedOnPublication(publicationId: $publicationId) }
       userErrors { field message }
     }
-  }`.replace('$publicationId','"'+publication.id+'"'),{
+  }`,{
     id,
-    input:[{publicationId:publication.id}]
+    input:[{publicationId:publication.id}],
+    publicationId:publication.id
   });
   const out=pub.publishablePublish||{};
   const errors=summarizeErrors(out.userErrors);
