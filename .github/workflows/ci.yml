@@ -25,6 +25,7 @@ jobs:
           node --check browser-operator-selftest.js
           node --check jarvis-commerce-engine.js
           node --check commerce-engine-selftest.js
+          node --check business-tools-selftest.js
           node --check routing-selftest.js
           node --check creator-engine-selftest.js
           node --check bootstrap-bridge-selftest.js
@@ -41,6 +42,8 @@ jobs:
         run: node browser-operator-selftest.js
       - name: Commerce engine selftest
         run: node commerce-engine-selftest.js
+      - name: Native business tools selftest
+        run: node business-tools-selftest.js
       - name: Routing selftest
         run: node routing-selftest.js
       - name: Bootstrap bridge selftest
