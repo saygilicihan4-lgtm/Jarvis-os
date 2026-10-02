@@ -55,6 +55,7 @@ jobs:
           node --check creator-auto-web-selftest.js
           node --check creator-scene-web-selftest.js
           node --check creator-narrative-sync-selftest.js
+          node --check creator-narrative-coverage-selftest.js
           node --check creator-kinetic-captions-selftest.js
           node --check creator-web-freshness-selftest.js
           node --check creator-real-motion-hook-selftest.js
@@ -143,6 +144,8 @@ jobs:
         run: node creator-scene-web-selftest.js
       - name: Creator narrative sync selftest
         run: node creator-narrative-sync-selftest.js
+      - name: Creator narrative coverage selftest
+        run: node creator-narrative-coverage-selftest.js
       - name: Creator kinetic captions selftest
         run: node creator-kinetic-captions-selftest.js
       - name: Creator web freshness selftest
