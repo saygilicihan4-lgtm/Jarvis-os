@@ -3998,7 +3998,7 @@ function normalizeBrowserMissionFields(args={}){
   const sensitive=/(?:password|parola|şifre|sifre|token|secret|api\s*key|api[_-]?key|otp|tek\s*kullanımlık|doğrulama\s*kodu|dogrulama\s*kodu|verification\s*code|cvv|cvc|card\s*number|kart\s*numarası|kart\s*numarasi|iban|banka\s*hesap|bank\s*account|kredi\s*kart)/i;
   return rows.map((row,index)=>{
     const label=String(row&&row.label||'').replace(/[\r\n]+/g,' ').trim().slice(0,180);
-    const value=String(row&&row.value??'');
+    const value=String((row&&row.value)??'');
     if(!label)throw new Error('Browser form alan etiketi gerekli: '+(index+1));
     if(sensitive.test(label))throw new Error('Hassas form alanı kalıcı browser görevinde saklanamaz: '+label);
     if(Buffer.byteLength(value,'utf8')>4000)throw new Error('Browser form alan değeri 4KB sınırını aşıyor: '+label);
