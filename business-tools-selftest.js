@@ -12,11 +12,13 @@ assert.ok(worker.includes("name:'shopify_create_draft'"),'native Shopify draft t
 assert.ok(worker.includes("getCommerceEngine().createDraft(WORKSPACE,product)"),'Shopify draft execution missing');
 assert.ok(worker.includes("getCreatorEngine().renderShort({workspace:WORKSPACE,name,script,voicePath:voice})"),'Creator native render execution missing');
 assert.ok(worker.includes('ürün yayınlanmadı'),'draft-only user feedback missing');
-assert.ok(worker.includes('Ürünü halka açık mağazada yayınlama native ajan aracı değildir.'),'native publish guardrail prompt missing');
+assert.ok(worker.includes('"Devam et" tek başına yayınlama onayı değildir'),'explicit publish approval guardrail prompt missing');
 
-// Publishing stays available only through the explicit deterministic command path.
-// It must not be exposed as an autonomous local-brain tool.
-assert.ok(!worker.includes("name:'shopify_publish_product'"),'public Shopify publish must not be a native autonomous tool');
+// Public publishing is exposed only through the explicit approval gate.
+// There is no direct autonomous publish-product tool.
+assert.ok(!worker.includes("name:'shopify_publish_product'"),'direct Shopify publish tool must not be exposed');
+assert.ok(worker.includes("name:'approve_mission_action'"),'explicit mission approval tool missing');
+assert.ok(worker.includes("dependency:'approval'"),'publish approval dependency missing');
 assert.ok(worker.includes("name:'varova_campaign_mission'"),'durable VAROVA campaign tool missing');
 assert.ok(worker.includes("name:'resume_latest_mission'"),'mission resume tool missing');
 assert.ok(worker.includes('createDraftForMission(WORKSPACE,product,id)'),'mission-idempotent Shopify draft execution missing');
