@@ -113,3 +113,13 @@ if(!html.includes('socialMomentum')||!html.includes('MOMENTUM'))throw new Error(
 if(!html.includes('cadenceMode')||!html.includes('RİTİM'))throw new Error('Adaptive conversation cadence diagnostics missing from streaming UI');
 
 if(!html.includes('/interruption-state')||!html.includes('DEVAM ET'))throw new Error('Interrupted-answer resume UI is missing');
+
+if(!html.includes('function workerVersionSupported(value)'))throw new Error('Semantic Worker version helper missing');
+if(!html.includes('workerVersionSupported(pc.version)'))throw new Error('Worker readiness still bypasses semantic version helper');
+if(html.includes('/^2\\.(?:1[3-9]|[2-9]\\d)\\./'))throw new Error('Legacy Worker minor-version regex still rejects 2.100.0');
+const versionFn=html.match(/function workerVersionSupported\(value\)\{([^}]*)\}/);
+if(!versionFn)throw new Error('Worker semantic-version helper body missing');
+const workerVersionSupported=new Function('value',versionFn[1]);
+if(workerVersionSupported('2.100.0')!==true)throw new Error('Worker 2.100.0 is incorrectly marked outdated');
+if(workerVersionSupported('2.13.0')!==true)throw new Error('Worker 2.13.0 compatibility regressed');
+if(workerVersionSupported('2.12.9')!==false)throw new Error('Unsupported legacy Worker is incorrectly accepted');
