@@ -1623,7 +1623,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
   };
 }
 
-function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId='',assetHashes=[],thumbnailTitle=''}){
+function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId='',assetHashes=[],thumbnailTitle='',assetMode='auto'}){
   if(!workspace)throw new Error('workspace required');
   if(!voicePath||!fs.existsSync(voicePath))throw new Error('creator long-form voice file missing');
   const status=ffmpegStatus(workspace);
@@ -1658,9 +1658,12 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
   const srtFile=path.join(jobDir,base+'.srt');
   const metaFile=path.join(jobDir,'job.json');
 
-  const explicitAssets=Array.isArray(assetFiles)&&assetFiles.length>0;
-  const assetCandidates=explicitAssets?resolveAssetSelection(workspace,assetFiles,20):selectAssets(workspace,base,24);
+  const requestedAssetMode=String(assetMode||'auto').trim().toLowerCase();
+  const proceduralAssets=requestedAssetMode==='procedural';
+  const explicitAssets=!proceduralAssets&&Array.isArray(assetFiles)&&assetFiles.length>0;
+  const assetCandidates=proceduralAssets?[]:(explicitAssets?resolveAssetSelection(workspace,assetFiles,20):selectAssets(workspace,base,24));
   const assetPreflight=preflightAssetSelection(workspace,assetCandidates,{maxScenes:explicitAssets?20:12});
+  const assetSelection=proceduralAssets?'procedural':(explicitAssets?'explicit':'automatic');
   const assets=assetPreflight.assets;
   const transition=assets.length>0?0.35:0;
   const storyboard=buildLongformStoryboard(assets,duration,transition,25,28);
@@ -1800,7 +1803,7 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     missionId:String(missionId||'').trim().slice(0,100)||null,
     name:base,
     script:cleanScript,
-    assetSelection:explicitAssets?'explicit':'automatic',
+    assetSelection,
     assetPreflight:assetPreflight.evidence,
     sourceAssetHashes:Array.isArray(assetHashes)?assetHashes.map(x=>String(x||'').slice(0,64)).filter(Boolean).slice(0,20):[],
     voicePath:path.relative(workspace,voicePath),
@@ -1838,6 +1841,7 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),
     audioMaster:creatorAudioMasterProfile(),
     narrationActivity,
+    assetSelection,
     profileVersion:CREATOR_PROFILE_VERSION
   };
 }

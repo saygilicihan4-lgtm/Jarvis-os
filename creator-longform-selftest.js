@@ -16,12 +16,13 @@ for(const cap of [
   'creator_longform_recovery_v1',
   'creator_multilingual_voice_v1',
   'creator_daily_longform_v1',
-  'creator_daily_idempotency_v1'
+  'creator_daily_idempotency_v1',
+  'creator_procedural_fallback_v1'
 ]){
   assert.ok(worker.includes("'"+cap+"'"),cap+' missing');
 }
 
-assert.ok(source.includes('function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId=\'\',assetHashes=[],thumbnailTitle=\'\'})'),'long-form renderer with thumbnail support missing');
+assert.ok(source.includes('function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId=\'\',assetHashes=[],thumbnailTitle=\'\',assetMode=\'auto\'})'),'long-form renderer with procedural asset mode missing');
 assert.ok(source.includes('function probeRenderedLongform(file,ffprobe)'),'long-form probe missing');
 assert.ok(source.includes("codec:String(video&&video.codec_name||'').toLowerCase()==='h264'"),'H.264 long-form gate missing');
 assert.ok(source.includes("width:Number(video&&video.width)===1920"),'1920 long-form width gate missing');
@@ -101,7 +102,8 @@ assert.ok(worker.includes("async function serviceCreatorDailyPlan"),'daily plan 
 assert.strictEqual((worker.match(/async function serviceCreatorDailyPlan/g)||[]).length,1,'daily planner must have exactly one service implementation');
 assert.ok(/function creatorDailyDefaultPlan\(\)[\s\S]{0,500}enabled:true/.test(worker),'requested daily long-form plan must default enabled');
 assert.ok(worker.includes('function creatorDailyAutoAssetBaselines(dateKey,maxItems=12)'),'daily auto asset baseline helper missing');
-assert.ok(worker.includes('creatorDailyAutoAssetBaselines(dateKey,12)'),'daily automatic storyboard must be selected and hash-locked before mission creation');
+assert.ok(worker.includes('chooseCreatorDailyBaselines(web,semantic,12)'),'daily automatic storyboard must use relevance-qualified baselines only');
+assert.ok(worker.includes("const creatorAssetMode=baselineOverride&&!creatorAssets.length?'procedural':'auto'"),'empty daily baseline override must become procedural mode');
 assert.ok(worker.includes('verifyCreatorLongformBaselines(plan.creatorAssets)'),'configured daily storyboard baselines must be reverified before reuse');
 assert.ok(worker.includes("setInterval(()=>serviceCreatorDailyPlan().catch(()=>{}),60000)"),'daily plan restart service interval missing');
 assert.ok(worker.includes("name:'creator_daily_longform_plan'"),'native daily plan tool missing');
