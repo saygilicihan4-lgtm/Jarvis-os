@@ -73,8 +73,10 @@ assert.strictEqual(typeof engine.thumbnailTitleLines,'function','thumbnail title
 assert.strictEqual(typeof engine.createThumbnail,'function','thumbnail renderer export missing');
 assert.strictEqual(typeof engine.buildShortSfxEvents,'function','Short SFX event planner export missing');
 assert.strictEqual(typeof engine.renderShortSfxBed,'function','Short SFX renderer export missing');
-assert.ok(source.includes("const quality=applyRenderedAudioQuality(")&&source.includes("probeRenderedShort(outFile,status.ffprobe)"),'post-render technical + final audio gate missing');
+assert.ok(source.includes("const quality=applyRenderedMediaQuality(")&&source.includes("probeRenderedShort(outFile,status.ffprobe)"),'post-render technical + final media gate missing');
 assert.strictEqual(typeof engine.applyRenderedAudioQuality,'function','final audio quality helper export missing');
+assert.strictEqual(typeof engine.applyRenderedMediaQuality,'function','final media quality helper export missing');
+assert.strictEqual(typeof engine.probeRenderedVisualActivity,'function','final visual activity probe export missing');
 assert.ok(source.includes("quality,\n    visualEdit,\n    thumbnail:thumbnail&&thumbnail.ok?thumbnail.path:null,\n    thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),\n    soundDesign,\n    audioMaster:creatorAudioMasterProfile(),\n    narrationActivity,\n    output:path.relative(workspace,outFile)"),'quality + visual edit + thumbnail + sound design + audio master + narration activity metadata missing');
 assert.strictEqual(typeof engine.probeNarrationActivity,'function','narration activity probe export missing');
 assert.strictEqual(typeof engine.creatorAudioMasterFilter,'function','audio master filter export missing');
