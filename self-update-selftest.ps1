@@ -20,6 +20,8 @@ if([int]$manifest.schema -ne 1){ throw 'Manifest schema mismatch' }
 $paths=@($manifest.files | ForEach-Object { [string]$_.path })
 $required=@(
   'worker.js',
+  'jarvis-commerce-engine.js',
+  'jarvis-shopify-connect.ps1',
   'jarvis-startup.ps1',
   'JARVIS-STARTUP-HIDDEN.vbs',
   'install-jarvis-startup.ps1',
