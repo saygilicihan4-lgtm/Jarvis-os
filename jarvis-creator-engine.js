@@ -63,8 +63,10 @@ function safeWorkspaceVideo(workspace,relativePath){
   return{root,rel,full,real,ext,bytes:lst.size};
 }
 function assetSafeName(relativePath){
-  const ext=path.extname(String(relativePath||'')).toLowerCase();
-  const stem=path.basename(String(relativePath||''),ext);
+  const input=String(relativePath||'');
+  const originalExt=path.extname(input);
+  const ext=originalExt.toLowerCase();
+  const stem=path.basename(input,originalExt);
   return safeName(stem)+ext;
 }
 function inspectAsset(workspace,relativePath){
