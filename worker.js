@@ -4856,7 +4856,7 @@ async function runDurableMission(id){
         const inspected=getCreatorEngine().inspectAsset(WORKSPACE,op.source);
         if(!inspected.ok){
           if(inspected.code==='FFPROBE_MISSING'){
-            mission=engine.failStep(WORKSPACE,id,{code:'FFPROBE_MISSING',message:'Creator asset doğrulaması için FFprobe gerekli.',retryable:true,dependency:'ffmpeg'});
+            mission=engine.failStep(WORKSPACE,id,{code:'FFPROBE_MISSING',message:'Creator asset doğrulaması için FFprobe gerekli.',retryable:true,dependency:'creator_probe'});
             return mission;
           }
           mission=engine.failStep(WORKSPACE,id,{code:String(inspected.code||'CREATOR_ASSET_INVALID'),message:'Creator asset video doğrulaması başarısız: '+String(op.source),retryable:false});
@@ -5452,6 +5452,12 @@ async function missionDependencyReady(mission){
     try{
       const st=await getYoutubeStudio().status(getBrowserOperator(),WORKSPACE);
       return !!(st&&st.running&&st.loggedIn);
+    }catch(_){return false}
+  }
+  if(dep==='creator_probe'){
+    try{
+      const st=getCreatorEngine().ffmpegStatus(WORKSPACE);
+      return !!(st&&st.ffmpeg&&st.ffprobe);
     }catch(_){return false}
   }
   if(dep==='ffmpeg'){
