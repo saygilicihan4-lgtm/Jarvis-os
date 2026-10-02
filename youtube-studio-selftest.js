@@ -68,7 +68,10 @@ const yt=require('./jarvis-youtube-studio');
   assert.ok(source.includes("input[type=file]"),'file input upload path missing');
   assert.ok(worker.includes("name:'youtube_prepare_draft_upload'"),'native YouTube draft tool missing');
   assert.ok(worker.includes("name:'youtube_studio_status'"),'native YouTube status tool missing');
-  assert.ok(!worker.includes("name:'youtube_publish'"),'YouTube public publish must not be an autonomous native tool');
+  assert.ok(!worker.includes("name:'youtube_publish'"),'direct YouTube publish tool must not be autonomous');
+  assert.ok(worker.includes("'youtube_publish_approval_v1'"),'YouTube publish approval capability missing');
+  assert.ok(source.includes('async function publishPreparedDraft('),'approval-gated YouTube publish path missing');
+  assert.ok(source.includes("if(!approved)return{ok:false,code:'EXPLICIT_APPROVAL_REQUIRED'"),'YouTube publish explicit approval guard missing');
   assert.ok(worker.includes('PUBLIC/YAYINLA adımına dokunulmadı')||source.includes('PUBLIC/YAYINLA adımına dokunulmadı'),'draft-only completion message missing');
   assert.ok(server.includes("return'youtube_upload_prepare_v1'"),'server YouTube draft routing missing');
 
