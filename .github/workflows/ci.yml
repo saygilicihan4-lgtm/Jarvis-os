@@ -39,6 +39,7 @@ jobs:
           node --check update-trust-selftest.js
           node --check mission-alerts-selftest.js
           node --check pc-acceptance-selftest.js
+          node --check pc-mission-selftest.js
           node --check pc-self-repair-selftest.js
           node --check youtube-studio-selftest.js
           node --check commerce-engine-selftest.js
@@ -89,6 +90,8 @@ jobs:
         run: node mission-alerts-selftest.js
       - name: PC acceptance snapshot selftest
         run: node pc-acceptance-selftest.js
+      - name: Safe PC mission selftest
+        run: node pc-mission-selftest.js
       - name: PC self-repair selftest
         run: node pc-self-repair-selftest.js
       - name: Routing selftest
