@@ -566,6 +566,57 @@ function audioDurationSeconds(file,ffprobe){
     return Number.isFinite(n)&&n>0?n:null;
   }catch(_){return null}
 }
+function probeNarrationActivity(file,ffmpeg){
+  if(!ffmpeg)return{ok:false,code:'FFMPEG_MISSING',meanDb:null,maxDb:null};
+  if(!file||!fs.existsSync(file))return{ok:false,code:'CREATOR_NARRATION_MISSING',meanDb:null,maxDb:null};
+  try{
+    const run=childProcess.spawnSync(ffmpeg,[
+      '-hide_banner','-nostats','-i',file,
+      '-map','0:a:0',
+      '-af','volumedetect',
+      '-f','null','-'
+    ],{
+      encoding:'utf8',
+      windowsHide:true,
+      timeout:45000,
+      maxBuffer:1024*1024*4
+    });
+    if(run.error||run.status!==0){
+      return{
+        ok:false,
+        code:'CREATOR_NARRATION_PROBE_FAILED',
+        meanDb:null,
+        maxDb:null,
+        detail:String((run.error&&run.error.message)||run.stderr||'').slice(-400)
+      };
+    }
+    const text=String(run.stderr||'');
+    const meanMatch=/mean_volume:\s*(-?inf|-?[0-9]+(?:\.[0-9]+)?)\s*dB/i.exec(text);
+    const maxMatch=/max_volume:\s*(-?inf|-?[0-9]+(?:\.[0-9]+)?)\s*dB/i.exec(text);
+    const parse=(match)=>{
+      if(!match)return null;
+      if(/inf/i.test(match[1]))return -Infinity;
+      const n=Number(match[1]);
+      return Number.isFinite(n)?n:null;
+    };
+    const meanDb=parse(meanMatch);
+    const maxDb=parse(maxMatch);
+    // Reject digital silence/noise-floor-only files while still allowing very
+    // quiet but recoverable narration to proceed into the loudness master.
+    const ok=Number.isFinite(maxDb)&&Number.isFinite(meanDb)&&maxDb>-80&&meanDb>-85;
+    return{
+      ok,
+      code:ok?'CREATOR_NARRATION_ACTIVITY_PASS':'CREATOR_NARRATION_SILENT',
+      meanDb,
+      maxDb,
+      thresholds:{meanDb:-85,maxDb:-80},
+      method:'ffmpeg-volumedetect'
+    };
+  }catch(e){
+    return{ok:false,code:'CREATOR_NARRATION_PROBE_FAILED',meanDb:null,maxDb:null,detail:String(e.message||e).slice(0,400)};
+  }
+}
+
 function fitNarrationRatePercent(measuredSeconds,targetSeconds=600,currentRatePercent=-7){
   const measured=Number(measuredSeconds);
   const target=Number(targetSeconds);
@@ -914,6 +965,13 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
   const metaFile=path.join(jobDir,'job.json');
 
   const measured=audioDurationSeconds(voicePath,status.ffprobe);
+  const narrationActivity=probeNarrationActivity(voicePath,status.ffmpeg);
+  if(!narrationActivity.ok){
+    const e=new Error('Creator narration audio is silent or unreadable.');
+    e.code=String(narrationActivity.code||'CREATOR_NARRATION_SILENT');
+    e.narrationActivity=narrationActivity;
+    throw e;
+  }
   if(measured&&measured>19.5){
     const e=new Error('Anlatım '+measured.toFixed(1)+' sn; Shorts hedefi için metni kısaltmak gerekiyor.');
     e.code='VOICE_TOO_LONG';
@@ -1104,6 +1162,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),
     soundDesign,
     audioMaster:creatorAudioMasterProfile(),
+    narrationActivity,
     output:path.relative(workspace,outFile),
     subtitle:path.relative(workspace,srtFile),
     burnedSubtitle:path.relative(workspace,assFile),
@@ -1131,6 +1190,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),
     soundDesign,
     audioMaster:creatorAudioMasterProfile(),
+    narrationActivity,
     profileVersion:CREATOR_PROFILE_VERSION
   };
 }
@@ -1149,6 +1209,13 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
   if(!cleanScript)throw new Error('script required');
 
   const measured=audioDurationSeconds(voicePath,status.ffprobe);
+  const narrationActivity=probeNarrationActivity(voicePath,status.ffmpeg);
+  if(!narrationActivity.ok){
+    const e=new Error('Creator long-form narration audio is silent or unreadable.');
+    e.code=String(narrationActivity.code||'CREATOR_NARRATION_SILENT');
+    e.narrationActivity=narrationActivity;
+    throw e;
+  }
   if(!measured||measured<539.5||measured>659.5){
     const e=new Error('Long-form anlatım süresi 9-11 dakika aralığında olmalı; ölçülen '+Number(measured||0).toFixed(1)+' sn.');
     e.code='LONGFORM_VOICE_DURATION_OUT_OF_RANGE';
@@ -1311,6 +1378,7 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     output:path.relative(workspace,outFile),
     subtitle:path.relative(workspace,srtFile),
     audioMaster:creatorAudioMasterProfile(),
+    narrationActivity,
     profile:{width:1920,height:1080,fps:30,codec:'H.264',audio:'AAC',durationTarget:'9-11m',multiScene:true,transition:'varied',sceneTarget:'20-30s',motion:'subtle-pan-crop',narrativeAssetOrder:assets.length>=6?'progressive':'cyclic'}
   };
   fs.writeFileSync(metaFile,JSON.stringify(meta,null,2),'utf8');
@@ -1332,6 +1400,7 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     thumbnail:thumbnail&&thumbnail.ok?thumbnail.path:null,
     thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),
     audioMaster:creatorAudioMasterProfile(),
+    narrationActivity,
     profileVersion:CREATOR_PROFILE_VERSION
   };
 }
@@ -1360,6 +1429,7 @@ module.exports={
   streamTimelineCoverage,
   creatorAudioMasterFilter,
   creatorAudioMasterProfile,
+  probeNarrationActivity,
   probeHookMotion,
   findHookMotionWindow,
   listAssets,
