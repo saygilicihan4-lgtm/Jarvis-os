@@ -4,7 +4,7 @@ const os=require('os');
 const childProcess=require('child_process');
 const crypto=require('crypto');
 
-const ENGINE_VERSION='1.2';
+const ENGINE_VERSION='1.3';
 const CREATOR_PROFILE_VERSION='2.0';
 
 function execFile(exe,args,opts={}){
@@ -237,6 +237,52 @@ function audioDurationSeconds(file,ffprobe){
     return Number.isFinite(n)&&n>0?n:null;
   }catch(_){return null}
 }
+function probeRenderedShort(file,ffprobe){
+  if(!ffprobe)return{ok:false,code:'FFPROBE_MISSING',message:'Rendered Shorts kalite doğrulaması için FFprobe gerekli.'};
+  if(!file||!fs.existsSync(file))return{ok:false,code:'CREATOR_OUTPUT_MISSING',message:'Rendered MP4 bulunamadı.'};
+  try{
+    const raw=execFile(ffprobe,[
+      '-v','error',
+      '-show_entries','stream=index,codec_type,codec_name,width,height,r_frame_rate:format=duration',
+      '-of','json',
+      file
+    ],{timeout:20000,maxBuffer:1024*1024*2}).trim();
+    const data=JSON.parse(raw||'{}');
+    const streams=Array.isArray(data.streams)?data.streams:[];
+    const video=streams.find(x=>x&&x.codec_type==='video');
+    const audio=streams.find(x=>x&&x.codec_type==='audio');
+    const duration=Number(data&&data.format&&data.format.duration);
+    const rate=String(video&&video.r_frame_rate||'0/1').split('/');
+    const fpsDen=Number(rate[1]||1),fpsNum=Number(rate[0]||0);
+    const fps=fpsDen?fpsNum/fpsDen:0;
+    const checks={
+      video:!!video,
+      audio:!!audio,
+      codec:String(video&&video.codec_name||'').toLowerCase()==='h264',
+      width:Number(video&&video.width)===1080,
+      height:Number(video&&video.height)===1920,
+      fps:Number.isFinite(fps)&&Math.abs(fps-30)<=0.05,
+      duration:Number.isFinite(duration)&&duration>=11.8&&duration<=18.8
+    };
+    const ok=Object.values(checks).every(Boolean);
+    return{
+      ok,
+      code:ok?'CREATOR_QUALITY_PASS':'CREATOR_QUALITY_FAILED',
+      checks,
+      measured:{
+        videoCodec:String(video&&video.codec_name||''),
+        audioCodec:String(audio&&audio.codec_name||''),
+        width:Number(video&&video.width||0),
+        height:Number(video&&video.height||0),
+        fps:Number(Number(fps||0).toFixed(3)),
+        duration:Number(Number(duration||0).toFixed(3))
+      },
+      message:ok?'Creator Shorts kalite kapısı geçti.':'Creator Shorts teknik kalite kapısı başarısız.'
+    };
+  }catch(e){
+    return{ok:false,code:'CREATOR_QUALITY_PROBE_FAILED',message:String(e.message||e).slice(0,500)};
+  }
+}
 function splitCaptionSegments(text){
   const clean=String(text||'').replace(/\s+/g,' ').trim();
   if(!clean)return[];
@@ -391,6 +437,13 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
   }
 
   if(!fs.existsSync(outFile)||fs.statSync(outFile).size<10000)throw new Error('Rendered MP4 verification failed');
+  const quality=probeRenderedShort(outFile,status.ffprobe);
+  if(!quality.ok){
+    const e=new Error(String(quality.message||'Creator Shorts quality gate failed')+' · '+String(quality.code||'CREATOR_QUALITY_FAILED'));
+    e.code=String(quality.code||'CREATOR_QUALITY_FAILED');
+    e.quality=quality;
+    throw e;
+  }
 
   const meta={
     engine:'JARVIS_CREATOR_ENGINE',
@@ -407,6 +460,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     sourceAssets:assets.map(x=>path.relative(workspace,x)),
     storyboard:storyboard.map(x=>({...x,file:path.relative(workspace,x.file)})),
     captionsBurned,
+    quality,
     output:path.relative(workspace,outFile),
     subtitle:path.relative(workspace,srtFile),
     profile:{width:1080,height:1920,fps:30,codec:'H.264',audio:'AAC',durationTarget:'12-18s',multiScene:true,transition:'fade'}
@@ -425,6 +479,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     sceneCount:assets.length,
     captionsBurned,
     duration,
+    quality,
     profileVersion:CREATOR_PROFILE_VERSION
   };
 }
@@ -441,6 +496,7 @@ module.exports={
   supportsSubtitles,
   ffmpegFilterPath,
   renderShort,
+  probeRenderedShort,
   listAssets,
   resolveAssetSelection,
   inspectAsset,
