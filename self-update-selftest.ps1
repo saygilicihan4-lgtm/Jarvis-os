@@ -23,6 +23,7 @@ $required=@(
   'jarvis-commerce-engine.js',
   'jarvis-shopify-connect.ps1',
   'jarvis-youtube-studio.js',
+  'JARVIS-PC-ACCEPTANCE.ps1',
   'jarvis-mission-engine.js',
   'jarvis-startup.ps1',
   'JARVIS-STARTUP-HIDDEN.vbs',
