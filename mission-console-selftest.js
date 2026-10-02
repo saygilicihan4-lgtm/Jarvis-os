@@ -6,7 +6,7 @@ const server=fs.readFileSync('./server.js','utf8');
 const html=fs.readFileSync('./public/index.html','utf8');
 const css=fs.readFileSync('./public/style.css','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.96.0'"),'Worker 2.96.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.97.0'"),'Worker 2.97.0 required');
 assert.ok(worker.includes("'pc_self_repair_v1'"),'self-repair capability must be preserved');
 assert.ok(worker.includes("'creator_multiscene_v2'"),'multi-scene Creator capability must be preserved');
 assert.ok(worker.includes("'creator_burned_captions_v1'"),'burned-caption Creator capability must be preserved');
@@ -22,6 +22,9 @@ assert.ok(!telemetry.includes('.input'),'cloud mission telemetry must not expose
 assert.ok(!telemetry.includes('TOKEN'),'cloud mission telemetry must not expose tokens');
 assert.ok(!telemetry.includes('DEVICE_TOKEN'),'cloud mission telemetry must not expose device token');
 assert.ok(telemetry.includes('queue:cleanQueue'),'sanitized mission queue missing');
+assert.ok(telemetry.includes('paused:Number(h.counts.paused||0)'),'paused mission count missing from cloud telemetry');
+assert.ok(server.includes('paused:Math.max(0,Math.min(10000,Number(counts.paused)||0))'),'server sanitizer drops paused mission count');
+assert.ok(css.includes('.status.paused'),'paused durable mission styling missing');
 
 assert.ok(server.includes('function sanitizeMissionTelemetry(raw)'),'server mission telemetry sanitizer missing');
 assert.ok(server.includes('.slice(0,160)'), 'server still truncates capability heartbeat too aggressively');
