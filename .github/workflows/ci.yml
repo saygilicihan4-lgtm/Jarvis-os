@@ -71,6 +71,7 @@ jobs:
           [scriptblock]::Create((Get-Content ./install-jarvis-startup.ps1 -Raw)) | Out-Null
           [scriptblock]::Create((Get-Content ./jarvis-self-update.ps1 -Raw)) | Out-Null
           [scriptblock]::Create((Get-Content ./jarvis-shopify-connect.ps1 -Raw)) | Out-Null
+          [scriptblock]::Create((Get-Content ./JARVIS-PC-ACCEPTANCE.ps1 -Raw)) | Out-Null
       - name: Startup regression selftest
         shell: pwsh
         run: ./startup-selftest.ps1
