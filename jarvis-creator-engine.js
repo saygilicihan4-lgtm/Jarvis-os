@@ -5,6 +5,7 @@ const childProcess=require('child_process');
 const crypto=require('crypto');
 
 const ENGINE_VERSION='1.0';
+const CREATOR_PROFILE_VERSION='2.0';
 
 function execFile(exe,args,opts={}){
   return childProcess.execFileSync(exe,args,{
@@ -54,6 +55,47 @@ function pickAsset(workspace,name){
   const h=crypto.createHash('sha1').update(String(name||'')).digest();
   const n=h.readUInt32BE(0)%assets.length;
   return assets[n];
+}
+function selectAssets(workspace,name,maxScenes=5){
+  const assets=listAssets(workspace);
+  if(!assets.length)return[];
+  const limit=Math.max(1,Math.min(5,Number(maxScenes)||5,assets.length));
+  const h=crypto.createHash('sha1').update('storyboard:'+String(name||'')).digest();
+  const offset=h.readUInt32BE(0)%assets.length;
+  const rotated=assets.slice(offset).concat(assets.slice(0,offset));
+  return rotated.slice(0,limit);
+}
+function buildStoryboard(assets,durationSeconds,transitionSeconds=0.18){
+  const list=Array.isArray(assets)?assets.filter(Boolean):[];
+  if(!list.length)return[];
+  const duration=Math.max(1,Number(durationSeconds)||15);
+  const transition=list.length>1?Math.max(0,Math.min(0.35,Number(transitionSeconds)||0)):0;
+  const sceneDuration=(duration+(transition*(list.length-1)))/list.length;
+  return list.map((file,index)=>{
+    const start=index*(sceneDuration-transition);
+    const end=Math.min(duration,start+sceneDuration);
+    return{
+      index,
+      file,
+      start:Number(start.toFixed(3)),
+      end:Number(end.toFixed(3)),
+      duration:Number((end-start).toFixed(3)),
+      transition:index===0?null:'fade'
+    };
+  });
+}
+function supportsSubtitles(ffmpeg){
+  if(!ffmpeg)return false;
+  try{
+    const out=execFile(ffmpeg,['-hide_banner','-filters'],{timeout:10000,maxBuffer:1024*1024*8});
+    return /\bsubtitles\b/.test(out);
+  }catch(_){return false}
+}
+function ffmpegFilterPath(file){
+  return path.resolve(file)
+    .replace(/\\/g,'/')
+    .replace(/:/g,'\\:')
+    .replace(/'/g,"\\'");
 }
 function ffmpegStatus(workspace){
   const ffmpeg=commandPath('ffmpeg');
@@ -156,7 +198,6 @@ function renderShort({workspace,name,script,voicePath}){
   const outFile=path.join(dirs.output,base+'.mp4');
   const srtFile=path.join(jobDir,base+'.srt');
   const metaFile=path.join(jobDir,'job.json');
-  const asset=pickAsset(workspace,base);
 
   const measured=audioDurationSeconds(voicePath,status.ffprobe);
   if(measured&&measured>19.5){
@@ -166,49 +207,82 @@ function renderShort({workspace,name,script,voicePath}){
     throw e;
   }
   const duration=measured?Math.max(12,Math.min(18.5,measured+0.35)):18;
+  const assets=selectAssets(workspace,base,5);
+  const transition=assets.length>1?0.18:0;
+  const storyboard=buildStoryboard(assets,duration,transition);
+  const captionsBurned=supportsSubtitles(status.ffmpeg);
 
   fs.writeFileSync(srtFile,buildSrt(cleanScript,duration),'utf8');
-  const meta={
-    engine:'JARVIS_CREATOR_ENGINE',
-    version:ENGINE_VERSION,
-    createdAt:new Date().toISOString(),
-    name:base,
-    script:cleanScript,
-    voicePath:path.relative(workspace,voicePath),
-    sourceAsset:asset?path.relative(workspace,asset):null,
-    output:path.relative(workspace,outFile),
-    subtitle:path.relative(workspace,srtFile),
-    profile:{width:1080,height:1920,fps:30,codec:'H.264',audio:'AAC',durationTarget:'12-18s'}
-  };
-  fs.writeFileSync(metaFile,JSON.stringify(meta,null,2),'utf8');
 
   let args=[];
-  if(asset){
-    args=[
-      '-y','-hide_banner','-loglevel','error',
-      '-stream_loop','-1','-i',asset,
-      '-i',voicePath,
+  if(assets.length){
+    args=['-y','-hide_banner','-loglevel','error'];
+    for(const asset of assets)args.push('-stream_loop','-1','-i',asset);
+    args.push('-i',voicePath);
+
+    const filters=[];
+    storyboard.forEach((scene,i)=>{
+      filters.push(
+        '['+i+':v]'+
+        'scale=1080:1920:force_original_aspect_ratio=increase,'+
+        'crop=1080:1920,'+
+        'fps=30,setsar=1,'+
+        'trim=duration='+scene.duration.toFixed(3)+','+
+        'setpts=PTS-STARTPTS,'+
+        'format=yuv420p[v'+i+']'
+      );
+    });
+
+    let videoLabel='v0';
+    if(storyboard.length>1){
+      for(let i=1;i<storyboard.length;i++){
+        const out='vx'+i;
+        const offset=(i*(storyboard[0].duration-transition));
+        filters.push('['+videoLabel+'][v'+i+']xfade=transition=fade:duration='+transition.toFixed(3)+':offset='+offset.toFixed(3)+'['+out+']');
+        videoLabel=out;
+      }
+    }
+
+    if(captionsBurned){
+      const subtitlePath=ffmpegFilterPath(srtFile);
+      filters.push(
+        '['+videoLabel+']subtitles=filename=\''+subtitlePath+'\':'+
+        "force_style='FontName=Arial,FontSize=22,PrimaryColour=&H00FFFFFF,OutlineColour=&H90000000,BorderStyle=1,Outline=3,Shadow=0,Alignment=2,MarginV=105'"+
+        '[vout]'
+      );
+      videoLabel='vout';
+    }
+
+    args.push(
       '-t',duration.toFixed(3),
-      '-filter_complex','[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1[v]',
-      '-map','[v]','-map','1:a:0',
-      '-c:v','libx264','-preset','veryfast','-crf','21','-pix_fmt','yuv420p',
-      '-c:a','aac','-b:a','160k',
+      '-filter_complex',filters.join(';'),
+      '-map','['+videoLabel+']',
+      '-map',String(assets.length)+':a:0',
+      '-c:v','libx264','-preset','veryfast','-crf','20','-pix_fmt','yuv420p',
+      '-c:a','aac','-b:a','160k','-af','apad=pad_dur=1',
       '-movflags','+faststart',
       outFile
-    ];
+    );
   }else{
     const graph='color=c=0x030712:s=1080x1920:r=30:d='+duration.toFixed(3)+',noise=alls=8:allf=t+u';
     args=[
       '-y','-hide_banner','-loglevel','error',
       '-f','lavfi','-i',graph,
       '-i',voicePath,
-      '-t',duration.toFixed(3),
+      '-t',duration.toFixed(3)
+    ];
+    if(captionsBurned){
+      args.push(
+        '-vf',"subtitles=filename='"+ffmpegFilterPath(srtFile)+"':force_style='FontName=Arial,FontSize=22,PrimaryColour=&H00FFFFFF,OutlineColour=&H90000000,BorderStyle=1,Outline=3,Shadow=0,Alignment=2,MarginV=105'"
+      );
+    }
+    args.push(
       '-map','0:v:0','-map','1:a:0',
-      '-c:v','libx264','-preset','veryfast','-crf','21','-pix_fmt','yuv420p',
-      '-c:a','aac','-b:a','160k',
+      '-c:v','libx264','-preset','veryfast','-crf','20','-pix_fmt','yuv420p',
+      '-c:a','aac','-b:a','160k','-af','apad=pad_dur=1',
       '-movflags','+faststart',
       outFile
-    ];
+    );
   }
 
   try{
@@ -220,23 +294,51 @@ function renderShort({workspace,name,script,voicePath}){
 
   if(!fs.existsSync(outFile)||fs.statSync(outFile).size<10000)throw new Error('Rendered MP4 verification failed');
 
+  const meta={
+    engine:'JARVIS_CREATOR_ENGINE',
+    version:ENGINE_VERSION,
+    profileVersion:CREATOR_PROFILE_VERSION,
+    createdAt:new Date().toISOString(),
+    name:base,
+    script:cleanScript,
+    voicePath:path.relative(workspace,voicePath),
+    sourceAsset:assets[0]?path.relative(workspace,assets[0]):null,
+    sourceAssets:assets.map(x=>path.relative(workspace,x)),
+    storyboard:storyboard.map(x=>({...x,file:path.relative(workspace,x.file)})),
+    captionsBurned,
+    output:path.relative(workspace,outFile),
+    subtitle:path.relative(workspace,srtFile),
+    profile:{width:1080,height:1920,fps:30,codec:'H.264',audio:'AAC',durationTarget:'12-18s',multiScene:true,transition:'fade'}
+  };
+  fs.writeFileSync(metaFile,JSON.stringify(meta,null,2),'utf8');
+
   return{
     ok:true,
-    message:'Shorts videosu hazır: '+outFile+' · 1080x1920 · 30 FPS · H.264'+(asset?' · yerel klip kullanıldı':' · procedural hareketli arka plan'),
+    message:'Shorts videosu hazır: '+outFile+' · 1080x1920 · 30 FPS · H.264 · '+(assets.length?assets.length+' sahne':'procedural hareketli arka plan')+(captionsBurned?' · altyazı videoya işlendi':' · altyazı ayrı SRT'),
     output:outFile,
     subtitle:srtFile,
     metadata:metaFile,
-    asset,
-    duration
+    asset:assets[0]||null,
+    assets,
+    storyboard,
+    sceneCount:assets.length,
+    captionsBurned,
+    duration,
+    profileVersion:CREATOR_PROFILE_VERSION
   };
 }
 
 module.exports={
   ENGINE_VERSION,
+  CREATOR_PROFILE_VERSION,
   safeName,
   ffmpegStatus,
   prepare,
   buildSrt,
+  selectAssets,
+  buildStoryboard,
+  supportsSubtitles,
+  ffmpegFilterPath,
   renderShort,
   listAssets
 };
