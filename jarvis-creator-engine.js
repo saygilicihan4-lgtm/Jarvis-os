@@ -259,6 +259,25 @@ function assetSafeName(relativePath){
   const stem=path.basename(input,originalExt);
   return safeName(stem)+ext;
 }
+function creatorAssetResolutionQuality(width,height,{minShortSide=432,minLongSide=640}={}){
+  const w=Number(width),h=Number(height);
+  const shortSide=Math.min(w,h),longSide=Math.max(w,h);
+  const minShort=Math.max(240,Number(minShortSide)||432);
+  const minLong=Math.max(minShort,Number(minLongSide)||640);
+  const ok=Number.isFinite(shortSide)&&Number.isFinite(longSide)&&shortSide>=minShort&&longSide>=minLong;
+  const preferred=ok&&shortSide>=540&&longSide>=960;
+  return{
+    ok,
+    preferred,
+    width:Number.isFinite(w)?w:0,
+    height:Number.isFinite(h)?h:0,
+    shortSide:Number.isFinite(shortSide)?shortSide:0,
+    longSide:Number.isFinite(longSide)?longSide:0,
+    minShortSide:minShort,
+    minLongSide:minLong,
+    tier:preferred?'preferred':(ok?'acceptable':'low')
+  };
+}
 function inspectAsset(workspace,relativePath){
   let info;
   try{info=safeWorkspaceVideo(workspace,relativePath)}catch(e){return{ok:false,code:String(e.message||e)}}
@@ -280,6 +299,7 @@ function inspectAsset(workspace,relativePath){
       return{ok:false,code:'CREATOR_ASSET_INVALID_VIDEO',file:info.rel};
     }
     if(duration>600)return{ok:false,code:'CREATOR_ASSET_DURATION_LIMIT',file:info.rel,duration};
+    const resolution=creatorAssetResolutionQuality(width,height);
     return{
       ok:true,
       file:info.rel,
@@ -287,12 +307,46 @@ function inspectAsset(workspace,relativePath){
       duration:Number(duration.toFixed(3)),
       width,
       height,
-      codec:String(stream.codec_name||'').slice(0,40)
+      codec:String(stream.codec_name||'').slice(0,40),
+      resolution
     };
   }catch(e){
     return{ok:false,code:'CREATOR_ASSET_PROBE_FAILED',file:info.rel,message:String(e.message||e).slice(0,400)};
   }
 }
+function preflightAssetSelection(workspace,files,{maxScenes=24}={}){
+  const rows=Array.isArray(files)?files.filter(Boolean):[];
+  const accepted=[],rejected=[];
+  const cap=Math.max(1,Math.min(24,Number(maxScenes)||24));
+  for(const file of rows){
+    if(accepted.length>=cap)break;
+    const rel=path.relative(workspace,String(file||'')).replace(/\\/g,'/');
+    const probe=inspectAsset(workspace,rel);
+    if(probe.ok&&probe.resolution&&probe.resolution.ok){
+      accepted.push(path.resolve(workspace,probe.file));
+    }else{
+      rejected.push({
+        file:rel,
+        code:String(probe.code||'CREATOR_ASSET_RESOLUTION_LOW'),
+        width:Number(probe.width||0),
+        height:Number(probe.height||0),
+        resolution:probe.resolution||null
+      });
+    }
+  }
+  return{
+    assets:accepted,
+    evidence:{
+      candidates:rows.length,
+      accepted:accepted.length,
+      rejected:rejected.length,
+      minShortSide:432,
+      minLongSide:640,
+      rejectedAssets:rejected.slice(0,24)
+    }
+  };
+}
+
 function assetDestinationName(relativePath,sha256){
   const ext=path.extname(String(relativePath||'')).toLowerCase();
   if(!CREATOR_ASSET_EXTENSIONS.has(ext))throw new Error('CREATOR_ASSET_UNSUPPORTED_EXTENSION');
@@ -1345,7 +1399,9 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
   }
   const duration=measured?Math.max(12,Math.min(18.5,measured+0.35)):18;
   const explicitAssets=Array.isArray(assetFiles)&&assetFiles.length>0;
-  const assets=explicitAssets?resolveAssetSelection(workspace,assetFiles,5):selectAssets(workspace,base,5);
+  const assetCandidates=explicitAssets?resolveAssetSelection(workspace,assetFiles,5):selectAssets(workspace,base,24);
+  const assetPreflight=preflightAssetSelection(workspace,assetCandidates,{maxScenes:5});
+  const assets=assetPreflight.assets;
   const transition=assets.length?0.18:0;
   const storyboard=buildShortStoryboard(assets,duration,transition,3.2,7,0.9);
   const hookMotion=assets.length
@@ -1520,6 +1576,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     name:base,
     script:cleanScript,
     assetSelection:explicitAssets?'explicit':'automatic',
+    assetPreflight:assetPreflight.evidence,
     sourceAssetHashes:Array.isArray(assetHashes)?assetHashes.map(x=>String(x||'').slice(0,64)).filter(Boolean).slice(0,5):[],
     voicePath:path.relative(workspace,voicePath),
     sourceAsset:assets[0]?path.relative(workspace,assets[0]):null,
@@ -1602,7 +1659,9 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
   const metaFile=path.join(jobDir,'job.json');
 
   const explicitAssets=Array.isArray(assetFiles)&&assetFiles.length>0;
-  const assets=explicitAssets?resolveAssetSelection(workspace,assetFiles,20):selectAssets(workspace,base,12);
+  const assetCandidates=explicitAssets?resolveAssetSelection(workspace,assetFiles,20):selectAssets(workspace,base,24);
+  const assetPreflight=preflightAssetSelection(workspace,assetCandidates,{maxScenes:explicitAssets?20:12});
+  const assets=assetPreflight.assets;
   const transition=assets.length>0?0.35:0;
   const storyboard=buildLongformStoryboard(assets,duration,transition,25,28);
   const maxSceneDuration=storyboard.length?Math.max(...storyboard.map(x=>Number(x.duration||0))):0;
@@ -1742,6 +1801,7 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     name:base,
     script:cleanScript,
     assetSelection:explicitAssets?'explicit':'automatic',
+    assetPreflight:assetPreflight.evidence,
     sourceAssetHashes:Array.isArray(assetHashes)?assetHashes.map(x=>String(x||'').slice(0,64)).filter(Boolean).slice(0,20):[],
     voicePath:path.relative(workspace,voicePath),
     sourceAsset:assets[0]?path.relative(workspace,assets[0]):null,
@@ -1820,6 +1880,8 @@ module.exports={
   listAssets,
   resolveAssetSelection,
   inspectAsset,
+  creatorAssetResolutionQuality,
+  preflightAssetSelection,
   assetSafeName,
   assetDestinationName,
   animateStillAsset,
