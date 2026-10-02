@@ -57,4 +57,16 @@ assert.strictEqual(latest.id,x.id);
 const summary=m.summarizeMission(latest);
 assert.strictEqual(summary.step.name,'shopify_draft');
 
+const ordered=m.schedulerOrder([
+  {id:'M-ZZZZZZZZZZZZ',status:'queued',createdAt:'2026-10-02T02:00:00.000Z'},
+  {id:'M-BBBBBBBBBBBB',status:'waiting_dependency',createdAt:'2026-10-02T01:00:00.000Z'},
+  {id:'M-AAAAAAAAAAAA',status:'completed',createdAt:'2026-10-02T00:00:00.000Z'},
+  {id:'M-CCCCCCCCCCCC',status:'needs_verification',createdAt:'2026-10-02T01:30:00.000Z'}
+]);
+assert.deepStrictEqual(ordered.map(x=>x.id),[
+  'M-BBBBBBBBBBBB',
+  'M-CCCCCCCCCCCC',
+  'M-ZZZZZZZZZZZZ'
+]);
+
 console.log('MISSION ENGINE SELFTEST PASS');
