@@ -3331,21 +3331,17 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
       if(Array.isArray(a.items)){
         for(let i=0;i<a.items.length;i++){
           const item=a.items[i]&&typeof a.items[i]==='object'?a.items[i]:null;
-          if(!item||Array.isArray(item.creatorAssets)&&item.creatorAssets.length||!String(item.webMediaQuery||'').trim())continue;
-          try{
-            const ready=getCreatorEngine().prepare(WORKSPACE,{allowInstall:true});
-            if(!ready.ok||!ready.ffprobe)continue;
-            const media=await getCreatorWebMedia().searchAndIngest(WORKSPACE,{
-              query:String(item.webMediaQuery).trim(),
-              provider:String(item.webMediaProvider||'auto'),
-              orientation:'portrait',
-              count:5,
-              inspect:(rel)=>getCreatorEngine().inspectAsset(WORKSPACE,rel),
-        animateImage:(rel,opts)=>getCreatorEngine().animateStillAsset(WORKSPACE,rel,opts),
-              manifestId:'batch-'+Date.now()+'-'+String(i+1).padStart(2,'0')
-            });
-            item.creatorAssets=media.assets;
-          }catch(_){}
+          if(!item||Array.isArray(item.creatorAssets)&&item.creatorAssets.length||item.webMediaAuto===false)continue;
+          const assets=await creatorAutoWebAssets({
+            title:String(item.youtubeTitle||item.campaignName||''),
+            script:String(item.script||''),
+            query:String(item.webMediaQuery||''),
+            provider:String(item.webMediaProvider||'auto'),
+            orientation:'portrait',
+            count:5,
+            manifestId:'batch-'+Date.now()+'-'+String(i+1).padStart(2,'0')
+          });
+          if(assets.length)item.creatorAssets=assets;
         }
       }
       const mission=createCreatorBatchMission(a);
@@ -3366,18 +3362,17 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
       return{ok:false,message:'YouTube PUBLIC adımını sıraya koymak için bu turda açık yayınlama isteği gerekli.'};
     }
     try{
-      if((!Array.isArray(a.creatorAssets)||!a.creatorAssets.length)&&String(a.webMediaQuery||'').trim()){
-        const ready=getCreatorEngine().prepare(WORKSPACE,{allowInstall:true});
-        if(!ready.ok||!ready.ffprobe)return{ok:false,message:'Long-form web medya için FFmpeg/FFprobe hazır değil.'};
-        const media=await getCreatorWebMedia().searchAndIngest(WORKSPACE,{
-          query:String(a.webMediaQuery).trim(),
+      if((!Array.isArray(a.creatorAssets)||!a.creatorAssets.length)&&a.webMediaAuto!==false){
+        const assets=await creatorAutoWebAssets({
+          title:String(a.youtubeTitle||a.campaignName||''),
+          script:String(a.script||''),
+          query:String(a.webMediaQuery||''),
           provider:String(a.webMediaProvider||'auto'),
           orientation:'landscape',
           count:12,
-          inspect:(rel)=>getCreatorEngine().inspectAsset(WORKSPACE,rel),
-        animateImage:(rel,opts)=>getCreatorEngine().animateStillAsset(WORKSPACE,rel,opts)
+          manifestId:'long-'+Date.now()
         });
-        a.creatorAssets=media.assets;
+        if(assets.length)a.creatorAssets=assets;
       }
       const mission=createCreatorLongformMission(a);
       return{ok:true,message:missionSummaryText(mission)+' · long-form görev scheduler sırasına alındı'+(Array.isArray(a.creatorAssets)&&a.creatorAssets.length?' · '+a.creatorAssets.length+' Creator klip kilitlendi':'')+(a.includeYouTube===true?' · YouTube yalnız DRAFT hazırlanacak':'')+(a.publish===true?' · PUBLIC için ayrıca approval gate beklenecek':' · PUBLIC yayın yok')};
@@ -3404,18 +3399,17 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
       return{ok:false,message:'YouTube PUBLIC adımını sıraya koymak için bu turda açık yayınlama isteği gerekli.'};
     }
     try{
-      if((!Array.isArray(a.creatorAssets)||!a.creatorAssets.length)&&String(a.webMediaQuery||'').trim()){
-        const ready=getCreatorEngine().prepare(WORKSPACE,{allowInstall:true});
-        if(!ready.ok||!ready.ffprobe)return{ok:false,message:'Short web medya için FFmpeg/FFprobe hazır değil.'};
-        const media=await getCreatorWebMedia().searchAndIngest(WORKSPACE,{
-          query:String(a.webMediaQuery).trim(),
+      if((!Array.isArray(a.creatorAssets)||!a.creatorAssets.length)&&a.webMediaAuto!==false){
+        const assets=await creatorAutoWebAssets({
+          title:String(a.youtubeTitle||a.campaignName||''),
+          script:String(a.script||''),
+          query:String(a.webMediaQuery||''),
           provider:String(a.webMediaProvider||'auto'),
           orientation:'portrait',
           count:5,
-          inspect:(rel)=>getCreatorEngine().inspectAsset(WORKSPACE,rel),
-        animateImage:(rel,opts)=>getCreatorEngine().animateStillAsset(WORKSPACE,rel,opts)
+          manifestId:'short-'+Date.now()
         });
-        a.creatorAssets=media.assets;
+        if(assets.length)a.creatorAssets=assets;
       }
       const mission=createCreatorShortMission(a);
       const out=await runDurableMission(mission.id);
@@ -3437,6 +3431,18 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
       return{ok:false,message:'YouTube PUBLIC adımını sıraya koymak için bu turda açık yayınlama isteği gerekli.'};
     }
     try{
+      if((!Array.isArray(a.creatorAssets)||!a.creatorAssets.length)&&a.webMediaAuto!==false){
+        const assets=await creatorAutoWebAssets({
+          title:String(a.youtubeTitle||a.productTitle||a.campaignName||'VAROVA'),
+          script:String(a.script||''),
+          query:String(a.webMediaQuery||''),
+          provider:String(a.webMediaProvider||'auto'),
+          orientation:'portrait',
+          count:5,
+          manifestId:'varova-'+Date.now()
+        });
+        if(assets.length)a.creatorAssets=assets;
+      }
       const mission=createVarovaCampaignMission(a);
       const out=await runDurableMission(mission.id);
       const current=getMissionEngine().currentStep(out);
@@ -5266,7 +5272,7 @@ async function serviceCreatorDailyPlan({force=false}={}){
       if(!configured.length){
         try{
           const media=await getCreatorWebMedia().searchAndIngest(WORKSPACE,{
-            query:brief.title,
+            query:creatorAutoWebQuery(brief.title,brief.script,9),
             provider:'auto',
             orientation:'landscape',
             count:4,
@@ -6906,7 +6912,7 @@ async function buildPcAcceptanceSnapshot(){
   try{commerce=await getCommerceEngine().status(WORKSPACE)}catch(e){commerce={ok:false,connected:false,error:String(e.message||e).slice(0,240)}}
   try{youtube=await getYoutubeStudio().status(getBrowserOperator(),WORKSPACE)}catch(e){youtube={ok:false,running:false,loggedIn:false,error:String(e.message||e).slice(0,240)}}
   const missions=missionHealthSnapshot();
-  const checks={workerVersion:WORKER_VERSION==='2.102.0',creatorQualityGateReady:CAPS.includes('creator_quality_gate_v1')&&CAPS.includes('creator_quality_recovery_v1'),creatorShortMotionReady:CAPS.includes('creator_short_motion_rhythm_v1'),creatorImageMotionReady:CAPS.includes('creator_image_motion_fallback_v1'),creatorLongformReady:CAPS.includes('creator_longform_mission_v1')&&CAPS.includes('creator_longform_quality_v1')&&CAPS.includes('creator_longform_recovery_v1')&&CAPS.includes('creator_multilingual_voice_v1')&&CAPS.includes('creator_daily_longform_v1')&&CAPS.includes('creator_daily_idempotency_v1')&&CAPS.includes('creator_longform_duration_fit_v1')&&CAPS.includes('creator_longform_edit_rhythm_v1'),creatorBatchMissionReady:CAPS.includes('creator_batch_mission_v1')&&CAPS.includes('creator_batch_child_dedupe_v1')&&CAPS.includes('creator_batch_youtube_draft_v1')&&CAPS.includes('mission_cooperative_yield_v1')&&CAPS.includes('creator_batch_storyboard_lock_v1')&&CAPS.includes('creator_batch_render_binding_v1'),creatorAssetMissionReady:CAPS.includes('creator_asset_mission_v1')&&CAPS.includes('creator_asset_probe_v1')&&CAPS.includes('creator_asset_hash_dedupe_v1'),creatorVisualRelevanceReady:CAPS.includes('creator_asset_semantic_catalog_v1')&&CAPS.includes('creator_visual_relevance_v1')&&CAPS.includes('creator_local_vision_broll_v1'),creatorStoryboardReady:CAPS.includes('creator_storyboard_v1')&&CAPS.includes('creator_explicit_assets_v1')&&CAPS.includes('creator_render_mission_bind_v1'),pcMissionReady:CAPS.includes('pc_safe_mission_v1')&&CAPS.includes('pc_safe_action_catalog_v1'),workspaceFileMissionReady:CAPS.includes('workspace_file_mission_v1')&&CAPS.includes('workspace_file_hash_guard_v1')&&CAPS.includes('workspace_file_no_overwrite_v1'),missionControlReady:CAPS.includes('mission_control_v1')&&CAPS.includes('mission_pause_v1')&&CAPS.includes('mission_cancel_v1'),missionRuntime:!!(missions&&missions.ok&&missions.autoResume),creatorEngineLoaded:!!(creator&&!creator.error),browserOperatorLoaded:!!(browser&&!browser.error),commerceEngineLoaded:!!(commerce&&!commerce.error),youtubeStudioLoaded:!!(youtube&&!youtube.error),silentStartup:process.platform==='win32'?startup.silentOk:true,autoUpdateReady:!!(startup.selfUpdate&&startup.selfUpdate.configured)};
+  const checks={workerVersion:WORKER_VERSION==='2.102.0',creatorQualityGateReady:CAPS.includes('creator_quality_gate_v1')&&CAPS.includes('creator_quality_recovery_v1'),creatorShortMotionReady:CAPS.includes('creator_short_motion_rhythm_v1'),creatorImageMotionReady:CAPS.includes('creator_image_motion_fallback_v1'),creatorAutoWebReady:CAPS.includes('creator_auto_web_query_v1'),creatorLongformReady:CAPS.includes('creator_longform_mission_v1')&&CAPS.includes('creator_longform_quality_v1')&&CAPS.includes('creator_longform_recovery_v1')&&CAPS.includes('creator_multilingual_voice_v1')&&CAPS.includes('creator_daily_longform_v1')&&CAPS.includes('creator_daily_idempotency_v1')&&CAPS.includes('creator_longform_duration_fit_v1')&&CAPS.includes('creator_longform_edit_rhythm_v1'),creatorBatchMissionReady:CAPS.includes('creator_batch_mission_v1')&&CAPS.includes('creator_batch_child_dedupe_v1')&&CAPS.includes('creator_batch_youtube_draft_v1')&&CAPS.includes('mission_cooperative_yield_v1')&&CAPS.includes('creator_batch_storyboard_lock_v1')&&CAPS.includes('creator_batch_render_binding_v1'),creatorAssetMissionReady:CAPS.includes('creator_asset_mission_v1')&&CAPS.includes('creator_asset_probe_v1')&&CAPS.includes('creator_asset_hash_dedupe_v1'),creatorVisualRelevanceReady:CAPS.includes('creator_asset_semantic_catalog_v1')&&CAPS.includes('creator_visual_relevance_v1')&&CAPS.includes('creator_local_vision_broll_v1'),creatorStoryboardReady:CAPS.includes('creator_storyboard_v1')&&CAPS.includes('creator_explicit_assets_v1')&&CAPS.includes('creator_render_mission_bind_v1'),pcMissionReady:CAPS.includes('pc_safe_mission_v1')&&CAPS.includes('pc_safe_action_catalog_v1'),workspaceFileMissionReady:CAPS.includes('workspace_file_mission_v1')&&CAPS.includes('workspace_file_hash_guard_v1')&&CAPS.includes('workspace_file_no_overwrite_v1'),missionControlReady:CAPS.includes('mission_control_v1')&&CAPS.includes('mission_pause_v1')&&CAPS.includes('mission_cancel_v1'),missionRuntime:!!(missions&&missions.ok&&missions.autoResume),creatorEngineLoaded:!!(creator&&!creator.error),browserOperatorLoaded:!!(browser&&!browser.error),commerceEngineLoaded:!!(commerce&&!commerce.error),youtubeStudioLoaded:!!(youtube&&!youtube.error),silentStartup:process.platform==='win32'?startup.silentOk:true,autoUpdateReady:!!(startup.selfUpdate&&startup.selfUpdate.configured)};
   const corePass=Object.values(checks).every(Boolean);
   const accountSetup={shopifyConnected:!!(commerce&&commerce.ok&&commerce.connected),youtubeLoggedIn:!!(youtube&&youtube.ok&&youtube.loggedIn)};
   const snapshot={ok:true,generatedAt,worker:{version:WORKER_VERSION,name:NAME,platform:process.platform,arch:process.arch},checks,corePass,startup,update:startup.selfUpdate,creator:{ready:!!(creator&&creator.ok),assets:Number(creator&&creator.assets||0),outputDir:creator&&creator.outputDir||null,installable:!!(creator&&creator.installable)},browser:{running:!!(browser&&browser.running),browser:browser&&browser.browser||null,tabs:Array.isArray(browser&&browser.tabs)?browser.tabs.length:0,profile:browser&&browser.profile||null},commerce:{connected:accountSetup.shopifyConnected,shop:commerce&&commerce.shop||null,apiVersion:commerce&&commerce.apiVersion||null,message:String(commerce&&commerce.message||'').slice(0,300)},youtube:{running:!!(youtube&&youtube.running),loggedIn:accountSetup.youtubeLoggedIn,title:youtube&&youtube.title||null,url:youtube&&youtube.url||null,message:String(youtube&&youtube.message||'').slice(0,300)},missions,accountSetup};
