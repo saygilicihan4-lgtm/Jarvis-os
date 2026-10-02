@@ -128,6 +128,7 @@ body::after{
 .status.completed{color:var(--ok)}
 .status.waiting_dependency,.status.blocked,.status.needs_verification,.status.uncertain{color:var(--warn)}
 .status.running,.status.queued,.status.pending{color:var(--cyan)}
+.status.paused{color:var(--warn)}
 .local-mission{border-left:2px solid rgba(101,230,255,.55);padding-left:9px;background:linear-gradient(90deg,rgba(0,184,255,.055),transparent 60%)}
 .local-mission .task-head b{color:#dffaff}
 .mini-btn{margin:7px 5px 0 0;padding:6px 9px;border:1px solid rgba(101,230,255,.25);background:rgba(0,184,255,.08);color:white;font:9px inherit;letter-spacing:.08em}

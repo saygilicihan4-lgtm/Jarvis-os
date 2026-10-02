@@ -4,7 +4,7 @@ const assert=require('assert');
 const worker=fs.readFileSync('./worker.js','utf8');
 const engine=fs.readFileSync('./jarvis-mission-engine.js','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.97.0'"),'Worker 2.97.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.98.0'"),'Worker 2.98.0 required');
 assert.ok(worker.includes("'mission_fair_scheduler_v1'"),'fair scheduler capability missing');
 assert.ok(engine.includes('function schedulerOrder(missions)'), 'schedulerOrder helper missing');
 
@@ -29,6 +29,8 @@ const health=worker.slice(healthStart,healthEnd);
 assert.ok(health.includes("scheduler:'oldest-ready-first'"),'health scheduler metadata missing');
 assert.ok(health.includes('waitingDependency'),'waiting dependency count missing');
 assert.ok(health.includes('needsVerification'),'verification count missing');
-assert.ok(health.includes('queue:open.slice(0,10)'),'mission queue preview missing');
+assert.ok(health.includes("paused=rows.filter(x=>String(x.status||'')==='paused')"),'paused mission preview source missing');
+assert.ok(health.includes('queue:[...open,...paused]'),'mission queue preview must include paused missions without scheduling them');
+assert.ok(!engine.includes("'paused'")||!engine.match(/OPEN_STATUSES[^\n]+paused/),'paused missions must stay outside scheduler OPEN_STATUSES');
 
 console.log('MISSION SCHEDULER SELFTEST PASS');

@@ -3,7 +3,7 @@ const assert=require('assert');
 
 const worker=fs.readFileSync('./worker.js','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.97.0'"),'Worker 2.97.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.98.0'"),'Worker 2.98.0 required');
 assert.ok(worker.includes("'browser_form_mission_v1'"),'durable browser form capability missing');
 assert.ok(worker.includes("'browser_form_prepare_v1'"),'browser form prepare capability missing');
 assert.ok(worker.includes("'browser_click_approval_v1'"),'browser click approval capability missing');

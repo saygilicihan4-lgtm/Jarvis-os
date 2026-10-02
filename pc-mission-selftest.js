@@ -3,7 +3,7 @@ const assert=require('assert');
 
 const worker=fs.readFileSync('./worker.js','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.97.0'"),'Worker 2.97.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.98.0'"),'Worker 2.98.0 required');
 assert.ok(worker.includes("'pc_safe_mission_v1'"),'durable safe PC mission capability missing');
 assert.ok(worker.includes("'pc_safe_action_catalog_v1'"),'safe PC action catalog capability missing');
 assert.ok(worker.includes("'pc_mission_resume_v1'"),'PC mission resume capability missing');
