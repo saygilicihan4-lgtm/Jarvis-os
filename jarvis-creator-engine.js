@@ -3,6 +3,7 @@ const path=require('path');
 const os=require('os');
 const childProcess=require('child_process');
 const crypto=require('crypto');
+const creatorSemanticQuality=require('./jarvis-creator-semantic-quality');
 
 const ENGINE_VERSION='1.4';
 const CREATOR_PROFILE_VERSION='2.0';
@@ -1658,6 +1659,10 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     throw e;
   }
   const duration=Math.max(540,Math.min(660,measured+0.35));
+  const narrativeDigest=creatorSemanticQuality.buildNarrativeDigest(cleanScript,{maxChars:3200});
+  const narrativeSections=Array.isArray(narrativeDigest.sections)&&narrativeDigest.sections.length
+    ?narrativeDigest.sections
+    :[{label:'TÜM ANLATIM',ratio:0,text:cleanScript}];
   const dirs=creatorDirs(workspace);
   const base=safeName(name);
   const jobDir=ensureDir(path.join(dirs.jobs,base));
@@ -1758,9 +1763,19 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
   }else{
     const proceduralSceneSeconds=30;
     const proceduralSceneCount=Math.max(18,Math.ceil(duration/proceduralSceneSeconds));
+    const proceduralNarrativePhases=Array.from({length:proceduralSceneCount},(_,index)=>{
+      const ratio=proceduralSceneCount<=1?0:index/(proceduralSceneCount-1);
+      let best=narrativeSections[0];
+      for(const section of narrativeSections){
+        if(Math.abs(Number(section.ratio||0)-ratio)<Math.abs(Number(best.ratio||0)-ratio))best=section;
+      }
+      return{index,ratio:Number(ratio.toFixed(3)),section:String(best.label||'ANLATIM')};
+    });
+    const narrativeHueShift=narrativeSections.length>=3?24:18;
+    const narrativeCycleSeconds=narrativeSections.length>=3?60:90;
     const graph='color=c=0x0b1324:s=1920x1080:r=30:d='+duration.toFixed(3)+
       ',noise=alls=9:allf=t+u'+
-      ",hue=H='18*sin(2*PI*t/90)':s='0.72+0.12*sin(2*PI*t/30)'"+
+      ",hue=H='"+narrativeHueShift+"*sin(2*PI*t/"+narrativeCycleSeconds+")':s='0.72+0.12*sin(2*PI*t/30)'"+
       ",eq=brightness='0.018*sin(2*PI*t/30)':contrast='1.04+0.03*sin(2*PI*t/60)'"+
       ',vignette=PI/5';
     args=[
@@ -1865,7 +1880,7 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     audioMaster:creatorAudioMasterProfile(),
     narrationActivity,
     assetSelection,
-    proceduralVisual:proceduralAssets?{sceneSeconds:proceduralSceneSeconds,sceneCount:proceduralSceneCount,profile:'animated-hue-noise-vignette'}:null,
+    proceduralVisual:proceduralAssets?{sceneSeconds:proceduralSceneSeconds,sceneCount:proceduralSceneCount,profile:'narrative-phased-hue-noise-vignette',hueShift:narrativeHueShift,cycleSeconds:narrativeCycleSeconds,narrativeSections:narrativeSections.map(x=>String(x.label||'')),phases:proceduralNarrativePhases}:null,
     profileVersion:CREATOR_PROFILE_VERSION
   };
 }
