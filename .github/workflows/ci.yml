@@ -21,6 +21,9 @@ jobs:
           node --check server.js
           node --check worker.js
           node --check jarvis-creator-engine.js
+          node --check jarvis-browser-operator.js
+          node --check browser-operator-selftest.js
+          node --check routing-selftest.js
           node --check creator-engine-selftest.js
           node --check bootstrap-bridge-selftest.js
           python -m py_compile jarvis-local-stt-v4.py
@@ -32,6 +35,10 @@ jobs:
         run: node ui-selftest.js
       - name: Creator engine selftest
         run: node creator-engine-selftest.js
+      - name: Browser operator selftest
+        run: node browser-operator-selftest.js
+      - name: Routing selftest
+        run: node routing-selftest.js
       - name: Bootstrap bridge selftest
         run: node bootstrap-bridge-selftest.js
       - name: PowerShell installer syntax
