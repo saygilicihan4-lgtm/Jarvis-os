@@ -33,8 +33,10 @@ assert.ok(web.includes("strictRightsPolicy:'Wikimedia video/image only Public Do
 
 assert.ok(worker.includes("'creator_image_motion_fallback_v1'"),'Creator image-motion capability missing');
 assert.ok(worker.includes("creatorImageMotionReady:CAPS.includes('creator_image_motion_fallback_v1')"),'PC acceptance image-motion readiness missing');
-const callbacks=(worker.match(/animateImage:\(rel,opts\)=>getCreatorEngine\(\)\.animateStillAsset\(WORKSPACE,rel,opts\)/g)||[]);
-assert.strictEqual(callbacks.length,5,'all five Creator web-media flows must wire image animation fallback');
+assert.ok(worker.includes('async function creatorAutoWebAssets('),'central Creator auto-web helper missing');
+assert.ok(worker.includes("animateImage:(rel,opts)=>getCreatorEngine().animateStillAsset(WORKSPACE,rel,opts)"),'central auto-web helper must preserve image animation fallback');
+const autoUses=(worker.match(/creatorAutoWebAssets\(\{/g)||[]);
+assert.ok(autoUses.length>=5,'Creator mission flows must use centralized auto-web helper');
 assert.ok(worker.includes("'creator_short_motion_rhythm_v1'"),'Short Motion v73 capability regressed');
 assert.ok(worker.includes("'creator_youtube_attribution_v1'"),'YouTube attribution v72 capability regressed');
 assert.ok(worker.includes('\"Devam et\" tek başına YouTube PUBLIC onayı değildir'),'YouTube PUBLIC approval policy regressed');
