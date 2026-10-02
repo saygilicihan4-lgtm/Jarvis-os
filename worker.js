@@ -3973,6 +3973,35 @@ function developerMissionTarget(input,file){
   if(!(target===root||target.startsWith(root+path.sep)))throw new Error('Proje kökü dışına yazma engellendi.');
   return{root,target,relative:path.relative(WORKSPACE,target)};
 }
+function approveMissionGate({missionId=''}={}){
+  const engine=getMissionEngine();
+  let mission=null;
+  const id=String(missionId||'').trim();
+  if(id){
+    mission=engine.loadMission(WORKSPACE,id);
+    if(!mission)throw new Error('Onaylanacak görev bulunamadı: '+id);
+  }else{
+    mission=engine.listMissions(WORKSPACE,{limit:50}).find(row=>{
+      if(row.status!=='waiting_dependency')return false;
+      const step=engine.currentStep(row);
+      return !!(step&&step.error&&step.error.dependency==='approval');
+    })||null;
+    if(!mission)throw new Error('Açık onay bekleyen görev yok.');
+  }
+  const step=engine.currentStep(mission);
+  if(!step||mission.status!=='waiting_dependency'||!step.error||step.error.dependency!=='approval'){
+    throw new Error('Bu görev şu anda açık kullanıcı onayı beklemiyor.');
+  }
+  step.meta={...(step.meta||{}),approvedAt:new Date().toISOString(),approvalKind:'explicit_user'};
+  step.status='pending';
+  step.error=null;
+  mission.status='queued';
+  if(Array.isArray(mission.history)){
+    mission.history.push({at:new Date().toISOString(),event:'step_explicitly_approved',step:step.name});
+    if(mission.history.length>200)mission.history=mission.history.slice(-200);
+  }
+  return engine.saveMission(WORKSPACE,mission);
+}
 function missionSummaryText(m){
   if(!m)return'Kayıtlı görev bulunamadı.';
   const x=getMissionEngine().summarizeMission(m),step=x&&x.step;
