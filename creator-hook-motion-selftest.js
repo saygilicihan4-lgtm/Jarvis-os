@@ -11,14 +11,15 @@ assert.ok(worker.includes("creatorHookMotionReady:CAPS.includes('creator_hook_mo
 assert.strictEqual(typeof creator.probeHookMotion,'function','probeHookMotion export missing');
 assert.strictEqual(typeof creator.findHookMotionWindow,'function','findHookMotionWindow export missing');
 
-assert.ok(source.includes("'-f','framemd5','-'"),'decoded-frame motion evidence missing');
+assert.ok(source.includes("tblend=all_mode=difference,signalstats,metadata=mode=print:key=lavfi.signalstats.YAVG:file=-"),'decoded frame-difference motion evidence missing');
 assert.ok(source.includes("'fps='+rate+',scale=64:64:flags=area,format=gray'"),'bounded hook frame sampling missing');
-assert.ok(source.includes("sampleCount>=3&&uniqueFrames>=2&&changeRatio>=0.12"),'hook motion threshold missing');
+assert.ok(source.includes("sampleCount>=3&&meanDifference>=0.12&&peakDifference>=0.25&&activeRatio>=0.35"),'hook motion threshold missing');
 assert.ok(source.includes("maxOffsetSeconds=3"),'bounded hook motion search horizon missing');
 assert.ok(source.includes("stepSeconds=0.5"),'hook motion search step missing');
 assert.ok(source.includes("findHookMotionWindow(assets[0],status.ffmpeg"),'Short renderer hook motion probe missing');
 assert.ok(source.includes("storyboard[0].sourceOffset=Number(hookMotion.offset||0)"),'moving-window source offset binding missing');
 assert.ok(source.includes("hookMotion.ok===true"),'visual edit gate must require motion evidence');
+assert.ok(source.includes("Number(probe.meanDifference||0)>Number(best.meanDifference||0)"),'moving-window search must rank by robust mean frame difference');
 assert.ok(source.includes("e.code='CREATOR_SHORT_HOOK_MOTION_MISSING'"),'missing-motion render must fail closed');
 assert.ok(source.includes("hookMotion,"),'hook motion metadata evidence missing');
 
