@@ -4,7 +4,7 @@ const assert=require('assert');
 const worker=fs.readFileSync('./worker.js','utf8');
 const engine=fs.readFileSync('./jarvis-mission-engine.js','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.99.0'"),'Worker 2.99.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.100.0'"),'Worker 2.100.0 required');
 assert.ok(worker.includes("'mission_fair_scheduler_v1'"),'fair scheduler capability missing');
 assert.ok(engine.includes('function schedulerOrder(missions)'), 'schedulerOrder helper missing');
 
