@@ -2562,7 +2562,7 @@ function nativeAgentTools(){
       type:'function',
       function:{
         name:'creator_short_mission',
-        description:'Kullanıcı bir Short/Reels videosunu kalıcı, yeniden başlatılabilir iş olarak üretmek istediğinde kullan. İstenirse aynı görev YouTube Studio taslağını da hazırlar. Video yerel MP4 olarak üretilir; YouTube PUBLIC yapılmaz.',
+        description:'Kullanıcı bir Short/Reels videosunu kalıcı, yeniden başlatılabilir iş olarak üretmek istediğinde kullan. İstenirse YouTube Studio taslağını hazırlar. publishYouTube=true yalnızca PUBLIC yayınlama adımını approval gate arkasına koyar; bu çağrıda yayınlamaz.',
         parameters:{
           type:'object',
           properties:{
@@ -2570,7 +2570,8 @@ function nativeAgentTools(){
             script:{type:'string',description:'12-18 saniyelik Türkçe anlatım metni.'},
             youtubeTitle:{type:'string'},
             youtubeDescription:{type:'string'},
-            includeYouTube:{type:'boolean',description:'true ise render sonrası YouTube Studio taslağı hazırlanır; yayınlanmaz.'}
+            includeYouTube:{type:'boolean',description:'true ise render sonrası YouTube Studio taslağı hazırlanır.'},
+            publishYouTube:{type:'boolean',description:'true ise taslaktan sonra PUBLIC yayınlama için approval gate oluşturur; bu çağrıda yayınlamaz.'}
           },
           required:['script'],
           additionalProperties:false
@@ -2581,7 +2582,7 @@ function nativeAgentTools(){
       type:'function',
       function:{
         name:'varova_campaign_mission',
-        description:'Kullanıcı VAROVA için ürün + reklam videosu + isteğe bağlı YouTube Studio taslağı gibi çok adımlı işi tek görev olarak istediğinde kalıcı ve devam ettirilebilir kampanya görevi başlat. Shopify ürünü DRAFT kalır, YouTube PUBLIC yapılmaz.',
+        description:'Kullanıcı VAROVA için ürün + reklam videosu + isteğe bağlı YouTube Studio işi istediğinde kalıcı ve devam ettirilebilir kampanya görevi başlat. Shopify DRAFT kalır. publishYouTube=true ise YouTube PUBLIC adımı approval gate üzerinde durur ve ayrıca açık onay bekler.',
         parameters:{
           type:'object',
           properties:{
@@ -2597,7 +2598,8 @@ function nativeAgentTools(){
             youtubeTitle:{type:'string'},
             youtubeDescription:{type:'string'},
             includeShopify:{type:'boolean'},
-            includeYouTube:{type:'boolean'}
+            includeYouTube:{type:'boolean'},
+            publishYouTube:{type:'boolean',description:'true ise YouTube PUBLIC yayınlama adımını ayrıca açık onay bekleyecek şekilde sıraya koyar.'}
           },
           required:['script'],
           additionalProperties:false
@@ -2967,8 +2969,9 @@ async function runNativeAgent(message,{maxRounds=4,signal=null}={}){
     'Kullanıcı uygulama/site/yazılım geliştirmeyi istediğinde developer_project_mission kullan. Bu araç kaynak dosyaları yalnızca JARVIS workspace içine yazar, mevcut farklı dosyanın üzerine otomatik yazmaz ve deploy etmez; böylece geliştirme görevi kesintiden sonra güvenle devam eder.',
     'İzinli bir web sayfasında alanları doldurup işi kesintiden sonra sürdürülebilir hazırlamak için browser_form_mission kullan. Hassas şifre/token/kart alanlarını göreve koyma. finalClick varsa görev approval gate üzerinde durur; public publish, ödeme, silme veya hesap kapatma gibi yüksek riskli eylemler generic browser göreviyle yapılmaz.',
     'Shopify ürününü halka açık mağazada yayınlama iki aşamalıdır: shopify_product_mission publish=true yalnızca yayınlama isteğini sıraya koyar ve approval gate üzerinde durur. Kullanıcı daha sonra aynı turda açıkça "onayla" veya "yayınla" demeden approve_mission_action çağırma. "Devam et" tek başına yayınlama onayı değildir.',
-    'YouTube için youtube_prepare_draft_upload yalnızca dosyayı Studio yükleme ekranına koyar ve metadata hazırlar; hiçbir zaman Publish/Yayınla düğmesine basmaz.',
-    'Kullanıcı aynı istekte Short üretip YouTube taslağına yüklemenizi isterse önce creator_render_short sonucundaki gerçek output yolunu al, sonra youtube_prepare_draft_upload çağır. Dosya yolu uydurma.',
+    'YouTube tek adımlı youtube_prepare_draft_upload çağrısında daima taslak kalır. PUBLIC yayınlama yalnızca kalıcı creator_short_mission veya varova_campaign_mission içinde publishYouTube=true ile sıraya alınabilir ve approval gate üzerinde durur.',
+    'YouTube PUBLIC adımında kullanıcı daha sonra açıkça "onayla", "yayınla" veya "publish" demeden approve_mission_action çağırma. "Devam et" YouTube yayınlama onayı değildir. Yayınlama sonucu belirsizse otomatik tekrar yapma.',
+    'Kullanıcı aynı istekte Short üretip YouTube taslağına yüklemenizi isterse kalıcı iş için creator_short_mission kullan; tek seferlik akışta önce creator_render_short sonucundaki gerçek output yolunu al, sonra youtube_prepare_draft_upload çağır. Dosya yolu uydurma.',
     'Bir istek VAROVA ürünü + reklam videosu + YouTube taslağı gibi birden fazla dış adım içeriyorsa ayrı ayrı araç çağırmak yerine varova_campaign_mission kullan; böylece görev disk üzerinde kalıcı olur ve kesintiden sonra devam eder.',
     'Kullanıcı yarım işi "devam et", "kaldığın yerden sürdür" gibi ifadeyle sürdürmek isterse önce mission_status veya doğrudan resume_latest_mission kullan. Tamamlanmış adımı yeniden yapma.',
     'Kalıcı görev needs_verification durumundaysa belirsiz dış yan etkiyi otomatik tekrar etme; kopya ürün veya kopya video riski yerine doğrulamayı bekle.',
