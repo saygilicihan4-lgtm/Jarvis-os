@@ -73,6 +73,7 @@ jobs:
           node --check creator-audio-continuity-selftest.js
           node --check creator-motion-coverage-selftest.js
           node --check creator-motion-continuity-selftest.js
+          node --check creator-visual-integrity-selftest.js
           node --check shopify-mission-selftest.js
           node --check approval-gate-selftest.js
           node --check developer-mission-selftest.js
@@ -116,6 +117,8 @@ jobs:
         run: node creator-motion-coverage-selftest.js
       - name: Creator motion continuity selftest
         run: node creator-motion-continuity-selftest.js
+      - name: Creator visual integrity selftest
+        run: node creator-visual-integrity-selftest.js
       - name: Browser operator selftest
         run: node browser-operator-selftest.js
       - name: Browser mission selftest

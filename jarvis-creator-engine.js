@@ -795,6 +795,88 @@ function probeRenderedMotionCoverage(file,ffmpeg,duration,{mode='short'}={}){
     windows
   };
 }
+function probeRenderedExposureWindow(file,ffmpeg,{start=0,seconds=1.1,fps=2}={}){
+  if(!ffmpeg)return{ok:false,code:'FFMPEG_MISSING',start:Number(start)||0,sampleCount:0};
+  if(!file||!fs.existsSync(file))return{ok:false,code:'CREATOR_VISUAL_OUTPUT_MISSING',start:Number(start)||0,sampleCount:0};
+  const at=Math.max(0,Number(start)||0);
+  const span=Math.max(0.8,Math.min(1.5,Number(seconds)||1.1));
+  const rate=Math.max(1,Math.min(4,Math.round(Number(fps)||2)));
+  try{
+    const raw=execFile(ffmpeg,[
+      '-hide_banner','-loglevel','error',
+      '-ss',at.toFixed(3),'-i',file,
+      '-t',span.toFixed(3),
+      '-an',
+      '-vf','fps='+rate+',scale=64:64:flags=area,signalstats,metadata=mode=print:file=-',
+      '-f','null','-'
+    ],{timeout:25000,maxBuffer:1024*1024*3});
+    const values=String(raw||'').split(/\r?\n/)
+      .map(x=>x.trim())
+      .filter(x=>x.startsWith('lavfi.signalstats.YAVG='))
+      .map(x=>Number(x.split('=').pop()))
+      .filter(Number.isFinite);
+    const sampleCount=values.length;
+    const meanY=sampleCount?values.reduce((a,b)=>a+b,0)/sampleCount:null;
+    const minY=sampleCount?Math.min(...values):null;
+    const maxY=sampleCount?Math.max(...values):null;
+    const nearBlack=sampleCount>=2&&Number(maxY)<=18.5;
+    const nearWhite=sampleCount>=2&&Number(minY)>=232.5;
+    const ok=sampleCount>=2&&!nearBlack&&!nearWhite;
+    return{
+      ok,
+      code:ok?'CREATOR_VISUAL_EXPOSURE_PASS':(nearBlack?'CREATOR_VISUAL_NEAR_BLACK':(nearWhite?'CREATOR_VISUAL_NEAR_WHITE':'CREATOR_VISUAL_EXPOSURE_PROBE_EMPTY')),
+      start:Number(at.toFixed(3)),
+      seconds:Number(span.toFixed(3)),
+      fps:rate,
+      sampleCount,
+      meanY:meanY===null?null:Number(meanY.toFixed(3)),
+      minY:minY===null?null:Number(minY.toFixed(3)),
+      maxY:maxY===null?null:Number(maxY.toFixed(3)),
+      nearBlack,
+      nearWhite
+    };
+  }catch(e){
+    return{ok:false,code:'CREATOR_VISUAL_EXPOSURE_PROBE_FAILED',start:Number(at.toFixed(3)),sampleCount:0,message:String(e.message||e).slice(0,300)};
+  }
+}
+function probeRenderedVisualIntegrity(file,ffmpeg,duration,{mode='short'}={}){
+  const total=Number(duration);
+  const longform=String(mode||'short')==='longform';
+  if(!Number.isFinite(total)||total<=0)return{
+    ok:false,
+    code:'CREATOR_RENDER_DURATION_MISSING',
+    mode:longform?'longform':'short',
+    usableWindows:0,
+    requiredWindows:0,
+    blankWindows:0,
+    windows:[]
+  };
+  const fractions=longform?[0.1,0.3,0.5,0.7,0.9]:[0.08,0.36,0.64,0.9];
+  const span=1.1;
+  const maxStart=Math.max(0,total-span);
+  const windows=fractions.map(fraction=>{
+    const start=Math.max(0,Math.min(maxStart,(total*fraction)-(span/2)));
+    return probeRenderedExposureWindow(file,ffmpeg,{start,seconds:span,fps:2});
+  });
+  const usableWindows=windows.filter(x=>x&&x.ok).length;
+  const blankWindows=windows.length-usableWindows;
+  const requiredWindows=longform?4:3;
+  const ok=usableWindows>=requiredWindows;
+  return{
+    ok,
+    code:ok?'CREATOR_VISUAL_INTEGRITY_PASS':'CREATOR_VISUAL_INTEGRITY_FAILED',
+    mode:longform?'longform':'short',
+    duration:Number(total.toFixed(3)),
+    usableWindows,
+    requiredWindows,
+    blankWindows,
+    sampledWindows:windows.length,
+    nearBlackWindows:windows.filter(x=>x&&x.nearBlack).length,
+    nearWhiteWindows:windows.filter(x=>x&&x.nearWhite).length,
+    windows
+  };
+}
+
 function applyRenderedVisualQuality(quality,file,ffmpeg,{mode='short'}={}){
   const result=quality&&typeof quality==='object'?quality:{ok:false,code:'CREATOR_QUALITY_FAILED',message:'Creator quality result missing.'};
   if(!result.checks||typeof result.checks!=='object')result.checks={};
@@ -802,19 +884,32 @@ function applyRenderedVisualQuality(quality,file,ffmpeg,{mode='short'}={}){
   const baseOk=!!result.ok;
   const duration=Number(result.measured.duration);
   const motionCoverage=probeRenderedMotionCoverage(file,ffmpeg,duration,{mode});
+  const visualIntegrity=probeRenderedVisualIntegrity(file,ffmpeg,duration,{mode});
   result.checks.motionCoverage=motionCoverage.coverageOk;
   result.checks.motionContinuity=motionCoverage.continuityOk;
+  result.checks.visualIntegrity=visualIntegrity.ok;
   result.motionCoverage=motionCoverage;
+  result.visualIntegrity=visualIntegrity;
   result.measured.motionActiveWindows=motionCoverage.activeWindows;
   result.measured.motionRequiredWindows=motionCoverage.requiredWindows;
   result.measured.motionMaxInactiveRun=motionCoverage.maxInactiveRun;
   result.measured.motionMaxAllowedInactiveRun=motionCoverage.maxAllowedInactiveRun;
-  result.ok=baseOk&&motionCoverage.ok;
+  result.measured.visualUsableWindows=visualIntegrity.usableWindows;
+  result.measured.visualRequiredWindows=visualIntegrity.requiredWindows;
+  result.measured.visualBlankWindows=visualIntegrity.blankWindows;
+  result.measured.visualNearBlackWindows=visualIntegrity.nearBlackWindows;
+  result.measured.visualNearWhiteWindows=visualIntegrity.nearWhiteWindows;
+  result.ok=baseOk&&motionCoverage.ok&&visualIntegrity.ok;
   if(baseOk&&!motionCoverage.ok){
     result.code=String(motionCoverage.code||'CREATOR_MOTION_COVERAGE_MISSING');
     result.message=String(mode||'short')==='longform'
       ?'Creator long-form final görüntü hareket sürekliliği kalite kapısı başarısız.'
       :'Creator Shorts final görüntü hareketi kalite kapısı başarısız.';
+  }else if(baseOk&&!visualIntegrity.ok){
+    result.code=String(visualIntegrity.code||'CREATOR_VISUAL_INTEGRITY_FAILED');
+    result.message=String(mode||'short')==='longform'
+      ?'Creator long-form final görüntü bütünlüğü kalite kapısı başarısız.'
+      :'Creator Shorts final görüntü bütünlüğü kalite kapısı başarısız.';
   }
   return result;
 }
@@ -1719,6 +1814,8 @@ module.exports={
   findHookMotionWindow,
   probeRenderedMotionWindow,
   probeRenderedMotionCoverage,
+  probeRenderedExposureWindow,
+  probeRenderedVisualIntegrity,
   applyRenderedVisualQuality,
   listAssets,
   resolveAssetSelection,
