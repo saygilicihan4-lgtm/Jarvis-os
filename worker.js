@@ -4712,6 +4712,27 @@ function rollbackDeveloperPatchMission(mission){
   return{ok:actions.every(x=>x.restored===true),actions};
 }
 
+function creatorBatchActiveChild(mission){
+  if(!mission||mission.type!=='creator_batch')return null;
+  const step=getMissionEngine().currentStep(mission);
+  if(!step||!/^creator_batch_render_\d+$/.test(String(step.name||'')))return null;
+  const index=Math.max(0,Number(step.meta&&step.meta.itemIndex)||0);
+  return findCreatorBatchChild(mission.id,index);
+}
+function cascadeCreatorBatchControl(mission,action){
+  const child=creatorBatchActiveChild(mission);
+  if(!child||['completed','failed','cancelled'].includes(String(child.status||'')))return child;
+  const op=String(action||'');
+  if(op==='resume'){
+    if(child.status==='paused'){
+      try{return requestMissionControl({missionId:child.id,action:'resume'})}catch(_){return child}
+    }
+    return child;
+  }
+  if(!['pause','cancel'].includes(op))return child;
+  try{return requestMissionControl({missionId:child.id,action:op})}catch(_){return child}
+}
+
 function missionControlCandidates(action){
   const engine=getMissionEngine();
   const rows=engine.listMissions(WORKSPACE,{limit:50});
@@ -4774,12 +4795,16 @@ function requestMissionControl({missionId='',action=''}={}){
       mission.history.push({at:new Date().toISOString(),event:'mission_resumed',status:resumeStatus});
       if(mission.history.length>200)mission.history=mission.history.slice(-200);
     }
-    return engine.saveMission(WORKSPACE,mission);
+    mission=engine.saveMission(WORKSPACE,mission);
+    cascadeCreatorBatchControl(mission,'resume');
+    return mission;
   }
   if(['completed','failed','cancelled'].includes(status))throw new Error('Tamamlanmış/sonlanmış görev kontrol edilemez.');
   if(op==='cancel'&&status==='paused'){
     mission.control={...(mission.control||{}),requested:'cancel',requestedAt:new Date().toISOString()};
-    return applyPendingMissionControl(engine.saveMission(WORKSPACE,mission));
+    mission=engine.saveMission(WORKSPACE,mission);
+    cascadeCreatorBatchControl(mission,'cancel');
+    return applyPendingMissionControl(mission);
   }
   mission.control={...(mission.control||{}),requested:op,requestedAt:new Date().toISOString()};
   if(Array.isArray(mission.history)){
@@ -4787,6 +4812,7 @@ function requestMissionControl({missionId='',action=''}={}){
     if(mission.history.length>200)mission.history=mission.history.slice(-200);
   }
   mission=engine.saveMission(WORKSPACE,mission);
+  cascadeCreatorBatchControl(mission,op);
   if(status!=='running')return applyPendingMissionControl(mission);
   return mission;
 }
@@ -4851,7 +4877,13 @@ async function verifyUncertainCampaignStep(mission){
         note:'Batch render child mission verified completed'
       });
     }
-    if(['failed','cancelled'].includes(String(child.status||'')))return mission;
+    if(['failed','cancelled'].includes(String(child.status||''))){
+      return engine.failStep(WORKSPACE,mission.id,{
+        code:'BATCH_CHILD_'+String(child.status||'failed').toUpperCase(),
+        message:'Creator batch render child tamamlanamadı: '+child.id,
+        retryable:false
+      });
+    }
     return engine.resolveUncertainStep(WORKSPACE,mission.id,{completed:false,note:'Existing batch render child is preserved for scheduler resume'});
   }
   if(/^creator_batch_youtube_\d+$/.test(step.name)){
@@ -5755,8 +5787,9 @@ async function missionDependencyReady(mission){
   const dep=String(step&&step.error&&step.error.dependency||'');
   if(!dep)return true;
 
-  if(/^mission:M-[A-Z0-9-]+$/.test(dep)){
-    const childId=dep.slice('mission:'.length);
+  if(dep.startsWith('mission:')){
+    const childId=dep.slice('mission:'.length).trim();
+    if(!childId)return true;
     const child=getMissionEngine().loadMission(WORKSPACE,childId);
     if(!child)return true;
     return ['completed','failed','cancelled'].includes(String(child.status||''));
