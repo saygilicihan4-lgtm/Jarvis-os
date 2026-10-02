@@ -10,8 +10,10 @@ function inside(parent,target){
   return t===p||t.startsWith(p+path.sep);
 }
 function normalizeRel(rel){
-  const raw=String(rel||'').replace(/\\/g,'/').replace(/^\/+/, '').trim();
-  if(!raw||raw.includes('\0')||path.isAbsolute(raw))throw new Error('WORKSPACE_FILE_BAD_PATH');
+  const original=String(rel||'').trim();
+  if(!original||original.includes('\0')||/^[\\/]/.test(original)||/^[A-Za-z]:[\\/]/.test(original))throw new Error('WORKSPACE_FILE_BAD_PATH');
+  const raw=original.replace(/\\/g,'/').trim();
+  if(!raw||path.isAbsolute(raw))throw new Error('WORKSPACE_FILE_BAD_PATH');
   const parts=raw.split('/').filter(Boolean);
   if(!parts.length||parts.some(x=>x==='.'||x==='..'))throw new Error('WORKSPACE_FILE_BAD_PATH');
   const lower=parts.map(x=>x.toLocaleLowerCase('tr-TR'));
@@ -141,25 +143,33 @@ function applyOperation(workspace,op){
   if(!state.sourceExists||state.sourceHash!==expected)return{ok:false,code:'WORKSPACE_FILE_SOURCE_CONFLICT',uncertain:false};
   if(state.destinationExists)return{ok:false,code:'WORKSPACE_FILE_DEST_EXISTS',uncertain:false};
 
-  try{
-    fs.copyFileSync(state.source,state.destination,fs.constants.COPYFILE_EXCL);
-  }catch(e){
-    return{ok:false,code:e&&e.code==='EEXIST'?'WORKSPACE_FILE_DEST_EXISTS':'WORKSPACE_FILE_COPY_FAILED',uncertain:false,message:String(e.message||e)};
-  }
-  let destinationHash=null;
-  try{destinationHash=hashFile(state.destination)}catch(e){
-    return{ok:false,code:'WORKSPACE_FILE_DEST_VERIFY_FAILED',uncertain:true,message:String(e.message||e)};
-  }
-  if(destinationHash!==expected)return{ok:false,code:'WORKSPACE_FILE_DEST_VERIFY_FAILED',uncertain:true};
-
   if(op.operation==='copy'){
+    try{
+      fs.copyFileSync(state.source,state.destination,fs.constants.COPYFILE_EXCL);
+    }catch(e){
+      return{ok:false,code:e&&e.code==='EEXIST'?'WORKSPACE_FILE_DEST_EXISTS':'WORKSPACE_FILE_COPY_FAILED',uncertain:false,message:String(e.message||e)};
+    }
+    let destinationHash=null;
+    try{destinationHash=hashFile(state.destination)}catch(e){
+      return{ok:false,code:'WORKSPACE_FILE_DEST_VERIFY_FAILED',uncertain:true,message:String(e.message||e)};
+    }
+    if(destinationHash!==expected)return{ok:false,code:'WORKSPACE_FILE_DEST_VERIFY_FAILED',uncertain:true};
     return{ok:true,operation:'copy',source:op.source,destination:op.destination,sha256:expected,bytes:Number(op.bytes||0)};
   }
 
   try{
-    const currentSource=hashFile(state.source);
-    if(currentSource!==expected)return{ok:false,code:'WORKSPACE_FILE_SOURCE_CHANGED_AFTER_COPY',uncertain:true};
+    fs.linkSync(state.source,state.destination);
+  }catch(e){
+    return{ok:false,code:e&&e.code==='EEXIST'?'WORKSPACE_FILE_DEST_EXISTS':'WORKSPACE_FILE_MOVE_LINK_FAILED',uncertain:false,message:String(e.message||e)};
+  }
+  try{
+    if(hashFile(state.destination)!==expected||hashFile(state.source)!==expected){
+      return{ok:false,code:'WORKSPACE_FILE_MOVE_LINK_VERIFY_FAILED',uncertain:true};
+    }
     fs.unlinkSync(state.source);
+    if(fs.existsSync(state.source)||hashFile(state.destination)!==expected){
+      return{ok:false,code:'WORKSPACE_FILE_MOVE_FINAL_VERIFY_FAILED',uncertain:true};
+    }
   }catch(e){
     return{ok:false,code:'WORKSPACE_FILE_MOVE_SOURCE_REMOVE_FAILED',uncertain:true,message:String(e.message||e)};
   }
