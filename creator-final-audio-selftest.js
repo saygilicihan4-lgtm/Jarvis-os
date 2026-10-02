@@ -45,7 +45,9 @@ try{
   assert.strictEqual(masteredProbe.method,'ffmpeg-loudnorm-analysis');
 
   const source=fs.readFileSync('./jarvis-creator-engine.js','utf8');
-  assert.strictEqual((source.match(/applyRenderedAudioQuality\(/g)||[]).length>=3,true,'final audio guard helper and both render call sites must exist');
+  assert.ok(source.includes('function applyRenderedAudioQuality('),'central final audio guard helper must exist');
+  assert.ok(source.includes('applyRenderedAudioQuality(quality,file,ffmpeg,{mode})'),'final media guard must preserve audio guard');
+  assert.strictEqual((source.match(/const quality=applyRenderedMediaQuality\(/g)||[]).length,2,'Short and long-form must both use final media guard');
   assert.ok(source.includes('const outputLoudness=probeRenderedAudioLoudness(file,ffmpeg);'),'central final audio guard must verify loudness');
   assert.ok(source.includes('result.checks.audioLoudness=outputLoudness.ok;'),'quality payload must record loudness gate');
   assert.ok(source.includes('result.measured.audioIntegratedLufs=outputLoudness.integratedLufs;'),'quality payload must retain measured LUFS');
