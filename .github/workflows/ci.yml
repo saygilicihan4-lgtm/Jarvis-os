@@ -67,6 +67,7 @@ jobs:
           node --check creator-short-sfx-selftest.js
           node --check creator-render-smoke-selftest.js
           node --check creator-av-timeline-selftest.js
+          node --check creator-audio-master-selftest.js
           node --check shopify-mission-selftest.js
           node --check approval-gate-selftest.js
           node --check developer-mission-selftest.js
@@ -98,6 +99,8 @@ jobs:
         run: node creator-render-smoke-selftest.js
       - name: Creator audio/video timeline regression
         run: node creator-av-timeline-selftest.js
+      - name: Creator audio master selftest
+        run: node creator-audio-master-selftest.js
       - name: Browser operator selftest
         run: node browser-operator-selftest.js
       - name: Browser mission selftest
