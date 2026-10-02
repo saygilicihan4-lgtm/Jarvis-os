@@ -8,7 +8,8 @@ for(const cap of [
   'creator_asset_semantic_catalog_v1',
   'creator_visual_relevance_v1',
   'creator_local_vision_broll_v1',
-  'creator_semantic_diversity_v1'
+  'creator_semantic_diversity_v1',
+  'creator_relevance_preserving_fallback_v1'
 ]){
   assert.ok(worker.includes("'"+cap+"'"),cap+' missing');
 }
@@ -53,13 +54,14 @@ assert.ok(daily.includes("await selectCreatorRelevantAssetBaselines(brief.title+
 assert.ok(daily.includes("const assets=await creatorAutoWebAssets({"),'daily plan must opportunistically use centralized licensed web B-roll helper');
 assert.ok(daily.includes("title:brief.title")&&daily.includes("script:brief.script"),'daily web helper must derive local scene queries from the generated brief');
 assert.ok(daily.includes("orientation:'landscape'"),'daily web B-roll must request landscape assets');
-assert.ok(daily.includes('mergeCreatorAssetBaselines(web,mergeCreatorAssetBaselines(semantic,creatorDailyAutoAssetBaselines(dateKey,12),12),12)'),'daily plan must merge web, semantic and deterministic fallback assets');
+assert.ok(daily.includes('chooseCreatorDailyBaselines(web,semantic,creatorDailyAutoAssetBaselines(dateKey,12),12)'),'daily plan must preserve relevance-qualified assets and use deterministic fallback only when relevance is empty');
 assert.ok(daily.includes('publish:false'),'daily visual relevance flow must remain DRAFT-only');
 assert.ok(!daily.includes('publish:true'),'daily visual relevance must never request PUBLIC');
 assert.ok(!daily.includes('youtube_publish'),'daily relevance block must never create PUBLIC step');
 
 assert.ok(worker.includes("creatorVisualRelevanceReady:CAPS.includes('creator_asset_semantic_catalog_v1')"),'PC acceptance readiness missing');
 assert.ok(worker.includes("CAPS.includes('creator_semantic_diversity_v1')"),'semantic diversity acceptance readiness missing');
+assert.ok(worker.includes("CAPS.includes('creator_relevance_preserving_fallback_v1')"),'relevance-preserving fallback acceptance readiness missing');
 assert.ok(worker.includes("'creator_longform_edit_rhythm_v1'"),'Longform Edit v70 capability must remain');
 assert.ok(worker.includes("'creator_longform_duration_fit_v1'"),'Duration Fit v69 capability must remain');
 assert.ok(worker.includes("'creator_daily_longform_v1'"),'Daily Longform v68 capability must remain');
