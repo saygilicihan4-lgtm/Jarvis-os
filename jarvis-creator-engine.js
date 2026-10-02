@@ -440,18 +440,20 @@ function probeHookMotion(file,ffmpeg,{start=0,seconds=0.95,fps=8}={}){
       '-ss',at.toFixed(3),'-i',file,
       '-t',span.toFixed(3),
       '-an',
-      '-vf','fps='+rate+',scale=64:64:flags=area,format=gray',
-      '-f','framemd5','-'
+      '-vf','fps='+rate+',scale=64:64:flags=area,tblend=all_mode=difference,signalstats,metadata=mode=print:key=lavfi.signalstats.YAVG:file=-',
+      '-f','null','-'
     ],{timeout:20000,maxBuffer:1024*1024*2});
-    const hashes=String(raw||'').split(/\r?\n/)
+    const diffs=String(raw||'').split(/\r?\n/)
       .map(x=>x.trim())
-      .filter(x=>x&&!x.startsWith('#')&&x.includes(','))
-      .map(x=>x.split(',').pop().trim().toLowerCase())
-      .filter(x=>/^[a-f0-9]{32,64}$/.test(x));
-    const uniqueFrames=new Set(hashes).size;
-    const sampleCount=hashes.length;
-    const changeRatio=sampleCount>1?(uniqueFrames-1)/(sampleCount-1):0;
-    const ok=sampleCount>=3&&uniqueFrames>=2&&changeRatio>=0.12;
+      .filter(x=>x.startsWith('lavfi.signalstats.YAVG='))
+      .map(x=>Number(x.split('=').pop()))
+      .filter(x=>Number.isFinite(x)&&x>=0);
+    const sampleCount=diffs.length;
+    const meanDifference=sampleCount?diffs.reduce((a,b)=>a+b,0)/sampleCount:0;
+    const peakDifference=sampleCount?Math.max(...diffs):0;
+    const activeFrames=diffs.filter(x=>x>=0.12).length;
+    const activeRatio=sampleCount?activeFrames/sampleCount:0;
+    const ok=sampleCount>=3&&meanDifference>=0.12&&peakDifference>=0.25&&activeRatio>=0.35;
     return{
       ok,
       code:ok?'CREATOR_HOOK_MOTION_PASS':'CREATOR_HOOK_MOTION_LOW',
@@ -459,8 +461,10 @@ function probeHookMotion(file,ffmpeg,{start=0,seconds=0.95,fps=8}={}){
       seconds:Number(span.toFixed(3)),
       fps:rate,
       sampleCount,
-      uniqueFrames,
-      changeRatio:Number(changeRatio.toFixed(3))
+      meanDifference:Number(meanDifference.toFixed(4)),
+      peakDifference:Number(peakDifference.toFixed(4)),
+      activeFrames,
+      activeRatio:Number(activeRatio.toFixed(3))
     };
   }catch(e){
     return{ok:false,code:'CREATOR_HOOK_MOTION_PROBE_FAILED',start:Number(at.toFixed(3)),message:String(e.message||e).slice(0,300)};
@@ -474,11 +478,11 @@ function findHookMotionWindow(file,ffmpeg,{windowSeconds=0.95,maxOffsetSeconds=3
   for(let offset=0;offset<=maxOffset+0.001;offset+=step){
     const probe=probeHookMotion(file,ffmpeg,{start:offset,seconds:windowSeconds,fps});
     attempts.push(probe);
-    if(!best||Number(probe.changeRatio||0)>Number(best.changeRatio||0))best=probe;
+    if(!best||Number(probe.meanDifference||0)>Number(best.meanDifference||0))best=probe;
     if(probe.ok)return{...probe,offset:Number(offset.toFixed(3)),attempts:attempts.length};
   }
   return{
-    ...(best||{ok:false,code:'CREATOR_HOOK_MOTION_LOW',changeRatio:0,sampleCount:0,uniqueFrames:0}),
+    ...(best||{ok:false,code:'CREATOR_HOOK_MOTION_LOW',meanDifference:0,peakDifference:0,activeFrames:0,activeRatio:0,sampleCount:0}),
     ok:false,
     code:'CREATOR_HOOK_MOTION_NOT_FOUND',
     offset:Number(best&&best.start||0),
