@@ -5,7 +5,7 @@ const worker=fs.readFileSync('./worker.js','utf8');
 const startup=fs.readFileSync('./jarvis-startup.ps1','utf8');
 
 assert.ok(worker.includes("const WORKER_VERSION='2.76.0'"),'worker 2.76.0 required');
-assert.ok(worker.includes('bootstrap_migration_v1'),'bootstrap capability missing');
+assert.ok(worker.includes('bootstrap_migration_v2'),'bootstrap capability missing');
 assert.ok(worker.includes('function bootstrapRuntimeUpgrade()'),'bootstrap migration function missing');
 assert.ok(worker.includes("['jarvis-self-update.ps1',\"UPDATER_VERSION='5.0'\"]"),'updater bootstrap missing');
 assert.ok(worker.includes("['jarvis-update-manifest.json','\"schema\": 1']"),'manifest bootstrap missing');
