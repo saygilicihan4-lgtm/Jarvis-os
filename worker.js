@@ -38,10 +38,10 @@ const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
 const UPDATE_STATE_FILE=path.join(MEMORY_DIR,'update-state.json');
-const WORKER_VERSION='2.96.0';
+const WORKER_VERSION='2.97.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
 CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1','adaptive_model_router_v1','deep_model_fallback_v1','dynamic_chunk_prosody_v1','natural_pause_timing_v1','adaptive_turn_pacing_v1','latency_learning_v1','full_duplex_interrupt_v1','cancellable_agent_v1','adaptive_voice_profile_v1','spoken_voice_preference_v1','speaker_echo_rejection_v1','social_dialogue_v1','response_variation_v1','contextual_followup_v1','dialogue_feedback_learning_v1','social_preference_adaptation_v1','dynamic_wake_ack_v1','wake_ack_turn_timing_v1','auto_quality_escalation_v1','weak_response_escalation_v1','repair_quality_escalation_v1','social_momentum_v1','elliptical_turn_resolution_v1','conversation_cadence_v1','brevity_mirroring_v1','adaptive_response_length_v1','interruption_continuity_v1','spoken_resume_v1','partial_stream_resume_v1');
-CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1','mission_auto_resume_v1','mission_health_v1','pc_acceptance_snapshot_v1','silent_startup_diagnostics_v1','pc_acceptance_hardened_v1','bootstrap_migration_v6','mission_fair_scheduler_v1','pc_self_repair_v1','creator_multiscene_v2','creator_burned_captions_v1','cloud_mission_telemetry_v1','creator_short_mission_v1','shopify_product_mission_v1','developer_project_mission_v1','approval_gate_v1','shopify_publish_approval_v1','browser_form_mission_v1','browser_form_prepare_v1','browser_click_approval_v1','youtube_publish_approval_v1','youtube_publish_receipt_v1','developer_patch_mission_v1','developer_patch_rollback_v1','pc_safe_mission_v1','pc_safe_action_catalog_v1','pc_mission_resume_v1');
+CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1','mission_auto_resume_v1','mission_health_v1','pc_acceptance_snapshot_v1','silent_startup_diagnostics_v1','pc_acceptance_hardened_v1','bootstrap_migration_v6','mission_fair_scheduler_v1','pc_self_repair_v1','creator_multiscene_v2','creator_burned_captions_v1','cloud_mission_telemetry_v1','creator_short_mission_v1','shopify_product_mission_v1','developer_project_mission_v1','approval_gate_v1','shopify_publish_approval_v1','browser_form_mission_v1','browser_form_prepare_v1','browser_click_approval_v1','youtube_publish_approval_v1','youtube_publish_receipt_v1','developer_patch_mission_v1','developer_patch_rollback_v1','pc_safe_mission_v1','pc_safe_action_catalog_v1','pc_mission_resume_v1','mission_control_v1','mission_pause_v1','mission_cancel_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -2478,6 +2478,22 @@ function nativeAgentTools(){
     {
       type:'function',
       function:{
+        name:'mission_control',
+        description:'Yalnızca kullanıcı açıkça kalıcı görevi duraklatmak, devam ettirmek veya iptal etmek istediğinde kullan. Running adımı zorla kesmez; kontrol isteği güvenli adım sınırında uygulanır. Birden fazla uygun görev varsa missionId gerekir.',
+        parameters:{
+          type:'object',
+          properties:{
+            action:{type:'string',enum:['pause','resume','cancel']},
+            missionId:{type:'string',description:'Varsa tam mission kimliği; boşsa yalnızca tek uygun görev olduğunda otomatik seçilir.'}
+          },
+          required:['action'],
+          additionalProperties:false
+        }
+      }
+    },
+    {
+      type:'function',
+      function:{
         name:'mission_status',
         description:'En son kalıcı JARVIS iş görevinin durumunu getir. Dış sistemlerde değişiklik yapmaz.',
         parameters:{type:'object',properties:{},additionalProperties:false}
@@ -2854,6 +2870,27 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
     }catch(e){
       return{ok:false,message:'Kalıcı PC görevi başlatılamadı: '+String(e.message||e).slice(0,650)};
     }
+  }else if(n==='mission_control'){
+    const action=String(a.action||'').trim().toLowerCase();
+    const intent=String(userText||'').toLocaleLowerCase('tr-TR');
+    const explicit=action==='pause'
+      ?/(?:duraklat|beklet|pause)/i.test(intent)
+      :action==='resume'
+        ?/(?:devam|sürdür|surdur|resume)/i.test(intent)
+        :action==='cancel'
+          ?/(?:iptal|cancel|vazgeç|vazgec|sonlandır|sonlandir)/i.test(intent)
+          :false;
+    if(!explicit)return{ok:false,message:'Mission control için bu turda açık duraklat/devam/iptal ifadesi gerekli.'};
+    try{
+      const controlled=requestMissionControl({missionId:String(a.missionId||'').trim(),action});
+      if(action==='resume'){
+        const out=await runDurableMission(controlled.id);
+        return{ok:out.status==='completed',message:'MISSION DEVAM · '+missionSummaryText(out)};
+      }
+      return{ok:true,message:(action==='pause'?'MISSION DURAKLATMA':'MISSION İPTAL')+' · '+missionSummaryText(controlled)};
+    }catch(e){
+      return{ok:false,message:'Mission control uygulanamadı: '+String(e.message||e).slice(0,650)};
+    }
   }else if(n==='mission_status'){
     const latest=getMissionEngine().latestOpenMission(WORKSPACE)||getMissionEngine().listMissions(WORKSPACE,{limit:1})[0]||null;
     return{ok:true,message:missionSummaryText(latest)};
@@ -3074,6 +3111,7 @@ async function runNativeAgent(message,{maxRounds=4,signal=null}={}){
     'Kullanıcı aynı istekte Short üretip YouTube taslağına yüklemenizi isterse önce creator_render_short sonucundaki gerçek output yolunu al, sonra youtube_prepare_draft_upload çağır. Dosya yolu uydurma.',
     'Bir istek VAROVA ürünü + reklam videosu + YouTube taslağı gibi birden fazla dış adım içeriyorsa ayrı ayrı araç çağırmak yerine varova_campaign_mission kullan; böylece görev disk üzerinde kalıcı olur ve kesintiden sonra devam eder.',
     'Birden fazla güvenli yerel PC işi sırayla yapılacaksa veya iş restart sonrası sürmeliyse pc_safe_mission kullan. Yalnızca durum sorgusu, allowlist uygulama/site açma ve medya kontrollerini sıraya koy; shell/PowerShell, keyfi exe/path, silme, ödeme, public publish veya hesap değişikliği ekleme.',
+    'Kullanıcı kalıcı görevi açıkça duraklatmak, devam ettirmek veya iptal etmek isterse mission_control kullan. Running dış yan etkiyi zorla kesme; güvenli adım sınırında uygula. Birden fazla uygun görev varsa missionId olmadan seçim yapma.',
     'Kullanıcı yarım işi "devam et", "kaldığın yerden sürdür" gibi ifadeyle sürdürmek isterse önce mission_status veya doğrudan resume_latest_mission kullan. Tamamlanmış adımı yeniden yapma.',
     'Kalıcı görev needs_verification durumundaysa belirsiz dış yan etkiyi otomatik tekrar etme; kopya ürün veya kopya video riski yerine doğrulamayı bekle.',
     'Kullanıcı bilgisayar testi, JARVIS testi, hazır mı veya kabul testi isterse pc_acceptance_snapshot kullan; bu salt-okunur denetimdir ve dış hesaplarda değişiklik yapmaz.',
@@ -4356,6 +4394,85 @@ function rollbackDeveloperPatchMission(mission){
   return{ok:actions.every(x=>x.restored===true),actions};
 }
 
+function missionControlCandidates(action){
+  const engine=getMissionEngine();
+  const rows=engine.listMissions(WORKSPACE,{limit:50});
+  if(action==='resume')return rows.filter(x=>String(x.status||'')==='paused');
+  if(action==='pause')return rows.filter(x=>new Set(['queued','running','waiting_dependency','needs_verification']).has(String(x.status||'')));
+  if(action==='cancel')return rows.filter(x=>new Set(['queued','running','waiting_dependency','needs_verification','paused']).has(String(x.status||'')));
+  return[];
+}
+function applyPendingMissionControl(mission){
+  if(!mission||!mission.id)return mission;
+  const action=String(mission.control&&mission.control.requested||'');
+  if(!['pause','cancel'].includes(action))return mission;
+  if(['completed','failed','cancelled'].includes(String(mission.status||'')))return mission;
+  const engine=getMissionEngine();
+  const at=new Date().toISOString();
+  if(action==='pause'){
+    const currentStatus=String(mission.status||'queued');
+    const resumeStatus=['waiting_dependency','needs_verification'].includes(currentStatus)?currentStatus:'queued';
+    mission.status='paused';
+    mission.control={...(mission.control||{}),requested:null,state:'paused',appliedAt:at,resumeStatus};
+    if(Array.isArray(mission.history)){
+      mission.history.push({at,event:'mission_paused',resumeStatus});
+      if(mission.history.length>200)mission.history=mission.history.slice(-200);
+    }
+  }else{
+    mission.status='cancelled';
+    mission.completedAt=mission.completedAt||at;
+    mission.control={...(mission.control||{}),requested:null,state:'cancelled',appliedAt:at};
+    if(Array.isArray(mission.history)){
+      mission.history.push({at,event:'mission_cancelled'});
+      if(mission.history.length>200)mission.history=mission.history.slice(-200);
+    }
+  }
+  return engine.saveMission(WORKSPACE,mission);
+}
+function requestMissionControl({missionId='',action=''}={}){
+  const engine=getMissionEngine();
+  const op=String(action||'').trim().toLowerCase();
+  if(!['pause','resume','cancel'].includes(op))throw new Error('Geçersiz mission control action.');
+  let mission=null;
+  const id=String(missionId||'').trim();
+  if(id){
+    mission=engine.loadMission(WORKSPACE,id);
+    if(!mission)throw new Error('Mission bulunamadı: '+id);
+  }else{
+    const candidates=missionControlCandidates(op);
+    if(!candidates.length)throw new Error('Bu işlem için uygun kalıcı görev yok.');
+    if(candidates.length>1)throw new Error('Birden fazla uygun görev var; missionId ile hangisini kontrol edeceğini belirt.');
+    mission=candidates[0];
+  }
+  const status=String(mission.status||'');
+  if(op==='resume'){
+    if(status!=='paused')throw new Error('Yalnızca paused görev devam ettirilebilir.');
+    const resumeStatus=['waiting_dependency','needs_verification'].includes(String(mission.control&&mission.control.resumeStatus||''))
+      ?String(mission.control.resumeStatus)
+      :'queued';
+    mission.status=resumeStatus;
+    mission.control={...(mission.control||{}),requested:null,state:'resumed',resumedAt:new Date().toISOString(),resumeStatus:null};
+    if(Array.isArray(mission.history)){
+      mission.history.push({at:new Date().toISOString(),event:'mission_resumed',status:resumeStatus});
+      if(mission.history.length>200)mission.history=mission.history.slice(-200);
+    }
+    return engine.saveMission(WORKSPACE,mission);
+  }
+  if(['completed','failed','cancelled'].includes(status))throw new Error('Tamamlanmış/sonlanmış görev kontrol edilemez.');
+  if(op==='cancel'&&status==='paused'){
+    mission.control={...(mission.control||{}),requested:'cancel',requestedAt:new Date().toISOString()};
+    return applyPendingMissionControl(engine.saveMission(WORKSPACE,mission));
+  }
+  mission.control={...(mission.control||{}),requested:op,requestedAt:new Date().toISOString()};
+  if(Array.isArray(mission.history)){
+    mission.history.push({at:new Date().toISOString(),event:'mission_control_requested',action:op});
+    if(mission.history.length>200)mission.history=mission.history.slice(-200);
+  }
+  mission=engine.saveMission(WORKSPACE,mission);
+  if(status!=='running')return applyPendingMissionControl(mission);
+  return mission;
+}
+
 function approveMissionGate({missionId=''}={}){
   const engine=getMissionEngine();
   let mission=null;
@@ -4516,7 +4633,8 @@ async function runDurableMission(id){
   for(let guard=0;guard<Math.max(4,mission.steps.length+2);guard++){
     mission=engine.loadMission(WORKSPACE,id);
     if(!mission)throw new Error('Mission disappeared: '+id);
-    if(mission.status==='completed'||mission.status==='failed')return mission;
+    mission=applyPendingMissionControl(mission);
+    if(['completed','failed','cancelled','paused'].includes(String(mission.status||'')))return mission;
 
     if(mission.status==='waiting_dependency'){
       const blocked=engine.currentStep(mission);
