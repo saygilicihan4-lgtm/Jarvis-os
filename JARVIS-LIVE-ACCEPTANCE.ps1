@@ -86,6 +86,16 @@ try {
 }
 
 try {
+  $acc=Invoke-Json "http://127.0.0.1:8765/acceptance-snapshot" "GET" $null 20
+  $accOk=($acc.ok -eq $true -and $acc.corePass -eq $true -and [string]$acc.worker.version -eq "2.82.0")
+  $startupDetail=if($acc.startup.windows){"silent="+$acc.startup.silentOk+" task="+$acc.startup.taskRegistered+" hiddenAction="+$acc.startup.hiddenTaskAction+" visibleShells="+@($acc.startup.visibleJarvisShells).Count}else{"Windows startup check deferred"}
+  $accountDetail=("shopify="+$acc.accountSetup.shopifyConnected+" youtube="+$acc.accountSetup.youtubeLoggedIn)
+  Add-Result "PC acceptance snapshot" $accOk ("Worker "+$acc.worker.version+" · "+$startupDetail+" · "+$accountDetail+" · report="+$acc.report)
+} catch {
+  Add-Result "PC acceptance snapshot" $false $_.Exception.Message
+}
+
+try {
   $vp=Invoke-Json "http://127.0.0.1:8765/voice-preferences" "GET" $null 5
   $vpOk=($vp.ok -eq $true -and $null -ne $vp.pauseScale -and $null -ne $vp.rateOffset -and $null -ne $vp.pitchOffset -and $null -ne $vp.volumeOffset)
   Add-Result "Voice preference state endpoint" $vpOk ("rate="+$vp.rateOffset+" pitch="+$vp.pitchOffset+" volume="+$vp.volumeOffset+" pause="+$vp.pauseScale)
