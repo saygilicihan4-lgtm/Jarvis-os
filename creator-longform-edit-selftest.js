@@ -37,7 +37,7 @@ assert.ok(source.includes("sceneCount:storyboard.length"),'long-form scene evide
 const renderStart=source.indexOf('function renderShort(');
 const renderEnd=source.indexOf('function renderLongform(',renderStart);
 const shortBlock=source.slice(renderStart,renderEnd);
-assert.ok(shortBlock.includes("const storyboard=buildShortStoryboard(assets,duration,transition,3.2,7)"),'Shorts must use its own dedicated motion storyboard');
+assert.ok(shortBlock.includes("const storyboard=buildShortStoryboard(assets,duration,transition,3.2,7,0.9)"),'Shorts must use its own dedicated micro-hook storyboard');
 assert.ok(shortBlock.includes("'-map',String(storyboard.length)+':a:0'"),'Shorts expanded storyboard audio mapping missing');
 assert.ok(!shortBlock.includes('buildLongformStoryboard'),'Long-form storyboard logic leaked into Shorts');
 assert.ok(shortBlock.includes("e.code='CREATOR_SHORT_EDIT_RHYTHM_FAILED'"),'Shorts must use its own edit-rhythm guard');
