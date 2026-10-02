@@ -34,7 +34,8 @@ assert.ok(worker.includes("jarvis-creator-engine.js',\"ENGINE_VERSION='1.4'"),'C
 assert.ok(creator.includes("const ENGINE_VERSION='1.4'"),'Creator Engine 1.4 required');
 assert.ok(creator.includes('function resolveAssetSelection(workspace,assetFiles,maxScenes=5)'),'explicit asset resolver missing');
 assert.ok(creator.includes("parts.length!==2||parts[0]!=='creator-assets'"),'explicit asset scope guard missing');
-assert.ok(creator.includes("const assets=explicitAssets?resolveAssetSelection(workspace,assetFiles,5):selectAssets(workspace,base,5)"),'explicit ordered selection must override automatic selection');
+assert.ok(creator.includes("const assetCandidates=explicitAssets?resolveAssetSelection(workspace,assetFiles,5):selectAssets(workspace,base,24)"),'explicit ordered selection must override automatic candidate selection');
+assert.ok(creator.includes("preflightAssetSelection(workspace,assetCandidates,{maxScenes:5})"),'Short storyboard asset quality preflight missing');
 assert.ok(creator.includes("assetSelection:explicitAssets?'explicit':'automatic'"),'Creator job metadata selection mode missing');
 assert.ok(creator.includes("missionId:String(missionId||'')"),'Creator job metadata mission binding missing');
 
