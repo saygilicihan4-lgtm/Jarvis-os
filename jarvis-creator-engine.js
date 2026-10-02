@@ -740,9 +740,23 @@ function probeRenderedMotionWindow(file,ffmpeg,{start=0,seconds=1.1,fps=4}={}){
 }
 function probeRenderedMotionCoverage(file,ffmpeg,duration,{mode='short'}={}){
   const total=Number(duration);
-  if(!Number.isFinite(total)||total<=0)return{ok:false,code:'CREATOR_RENDER_DURATION_MISSING',mode,activeWindows:0,requiredWindows:0,windows:[]};
+  if(!Number.isFinite(total)||total<=0)return{
+    ok:false,
+    code:'CREATOR_RENDER_DURATION_MISSING',
+    mode,
+    activeWindows:0,
+    requiredWindows:0,
+    sampledWindows:0,
+    maxInactiveRun:0,
+    maxAllowedInactiveRun:0,
+    coverageOk:false,
+    continuityOk:false,
+    windows:[]
+  };
   const longform=String(mode||'short')==='longform';
-  const fractions=longform?[0.05,0.25,0.5,0.75,0.95]:[0.08,0.36,0.64,0.9];
+  const fractions=longform
+    ?Array.from({length:11},(_,index)=>0.05+((0.90*index)/10))
+    :[0.08,0.36,0.64,0.9];
   const span=1.1;
   const maxStart=Math.max(0,total-span);
   const windows=fractions.map(fraction=>{
@@ -750,16 +764,34 @@ function probeRenderedMotionCoverage(file,ffmpeg,duration,{mode='short'}={}){
     return probeRenderedMotionWindow(file,ffmpeg,{start,seconds:span,fps:4});
   });
   const activeWindows=windows.filter(x=>x&&x.ok).length;
-  const requiredWindows=longform?4:3;
-  const ok=activeWindows>=requiredWindows;
+  const requiredWindows=longform?8:3;
+  let currentInactiveRun=0,maxInactiveRun=0;
+  for(const window of windows){
+    if(window&&window.ok){
+      currentInactiveRun=0;
+    }else{
+      currentInactiveRun++;
+      if(currentInactiveRun>maxInactiveRun)maxInactiveRun=currentInactiveRun;
+    }
+  }
+  const maxAllowedInactiveRun=longform?2:1;
+  const coverageOk=activeWindows>=requiredWindows;
+  const continuityOk=maxInactiveRun<=maxAllowedInactiveRun;
+  const ok=coverageOk&&continuityOk;
   return{
     ok,
-    code:ok?'CREATOR_MOTION_COVERAGE_PASS':'CREATOR_MOTION_COVERAGE_MISSING',
+    code:ok
+      ?'CREATOR_MOTION_COVERAGE_PASS'
+      :(!coverageOk?'CREATOR_MOTION_COVERAGE_MISSING':'CREATOR_MOTION_CONTINUITY_MISSING'),
     mode:longform?'longform':'short',
     duration:Number(total.toFixed(3)),
     activeWindows,
     requiredWindows,
     sampledWindows:windows.length,
+    maxInactiveRun,
+    maxAllowedInactiveRun,
+    coverageOk,
+    continuityOk,
     windows
   };
 }
@@ -770,15 +802,18 @@ function applyRenderedVisualQuality(quality,file,ffmpeg,{mode='short'}={}){
   const baseOk=!!result.ok;
   const duration=Number(result.measured.duration);
   const motionCoverage=probeRenderedMotionCoverage(file,ffmpeg,duration,{mode});
-  result.checks.motionCoverage=motionCoverage.ok;
+  result.checks.motionCoverage=motionCoverage.coverageOk;
+  result.checks.motionContinuity=motionCoverage.continuityOk;
   result.motionCoverage=motionCoverage;
   result.measured.motionActiveWindows=motionCoverage.activeWindows;
   result.measured.motionRequiredWindows=motionCoverage.requiredWindows;
+  result.measured.motionMaxInactiveRun=motionCoverage.maxInactiveRun;
+  result.measured.motionMaxAllowedInactiveRun=motionCoverage.maxAllowedInactiveRun;
   result.ok=baseOk&&motionCoverage.ok;
   if(baseOk&&!motionCoverage.ok){
-    result.code='CREATOR_MOTION_COVERAGE_MISSING';
+    result.code=String(motionCoverage.code||'CREATOR_MOTION_COVERAGE_MISSING');
     result.message=String(mode||'short')==='longform'
-      ?'Creator long-form final görüntü hareketi kalite kapısı başarısız.'
+      ?'Creator long-form final görüntü hareket sürekliliği kalite kapısı başarısız.'
       :'Creator Shorts final görüntü hareketi kalite kapısı başarısız.';
   }
   return result;

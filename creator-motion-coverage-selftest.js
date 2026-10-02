@@ -34,7 +34,9 @@ try{
   assert.ok(movingShort.activeWindows>=movingShort.requiredWindows);
   assert.strictEqual(staticLong.ok,false,'static video must fail long-form sampling policy');
   assert.strictEqual(movingLong.ok,true,'moving video must pass long-form sampling policy');
-  assert.strictEqual(movingLong.sampledWindows,5);
+  assert.strictEqual(movingLong.sampledWindows,11);
+  assert.strictEqual(movingLong.continuityOk,true);
+  assert.strictEqual(movingLong.maxInactiveRun,0);
   assert.strictEqual(movingShort.sampledWindows,4);
 
   const good=creator.applyRenderedVisualQuality(
@@ -43,6 +45,7 @@ try{
   );
   assert.strictEqual(good.ok,true);
   assert.strictEqual(good.checks.motionCoverage,true);
+  assert.strictEqual(good.checks.motionContinuity,true);
   assert.ok(good.motionCoverage&&good.motionCoverage.ok);
 
   const frozen=creator.applyRenderedVisualQuality(
@@ -52,6 +55,7 @@ try{
   assert.strictEqual(frozen.ok,false);
   assert.strictEqual(frozen.code,'CREATOR_MOTION_COVERAGE_MISSING');
   assert.strictEqual(frozen.checks.motionCoverage,false);
+  assert.strictEqual(frozen.checks.motionContinuity,false);
 
   const baseFailure=creator.applyRenderedVisualQuality(
     {ok:false,code:'BASE_FAIL',message:'base fail',checks:{},measured:{duration:12.2}},
