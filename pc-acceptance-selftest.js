@@ -2,11 +2,12 @@ const fs=require('fs');
 const assert=require('assert');
 
 const worker=fs.readFileSync('./worker.js','utf8');
-assert.ok(worker.includes("const WORKER_VERSION='2.82.0'"),'Worker 2.82.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.83.0'"),'Worker 2.83.0 required');
 assert.ok(worker.includes("name:'pc_acceptance_snapshot'"),'native acceptance tool missing');
 assert.ok(worker.includes("req.url==='/acceptance-snapshot'"),'acceptance endpoint missing');
 assert.ok(worker.includes("'pc_acceptance_snapshot_v1'"),'acceptance capability missing');
 assert.ok(worker.includes("'silent_startup_diagnostics_v1'"),'silent startup diagnostics capability missing');
+assert.ok(worker.includes("'pc_self_repair_v1'"),'PC self-repair capability missing');
 
 const start=worker.indexOf('async function buildPcAcceptanceSnapshot()');
 const end=worker.indexOf('function acceptanceSummaryText',start);
