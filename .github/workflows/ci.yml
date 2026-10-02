@@ -62,6 +62,7 @@ jobs:
           node --check creator-micro-hook-selftest.js
           node --check creator-hook-motion-selftest.js
           node --check creator-auto-hook-rank-selftest.js
+          node --check creator-thumbnail-selftest.js
           node --check creator-render-smoke-selftest.js
           node --check shopify-mission-selftest.js
           node --check approval-gate-selftest.js
@@ -156,6 +157,8 @@ jobs:
         run: node creator-hook-motion-selftest.js
       - name: Creator auto hook motion rank selftest
         run: node creator-auto-hook-rank-selftest.js
+      - name: Creator thumbnail selftest
+        run: node creator-thumbnail-selftest.js
       - name: Shopify mission selftest
         run: node shopify-mission-selftest.js
       - name: Approval gate selftest

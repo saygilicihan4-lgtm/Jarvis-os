@@ -36,7 +36,8 @@ function creatorDirs(workspace){
   return{
     assets:ensureDir(path.join(workspace,'creator-assets')),
     output:ensureDir(path.join(workspace,'creator-video')),
-    jobs:ensureDir(path.join(workspace,'creator-jobs'))
+    jobs:ensureDir(path.join(workspace,'creator-jobs')),
+    thumbnails:ensureDir(path.join(workspace,'creator-thumbnails'))
   };
 }
 const CREATOR_ASSET_EXTENSIONS=new Set(['.mp4','.mov','.mkv','.webm','.m4v']);
@@ -165,6 +166,92 @@ function animateStillAsset(workspace,relativePath,{orientation='portrait',durati
     derivedFromImage:true
   };
 }
+function thumbnailTitleLines(text,{maxChars=28,maxLines=3}={}){
+  const words=String(text||'').replace(/[\r\n]+/g,' ').replace(/\s+/g,' ').trim().split(' ').filter(Boolean);
+  if(!words.length)return[];
+  const limit=Math.max(12,Math.min(42,Number(maxChars)||28));
+  const lineLimit=Math.max(1,Math.min(4,Number(maxLines)||3));
+  const lines=[];
+  let current='';
+  for(const word of words){
+    const next=current?(current+' '+word):word;
+    if(current&&next.length>limit){
+      lines.push(current);
+      current=word;
+      if(lines.length>=lineLimit)break;
+    }else current=next;
+  }
+  if(lines.length<lineLimit&&current)lines.push(current);
+  return lines.slice(0,lineLimit);
+}
+function createThumbnail(workspace,videoFile,{title='',name='',missionId='',frameAt=1.2}={}){
+  const root=path.resolve(String(workspace||''));
+  const raw=String(videoFile||'').trim();
+  if(!raw)throw new Error('CREATOR_THUMBNAIL_VIDEO_REQUIRED');
+  let rel=raw;
+  if(path.isAbsolute(raw)){
+    const full=path.resolve(raw);
+    const relative=path.relative(root,full);
+    if(!relative||relative.startsWith('..'+path.sep)||relative==='..'||path.isAbsolute(relative))throw new Error('CREATOR_THUMBNAIL_OUTSIDE_WORKSPACE');
+    rel=relative.replace(/\\/g,'/');
+  }
+  const info=safeWorkspaceVideo(workspace,rel);
+  const status=ffmpegStatus(workspace);
+  if(!status.ok||!status.ffprobe){
+    const e=new Error('Creator thumbnail requires FFmpeg + FFprobe');
+    e.code=!status.ok?'FFMPEG_MISSING':'FFPROBE_MISSING';
+    throw e;
+  }
+  const dirs=creatorDirs(workspace);
+  const base=safeName(name||missionId||title||path.basename(info.full,path.extname(info.full)));
+  const outFile=path.join(dirs.thumbnails,base+'.jpg');
+  const textFile=path.join(dirs.thumbnails,base+'.title.txt');
+  const lines=thumbnailTitleLines(title,{maxChars:28,maxLines:3});
+  const titleText=lines.join('\n').slice(0,180);
+  fs.writeFileSync(textFile,titleText,'utf8');
+  const at=Math.max(0,Math.min(30,Number(frameAt)||1.2));
+  const baseFilter='scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,eq=contrast=1.06:saturation=1.10';
+  const draw=titleText
+    ?baseFilter+",drawbox=x=0:y=400:w=1280:h=320:color=black@0.58:t=fill,drawtext=textfile='"+ffmpegFilterPath(textFile)+"':fontcolor=white:fontsize=62:borderw=3:bordercolor=black@0.9:x=64:y=448:line_spacing=12"
+    :baseFilter;
+  let titleBurned=!!titleText;
+  const run=(filter)=>execFile(status.ffmpeg,[
+    '-y','-hide_banner','-loglevel','error',
+    '-ss',at.toFixed(3),'-i',info.full,
+    '-frames:v','1','-vf',filter,'-q:v','2',outFile
+  ],{timeout:90000,maxBuffer:1024*1024*12});
+  try{
+    run(draw);
+  }catch(_){
+    titleBurned=false;
+    run(baseFilter);
+  }finally{
+    try{if(fs.existsSync(textFile))fs.unlinkSync(textFile)}catch(_){}
+  }
+  if(!fs.existsSync(outFile)||!fs.statSync(outFile).isFile()||fs.statSync(outFile).size<5000)throw new Error('CREATOR_THUMBNAIL_OUTPUT_INVALID');
+  let width=0,height=0;
+  try{
+    const rawProbe=execFile(status.ffprobe,[
+      '-v','error','-select_streams','v:0',
+      '-show_entries','stream=width,height','-of','json',outFile
+    ],{timeout:15000,maxBuffer:1024*1024}).trim();
+    const data=JSON.parse(rawProbe||'{}');
+    const stream=Array.isArray(data.streams)&&data.streams[0]?data.streams[0]:{};
+    width=Number(stream.width||0);height=Number(stream.height||0);
+  }catch(_){}
+  if(width!==1280||height!==720)throw new Error('CREATOR_THUMBNAIL_DIMENSIONS_INVALID');
+  return{
+    ok:true,
+    path:path.relative(root,outFile).replace(/\\/g,'/'),
+    fullPath:outFile,
+    width,height,
+    bytes:Number(fs.statSync(outFile).size||0),
+    frameAt:Number(at.toFixed(3)),
+    titleBurned,
+    missionId:String(missionId||'').slice(0,100)||null
+  };
+}
+
 function assetSafeName(relativePath){
   const input=String(relativePath||'');
   const originalExt=path.extname(input);
@@ -690,7 +777,7 @@ function buildShortAss(text,durationSeconds=15){
   return lines.join('\n');
 }
 
-function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId='',assetHashes=[]}){
+function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId='',assetHashes=[],thumbnailTitle=''}){
   if(!workspace)throw new Error('workspace required');
   if(!voicePath||!fs.existsSync(voicePath))throw new Error('creator voice file missing');
   const status=ffmpegStatus(workspace);
@@ -847,6 +934,18 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     throw e;
   }
 
+  let thumbnail=null;
+  try{
+    thumbnail=createThumbnail(workspace,outFile,{
+      title:String(thumbnailTitle||name||''),
+      name:base+'-thumb',
+      missionId,
+      frameAt:0.45
+    });
+  }catch(e){
+    thumbnail={ok:false,error:String(e.message||e).slice(0,300)};
+  }
+
   const meta={
     engine:'JARVIS_CREATOR_ENGINE',
     version:ENGINE_VERSION,
@@ -865,6 +964,8 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     captionAnimation:captionsBurned?'pop-fade':'none',
     quality,
     visualEdit,
+    thumbnail:thumbnail&&thumbnail.ok?thumbnail.path:null,
+    thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),
     output:path.relative(workspace,outFile),
     subtitle:path.relative(workspace,srtFile),
     burnedSubtitle:path.relative(workspace,assFile),
@@ -888,11 +989,13 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     duration,
     quality,
     visualEdit,
+    thumbnail:thumbnail&&thumbnail.ok?thumbnail.path:null,
+    thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),
     profileVersion:CREATOR_PROFILE_VERSION
   };
 }
 
-function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId='',assetHashes=[]}){
+function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId='',assetHashes=[],thumbnailTitle=''}){
   if(!workspace)throw new Error('workspace required');
   if(!voicePath||!fs.existsSync(voicePath))throw new Error('creator long-form voice file missing');
   const status=ffmpegStatus(workspace);
@@ -1033,6 +1136,18 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     throw e;
   }
 
+  let thumbnail=null;
+  try{
+    thumbnail=createThumbnail(workspace,outFile,{
+      title:String(thumbnailTitle||name||''),
+      name:base+'-thumb',
+      missionId,
+      frameAt:3
+    });
+  }catch(e){
+    thumbnail={ok:false,error:String(e.message||e).slice(0,300)};
+  }
+
   const meta={
     engine:'JARVIS_CREATOR_ENGINE',
     version:ENGINE_VERSION,
@@ -1051,6 +1166,8 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     captionsBurned,
     quality,
     visualEdit,
+    thumbnail:thumbnail&&thumbnail.ok?thumbnail.path:null,
+    thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),
     output:path.relative(workspace,outFile),
     subtitle:path.relative(workspace,srtFile),
     profile:{width:1920,height:1080,fps:30,codec:'H.264',audio:'AAC',durationTarget:'9-11m',multiScene:true,transition:'varied',sceneTarget:'20-30s',motion:'subtle-pan-crop',narrativeAssetOrder:assets.length>=6?'progressive':'cyclic'}
@@ -1071,6 +1188,8 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     duration,
     quality,
     visualEdit,
+    thumbnail:thumbnail&&thumbnail.ok?thumbnail.path:null,
+    thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),
     profileVersion:CREATOR_PROFILE_VERSION
   };
 }
@@ -1102,6 +1221,8 @@ module.exports={
   assetSafeName,
   assetDestinationName,
   animateStillAsset,
+  thumbnailTitleLines,
+  createThumbnail,
   CREATOR_ASSET_EXTENSIONS,
   CREATOR_IMAGE_EXTENSIONS
 };

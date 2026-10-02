@@ -68,7 +68,8 @@ const out=creator.renderShort({
   voicePath:voice,
   assetFiles:['creator-assets/smoke-a.mp4','creator-assets/smoke-b.mp4'],
   assetHashes:[],
-  missionId:'creator-render-smoke-v83'
+  missionId:'creator-render-smoke-v83',
+  thumbnailTitle:'GERÇEK HAREKET · JARVIS'
 });
 
 assert.strictEqual(out.ok,true,'renderShort must succeed');
@@ -78,6 +79,17 @@ assert.ok(fs.existsSync(out.subtitle),'plain SRT sidecar missing');
 assert.ok(fs.existsSync(out.burnedSubtitle),'kinetic ASS subtitle artifact missing');
 assert.strictEqual(out.captionsBurned,true,'kinetic captions must actually be burned in CI');
 assert.strictEqual(out.captionAnimation,'pop-fade','kinetic caption animation evidence missing');
+assert.ok(out.thumbnail,'Creator thumbnail artifact missing');
+const thumbFull=path.resolve(workspace,out.thumbnail);
+assert.ok(fs.existsSync(thumbFull),'Creator thumbnail file missing');
+assert.ok(fs.statSync(thumbFull).size>5000,'Creator thumbnail too small');
+const thumbProbe=JSON.parse(run(ffprobe,[
+  '-v','error','-select_streams','v:0',
+  '-show_entries','stream=width,height',
+  '-of','json',thumbFull
+]));
+assert.strictEqual(Number(thumbProbe.streams&&thumbProbe.streams[0]&&thumbProbe.streams[0].width),1280,'thumbnail width mismatch');
+assert.strictEqual(Number(thumbProbe.streams&&thumbProbe.streams[0]&&thumbProbe.streams[0].height),720,'thumbnail height mismatch');
 assert.ok(out.sceneCount>=4,'Short smoke render must use paced multi-scene editing');
 assert.ok(out.visualEdit&&out.visualEdit.ok===true,'visual edit gate must pass');
 assert.ok(out.visualEdit.hookSeconds>=0.75&&out.visualEdit.hookSeconds<=1.05,'real render micro-hook timing evidence missing');
@@ -97,6 +109,8 @@ assert.ok(probe.measured.duration>=11.8&&probe.measured.duration<=18.8,'render d
 const meta=JSON.parse(fs.readFileSync(out.metadata,'utf8'));
 assert.strictEqual(meta.missionId,'creator-render-smoke-v83','mission binding missing');
 assert.strictEqual(meta.captionAnimation,'pop-fade','metadata kinetic caption evidence missing');
+assert.strictEqual(meta.thumbnail,out.thumbnail,'metadata thumbnail binding missing');
+assert.strictEqual(typeof meta.thumbnailTitleBurned,'boolean','metadata thumbnail title evidence missing');
 assert.strictEqual(meta.profile.captions,'kinetic-pop-fade','profile kinetic caption evidence missing');
 assert.strictEqual(meta.profile.motion,'dynamic-pan-crop','motion profile missing');
 assert.ok(Array.isArray(meta.storyboard)&&meta.storyboard.length>=4,'storyboard metadata missing');
