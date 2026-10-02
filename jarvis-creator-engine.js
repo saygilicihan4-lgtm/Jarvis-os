@@ -860,6 +860,55 @@ function probeRenderedAudioLoudness(file,ffmpeg,{targetLufs=-16,toleranceLufs=3,
   }
 }
 
+function probeAudioContinuity(file,ffmpeg,{maxSilentSeconds=3,minSilenceSeconds=1.2,noiseDb=-50}={}){
+  const maxGap=Math.max(1,Math.min(30,Number(maxSilentSeconds)||3));
+  const minGap=Math.max(0.5,Math.min(maxGap,Number(minSilenceSeconds)||1.2));
+  const noise=Math.max(-80,Math.min(-20,Number(noiseDb)||-50));
+  if(!ffmpeg)return{ok:false,code:'FFMPEG_MISSING',maxSilenceSeconds:null,silenceEvents:0,maxAllowedSeconds:maxGap};
+  if(!file||!fs.existsSync(file))return{ok:false,code:'CREATOR_AUDIO_OUTPUT_MISSING',maxSilenceSeconds:null,silenceEvents:0,maxAllowedSeconds:maxGap};
+  try{
+    const run=childProcess.spawnSync(ffmpeg,[
+      '-hide_banner','-nostats','-i',file,
+      '-map','0:a:0',
+      '-af','silencedetect=noise='+noise+'dB:d='+minGap,
+      '-f','null','-'
+    ],{
+      encoding:'utf8',
+      windowsHide:true,
+      timeout:90000,
+      maxBuffer:1024*1024*8
+    });
+    if(run.error||run.status!==0){
+      return{
+        ok:false,
+        code:'CREATOR_AUDIO_CONTINUITY_PROBE_FAILED',
+        maxSilenceSeconds:null,
+        silenceEvents:0,
+        maxAllowedSeconds:maxGap,
+        detail:String((run.error&&run.error.message)||run.stderr||'').slice(-500)
+      };
+    }
+    const text=String(run.stderr||'');
+    const durations=[...text.matchAll(/silence_duration:\s*([0-9]+(?:\.[0-9]+)?)/gi)]
+      .map(m=>Number(m[1]))
+      .filter(Number.isFinite);
+    const maxSilenceSeconds=durations.length?Math.max(...durations):0;
+    const ok=maxSilenceSeconds<=maxGap;
+    return{
+      ok,
+      code:ok?'CREATOR_AUDIO_CONTINUITY_PASS':'CREATOR_AUDIO_DROPOUT',
+      maxSilenceSeconds:Number(maxSilenceSeconds.toFixed(3)),
+      silenceEvents:durations.length,
+      maxAllowedSeconds:maxGap,
+      minSilenceSeconds:minGap,
+      noiseDb:noise,
+      method:'ffmpeg-silencedetect'
+    };
+  }catch(e){
+    return{ok:false,code:'CREATOR_AUDIO_CONTINUITY_PROBE_FAILED',maxSilenceSeconds:null,silenceEvents:0,maxAllowedSeconds:maxGap,detail:String(e.message||e).slice(0,500)};
+  }
+}
+
 function applyRenderedAudioQuality(quality,file,ffmpeg,{mode='short'}={}){
   const result=quality&&typeof quality==='object'?quality:{ok:false,code:'CREATOR_QUALITY_FAILED',message:'Creator quality result missing.'};
   if(!result.checks||typeof result.checks!=='object')result.checks={};
@@ -867,15 +916,20 @@ function applyRenderedAudioQuality(quality,file,ffmpeg,{mode='short'}={}){
   const baseOk=!!result.ok;
   const outputAudioActivity=probeNarrationActivity(file,ffmpeg,{minMeanDb:-45,minPeakDb:-30});
   const outputLoudness=probeRenderedAudioLoudness(file,ffmpeg);
+  const longform=String(mode||'short')==='longform';
+  const audioContinuity=probeAudioContinuity(file,ffmpeg,{maxSilentSeconds:longform?8:3,minSilenceSeconds:1.2,noiseDb:-50});
   result.checks.audioSignal=outputAudioActivity.ok;
   result.checks.audioLoudness=outputLoudness.ok;
+  result.checks.audioContinuity=audioContinuity.ok;
   result.measured.audioMeanDb=outputAudioActivity.meanDb;
   result.measured.audioPeakDb=outputAudioActivity.maxDb;
   result.measured.audioIntegratedLufs=outputLoudness.integratedLufs;
   result.measured.audioTruePeakDb=outputLoudness.truePeakDb;
+  result.measured.maxAudioSilenceSeconds=audioContinuity.maxSilenceSeconds;
   result.audioSignal=outputAudioActivity;
   result.audioLoudness=outputLoudness;
-  result.ok=baseOk&&outputAudioActivity.ok&&outputLoudness.ok;
+  result.audioContinuity=audioContinuity;
+  result.ok=baseOk&&outputAudioActivity.ok&&outputLoudness.ok&&audioContinuity.ok;
   if(baseOk&&!outputAudioActivity.ok){
     result.code='CREATOR_AUDIO_SIGNAL_MISSING';
     result.message=mode==='longform'
@@ -886,6 +940,11 @@ function applyRenderedAudioQuality(quality,file,ffmpeg,{mode='short'}={}){
     result.message=mode==='longform'
       ?'Creator long-form final loudness kalite kapısı başarısız.'
       :'Creator Shorts final loudness kalite kapısı başarısız.';
+  }else if(baseOk&&!audioContinuity.ok){
+    result.code='CREATOR_AUDIO_DROPOUT';
+    result.message=mode==='longform'
+      ?'Creator long-form final ses sürekliliği kalite kapısı başarısız.'
+      :'Creator Shorts final ses sürekliliği kalite kapısı başarısız.';
   }
   return result;
 }
@@ -1619,6 +1678,7 @@ module.exports={
   creatorAudioMasterProfile,
   probeNarrationActivity,
   probeRenderedAudioLoudness,
+  probeAudioContinuity,
   applyRenderedAudioQuality,
   probeHookMotion,
   findHookMotionWindow,
