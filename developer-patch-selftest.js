@@ -4,7 +4,7 @@ const assert=require('assert');
 const worker=fs.readFileSync('./worker.js','utf8');
 const html=fs.readFileSync('./public/index.html','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.99.0'"),'Worker 2.99.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.100.0'"),'Worker 2.100.0 required');
 assert.ok(worker.includes("'developer_patch_mission_v1'"),'developer patch capability missing');
 assert.ok(worker.includes("'developer_patch_rollback_v1'"),'developer rollback capability missing');
 assert.ok(worker.includes("name:'developer_patch_mission'"),'developer patch native tool missing');
