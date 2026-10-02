@@ -56,13 +56,40 @@ const pixabay=web.normalizePixabay({hits:[{
 assert.strictEqual(pixabay.length,1);
 assert.strictEqual(pixabay[0].license,'Pixabay Content License');
 
-for(const cap of ['creator_web_media_v1','creator_web_license_manifest_v1','creator_web_zero_key_v1']){
+const tmp=require('os').tmpdir()+'/jarvis-web-media-selftest-'+process.pid+'-'+Date.now();
+fs.mkdirSync(tmp,{recursive:true});
+fs.mkdirSync(require('path').join(tmp,'creator-web-media'),{recursive:true});
+fs.writeFileSync(require('path').join(tmp,'creator-web-media','manifest-test.json'),JSON.stringify({
+  items:[{
+    path:'creator-assets/web-deadbeef.mp4',
+    source:{
+      provider:'wikimedia',
+      title:'Public domain robot clip',
+      creator:'Example Creator',
+      sourcePage:'https://commons.wikimedia.org/wiki/File:Robot.webm',
+      license:'CC0 1.0',
+      licenseUrl:'https://creativecommons.org/publicdomain/zero/1.0/'
+    }
+  }]
+},null,2),'utf8');
+const credits=web.buildAttributionText(tmp,['creator-assets/web-deadbeef.mp4']);
+assert.ok(credits.includes('Public domain robot clip'),'attribution title missing');
+assert.ok(credits.includes('CC0 1.0'),'attribution license missing');
+const withCredits=web.appendAttribution('Video açıklaması',tmp,['creator-assets/web-deadbeef.mp4'],5000);
+assert.ok(withCredits.startsWith('Video açıklaması'),'base YouTube description must be preserved');
+assert.ok(withCredits.includes('Görsel kaynakları / Visual sources:'),'YouTube attribution heading missing');
+
+for(const cap of ['creator_web_media_v1','creator_web_license_manifest_v1','creator_web_zero_key_v1','creator_youtube_attribution_v1']){
   assert.ok(worker.includes("'"+cap+"'"),cap+' missing');
 }
 assert.ok(worker.includes("name:'creator_web_media'"),'native Creator web media tool missing');
 assert.ok(worker.includes("else if(n==='creator_web_media')"),'native Creator web media handler missing');
 assert.ok(worker.includes("syncRepoRuntimeFile('jarvis-creator-web-media.js'"),'runtime sync for Creator web media missing');
 assert.ok(worker.includes("webMediaQuery:{type:'string'"),'Creator mission webMediaQuery schema missing');
+assert.ok(worker.includes('creatorYoutubeDescription(item.youtubeDescription,item.creatorAssets)'),'batch YouTube attribution wiring missing');
+assert.ok(worker.includes('creatorYoutubeDescription(yt.description,mission.input&&mission.input.creatorAssets)'),'mission YouTube attribution wiring missing');
+assert.ok(worker.includes("manifestId:'batch-'"),'batch web-media manifest binding missing');
+assert.ok(worker.includes("manifestId:'daily-'"),'daily web-media manifest binding missing');
 assert.ok(worker.includes("orientation:'portrait'"),'Short web-media orientation missing');
 assert.ok(worker.includes("orientation:'landscape'"),'long-form web-media orientation missing');
 assert.ok(worker.includes("inspect:(rel)=>getCreatorEngine().inspectAsset(WORKSPACE,rel)"),'downloaded web media must pass Creator FFprobe inspection');

@@ -300,6 +300,72 @@ async function downloadCandidate(workspace,candidate,{maxBytes=DEFAULT_MAX_BYTES
     try{if(fs.existsSync(temp))fs.unlinkSync(temp)}catch(_){}
   }
 }
+function readWebMediaManifests(workspace){
+  const root=path.resolve(String(workspace||''));
+  const dir=path.join(root,'creator-web-media');
+  if(!fs.existsSync(dir))return[];
+  const out=[];
+  for(const name of fs.readdirSync(dir).filter(x=>/^manifest-.+\.json$/i.test(x)).sort()){
+    try{
+      const full=path.join(dir,name);
+      const row=JSON.parse(fs.readFileSync(full,'utf8'));
+      if(row&&Array.isArray(row.items))out.push({file:path.relative(root,full).replace(/\\/g,'/'),...row});
+    }catch(_){}
+  }
+  return out;
+}
+function sourceRecordsForAssets(workspace,assetPaths){
+  const wanted=new Set((Array.isArray(assetPaths)?assetPaths:[]).map(x=>String(x&&x.path||x||'').replace(/\\/g,'/')).filter(Boolean));
+  if(!wanted.size)return[];
+  const out=[],seen=new Set();
+  for(const manifest of readWebMediaManifests(workspace).reverse()){
+    for(const item of Array.isArray(manifest.items)?manifest.items:[]){
+      const p=String(item&&item.path||'').replace(/\\/g,'/');
+      if(!wanted.has(p)||seen.has(p))continue;
+      const source=item&&item.source||{};
+      out.push({
+        path:p,
+        provider:cleanText(source.provider,60),
+        title:cleanText(source.title,180),
+        creator:cleanText(source.creator,160),
+        sourcePage:String(source.sourcePage||'').trim().slice(0,900),
+        license:cleanText(source.license,140),
+        licenseUrl:String(source.licenseUrl||'').trim().slice(0,900),
+        attributionRequired:!!source.attributionRequired
+      });
+      seen.add(p);
+    }
+  }
+  return out;
+}
+function buildAttributionText(workspace,assetPaths,{maxChars=1800}={}){
+  const rows=sourceRecordsForAssets(workspace,assetPaths);
+  if(!rows.length)return'';
+  const lines=['','Görsel kaynakları / Visual sources:'];
+  for(const row of rows){
+    let line='- '+(row.title||path.basename(row.path));
+    if(row.creator)line+=' — '+row.creator;
+    if(row.provider)line+=' ['+row.provider+']';
+    if(row.license)line+=' · '+row.license;
+    if(row.sourcePage)line+=' · '+row.sourcePage;
+    if(row.licenseUrl&&row.licenseUrl!==row.sourcePage)line+=' · Lisans: '+row.licenseUrl;
+    lines.push(line);
+  }
+  return lines.join('\n').slice(0,Math.max(200,Number(maxChars)||1800));
+}
+function appendAttribution(description,workspace,assetPaths,maxLength=5000){
+  const base=String(description||'').trim();
+  const credits=buildAttributionText(workspace,assetPaths,{maxChars:Math.max(300,Number(maxLength)||5000)});
+  if(!credits)return base.slice(0,maxLength);
+  const room=Math.max(0,Number(maxLength)||5000);
+  if(base){
+    const separator='\n\n';
+    const available=Math.max(0,room-credits.length-separator.length);
+    return (base.slice(0,available)+separator+credits).slice(0,room);
+  }
+  return credits.trim().slice(0,room);
+}
+
 async function searchAndIngest(workspace,{query,provider='auto',orientation='any',count=3,fetchImpl=global.fetch,inspect=null,manifestId=''}={}){
   const q=normalizeQuery(query);
   const wanted=Math.max(1,Math.min(12,Number(count)||3));
@@ -366,5 +432,9 @@ module.exports={
   search,
   downloadCandidate,
   searchAndIngest,
+  readWebMediaManifests,
+  sourceRecordsForAssets,
+  buildAttributionText,
+  appendAttribution,
   extensionFor
 };
