@@ -1,0 +1,11 @@
+const assert=require('assert'); const bt=require('./jarvis-bluetooth-secure'); const fs=require('fs'); const os=require('os'); const path=require('path');
+const w=fs.mkdtempSync(path.join(os.tmpdir(),'jarvis-bt-'));
+assert.throws(()=>bt.pair(w,{deviceId:'phone',password:'short'}),/MIN_8/);
+assert.ok(bt.pair(w,{deviceId:'phone',password:'correct-horse',label:'Cihan phone'}).ok);
+assert.equal(bt.authenticate(w,{deviceId:'unknown',password:'correct-horse'}).reason,'not_paired');
+assert.equal(bt.authenticate(w,{deviceId:'phone',password:'wrong-pass'}).reason,'bad_password');
+const auth=bt.authenticate(w,{deviceId:'phone',password:'correct-horse'}); assert.ok(auth.ok);
+assert.ok(bt.authorizeCommand(auth,{action:'status'}).ok);
+assert.equal(bt.authorizeCommand(auth,{action:'youtube_publish'}).reason,'protected_action_requires_primary_approval');
+const raw=fs.readFileSync(path.join(w,'.jarvis-memory','bluetooth-pairing.json'),'utf8'); assert.ok(!raw.includes('correct-horse'));
+console.log('BLUETOOTH SECURE PAIRING SELFTEST PASS');
