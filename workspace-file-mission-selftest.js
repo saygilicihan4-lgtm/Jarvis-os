@@ -30,7 +30,8 @@ assert.ok(engine.includes("CHUNK_BYTES=1024*1024"),'large-file chunked SHA-256 h
 assert.ok(engine.includes("if(op.operation==='copy')"),'copy recovery path missing');
 assert.ok(engine.includes("if(op.operation==='move')"),'move recovery path missing');
 assert.ok(engine.includes("return{decision:'uncertain',state}"),'ambiguous restart state must remain uncertain');
-assert.ok(engine.includes("fs.unlinkSync(state.source)"),'move must remove source only after destination verification');
+assert.ok(engine.includes("fs.linkSync(state.source,state.destination)"),'move must create an atomic no-overwrite hard link before source removal');
+assert.ok(engine.includes("fs.unlinkSync(state.source)"),'move must remove source only after linked destination verification');
 assert.ok(!engine.includes("operation==='delete'"),'standalone delete operation must not exist');
 
 console.log('WORKSPACE FILE MISSION SELFTEST PASS');
