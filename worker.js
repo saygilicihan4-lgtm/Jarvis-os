@@ -4727,6 +4727,19 @@ function creatorMarkWebAssetsUsed(assets,context={}){
   return{marked};
 }
 
+function creatorOrderRealMotionHookAssets(paths,mediaKinds,orientation='portrait'){
+  const rows=Array.isArray(paths)?paths.map(x=>String(x||'').replace(/\\/g,'/').trim()).filter(Boolean):[];
+  if(String(orientation||'').toLowerCase()!=='portrait'||rows.length<2)return rows;
+  const kinds=mediaKinds instanceof Map?mediaKinds:new Map();
+  const video=[],unknown=[],animated=[];
+  for(const rel of rows){
+    const kind=String(kinds.get(rel)||'');
+    if(kind==='video')video.push(rel);
+    else if(kind==='animated_still')animated.push(rel);
+    else unknown.push(rel);
+  }
+  return [...video,...unknown,...animated];
+}
 function creatorPreferRealMotionHookAssets(paths,orientation='portrait'){
   const rows=Array.isArray(paths)?paths.map(x=>String(x||'').replace(/\\/g,'/').trim()).filter(Boolean):[];
   if(String(orientation||'').toLowerCase()!=='portrait'||rows.length<2)return rows;
@@ -4734,14 +4747,7 @@ function creatorPreferRealMotionHookAssets(paths,orientation='portrait'){
   try{records=getCreatorWebMedia().sourceRecordsForAssets(WORKSPACE,rows)}catch(_){records=[]}
   if(!records.length)return rows;
   const kinds=new Map(records.map(x=>[String(x&&x.path||'').replace(/\\/g,'/'),String(x&&x.mediaKind||'video')]));
-  const video=[],unknown=[],animated=[];
-  for(const rel of rows){
-    const kind=kinds.get(rel);
-    if(kind==='video')video.push(rel);
-    else if(kind==='animated_still')animated.push(rel);
-    else unknown.push(rel);
-  }
-  return [...video,...unknown,...animated];
+  return creatorOrderRealMotionHookAssets(rows,kinds,orientation);
 }
 function creatorAutoWebQuery(title,script,maxTerms=9){
   const stop=new Set([
