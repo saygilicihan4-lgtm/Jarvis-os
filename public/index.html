@@ -178,6 +178,7 @@ let lastLocalText='';
 let activeLanguage='tr-TR';
 let localMissionRuntime=null;
 let localMissionRuntimeAt=0;
+let localMissionRuntimeSource='';
 let lastCloudTasks=[];
 const jarvisCalendar={
   reminders:JSON.parse(localStorage.getItem('jarvisCalendarReminders')||'[]'),
@@ -1815,6 +1816,7 @@ async function refreshLocalWorkerHealth(){
     const ver=String(j.version||'');
     localMissionRuntime=j.missionRuntime&&j.missionRuntime.ok!==false?j.missionRuntime:null;
     localMissionRuntimeAt=Date.now();
+    localMissionRuntimeSource=localMissionRuntime?'local':'';
     renderMissionQueue();
     if(window.workerSetup)workerSetup.textContent='LOCAL v'+ver+' · CLOUD '+workerSetup.textContent;
     if(j.localBrain){
@@ -1863,8 +1865,9 @@ async function refreshLocalWorkerHealth(){
     return ver;
   }catch(_){
     clearTimeout(timer);
-    if(localMissionRuntime&&Date.now()-localMissionRuntimeAt>12000){
+    if(localMissionRuntimeSource==='local'&&localMissionRuntime&&Date.now()-localMissionRuntimeAt>12000){
       localMissionRuntime=null;
+      localMissionRuntimeSource='';
       renderMissionQueue();
     }
     return null
@@ -2542,7 +2545,8 @@ function renderMissionQueue(){
       const c=localMissionRuntime.counts||{};
       const open=Number(localMissionRuntime.openCount||0);
       const blocked=Number(c.waitingDependency||0)+Number(c.needsVerification||0);
-      localMissionState.textContent=open?(open+' OPEN'+(blocked?' · '+blocked+' WAIT':'')):'IDLE';
+      const relay=localMissionRuntimeSource==='cloud'?' · CLOUD':'';
+      localMissionState.textContent=(open?(open+' OPEN'+(blocked?' · '+blocked+' WAIT':'')):'IDLE')+relay;
       localMissionState.style.color=blocked?'#ffca66':'#65ffbf';
     }
   }
@@ -2574,6 +2578,15 @@ async function load(){
   speakPhoneTaskResults(d.tasks||[]);
   const pc=d.workers&&d.workers.pc?d.workers.pc:{online:false};
   const brain=d.brain||{};
+  if(pc.missions&&typeof pc.missions==='object'&&(
+    !localMissionRuntime||
+    localMissionRuntimeSource!=='local'||
+    Date.now()-localMissionRuntimeAt>8000
+  )){
+    localMissionRuntime=pc.missions;
+    localMissionRuntimeAt=Date.now();
+    localMissionRuntimeSource='cloud';
+  }
   const coreRow=[...document.querySelectorAll('.agent-row span')].find(x=>x.textContent==='CORE');
   if(coreRow){
     const b=coreRow.parentElement.querySelector('b');
@@ -2605,7 +2618,6 @@ async function load(){
     if(detail)detail.textContent=localMemory?'PC disk persistence active':'Persistent memory not connected';
   }
 
-  renderMissionQueue();
   audit.innerHTML=(d.audit||[]).slice(-18).reverse().map(x=>'<div class="log"><small>'+esc(x.at)+' · '+esc(x.type)+'</small><br>'+esc(x.message)+'</div>').join('')||'<div class="log"><small>No system events.</small></div>';
   setAuthenticated(true);
   if(desktopWakeWordEnabled)scheduleDesktopWakeWord(900);
