@@ -60,6 +60,7 @@ jobs:
           node --check creator-real-motion-hook-selftest.js
           node --check creator-batch-diversity-selftest.js
           node --check creator-micro-hook-selftest.js
+          node --check creator-hook-motion-selftest.js
           node --check creator-render-smoke-selftest.js
           node --check shopify-mission-selftest.js
           node --check approval-gate-selftest.js
@@ -150,6 +151,8 @@ jobs:
         run: node creator-batch-diversity-selftest.js
       - name: Creator micro hook selftest
         run: node creator-micro-hook-selftest.js
+      - name: Creator hook motion evidence selftest
+        run: node creator-hook-motion-selftest.js
       - name: Shopify mission selftest
         run: node shopify-mission-selftest.js
       - name: Approval gate selftest
