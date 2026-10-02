@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "channel": "stable",
+  "description": "JARVIS OS trusted Windows runtime files. The updater stages and validates every file before replacement.",
+  "files": [
+    {
+      "path": "worker.js",
+      "signature": "const WORKER_VERSION='",
+      "kind": "node",
+      "min_bytes": 100000
+    },
+    {
+      "path": "jarvis-startup.ps1",
+      "signature": "JARVIS_CINEMATIC_STARTUP_V1",
+      "kind": "powershell",
+      "min_bytes": 7000
+    },
+    {
+      "path": "JARVIS-STARTUP-HIDDEN.vbs",
+      "signature": "JARVIS-OS\\jarvis-startup.ps1",
+      "kind": "text",
+      "min_bytes": 150
+    },
+    {
+      "path": "install-jarvis-startup.ps1",
+      "signature": "JARVIS Silent Startup",
+      "kind": "powershell",
+      "min_bytes": 2000
+    },
+    {
+      "path": "jarvis-local-stt-v4.py",
+      "signature": "JARVIS_STT_HOTWORDS",
+      "kind": "python",
+      "min_bytes": 9000
+    },
+    {
+      "path": "jarvis-double-clap-v9.py",
+      "signature": "JARVIS_CLAP_SINGLETON",
+      "kind": "python",
+      "min_bytes": 8000
+    },
+    {
+      "path": "jarvis-wake-hotkey.ps1",
+      "signature": "HELPER_VERSION='3.5'",
+      "kind": "powershell",
+      "min_bytes": 1500
+    },
+    {
+      "path": "jarvis-self-update.ps1",
+      "signature": "UPDATER_VERSION='5.0'",
+      "kind": "powershell-next",
+      "min_bytes": 7000
+    }
+  ]
+}
