@@ -31,6 +31,7 @@ assert.deepStrictEqual(choose([],[],12),[],'empty relevance set must stay empty 
 assert.ok(worker.includes("'creator_semantic_narrative_digest_v1'"),'semantic narrative digest capability regressed');
 assert.ok(worker.includes("'creator_procedural_fallback_v1'"),'procedural fallback capability missing');
 assert.ok(worker.includes("'creator_procedural_visual_phases_v1'"),'v102 procedural visual phases capability missing');
+assert.ok(worker.includes("'creator_procedural_narrative_phases_v1'"),'v103 procedural narrative phases capability missing');
 assert.ok(worker.includes("'creator_longform_repeat_pressure_v1'"),'v100 repeat pressure capability missing');
 assert.ok(worker.includes("const creatorAssetMode=baselineOverride&&creatorAssets.length<6?'procedural':'auto'"),
   'sparse daily baseline override must bind procedural mode into durable mission input');
@@ -48,7 +49,10 @@ assert.ok(engine.includes("const assetSelection=proceduralAssets?'procedural':")
 assert.ok(engine.includes('const proceduralSceneSeconds=30;'),'v102 procedural phase cadence missing');
 assert.ok(engine.includes("hue=H='18*sin(2*PI*t/90)'"),'v102 animated hue motion missing');
 assert.ok(engine.includes("eq=brightness='0.018*sin(2*PI*t/30)'"),'v102 animated luminance phase missing');
-assert.ok(engine.includes("profile:'animated-hue-noise-vignette'"),'v102 procedural visual evidence missing');
+assert.ok(engine.includes("profile:'narrative-phased-hue-noise-vignette'"),'v103 procedural narrative evidence missing');
+assert.ok(engine.includes("buildNarrativeDigest(cleanScript,{maxChars:3200})"),'v103 narrative digest binding missing');
+assert.ok(engine.includes("const proceduralNarrativePhases=Array.from"),'v103 procedural phase assignment missing');
+assert.ok(engine.includes("const narrativeHueShift=narrativeSections.length>=3?24:18"),'v103 narrative-aware visual behavior missing');
 
 const dailyStart=worker.indexOf('async function serviceCreatorDailyPlan');
 const dailyEnd=worker.indexOf('function normalizePcMissionActions',dailyStart);
