@@ -52,7 +52,9 @@ try{
   assert.strictEqual(movingShort.ok,true);
   assert.strictEqual(movingShort.usableWindows,4);
   assert.strictEqual(movingLong.ok,true);
-  assert.strictEqual(movingLong.sampledWindows,5);
+  assert.strictEqual(movingLong.sampledWindows,7,'short long-form fixture must use the v101 minimum dense sample grid');
+  assert.strictEqual(movingLong.requiredWindows,6);
+  assert.strictEqual(movingLong.maxAllowedBlankWindows,1);
   assert.ok(movingLong.usableWindows>=movingLong.requiredWindows);
 
   const quality=creator.applyRenderedVisualQuality(
@@ -63,11 +65,16 @@ try{
   assert.strictEqual(quality.checks.visualIntegrity,true);
   assert.ok(quality.visualIntegrity&&quality.visualIntegrity.ok);
   assert.ok(Number.isFinite(quality.measured.visualUsableWindows));
+  const tenMinuteFractions=Array.from({length:11},(_,index)=>0.05+((0.90*index)/10));
+  assert.strictEqual(tenMinuteFractions.length,11,'v101 10-minute visual integrity density regression');
 
   const source=fs.readFileSync('./jarvis-creator-engine.js','utf8');
   assert.ok(source.includes('result.checks.visualIntegrity=visualIntegrity.ok'),'visual integrity evidence missing from quality payload');
   assert.ok(source.includes('result.measured.visualNearBlackWindows=visualIntegrity.nearBlackWindows'),'near-black measurement missing');
   assert.ok(source.includes('result.measured.visualNearWhiteWindows=visualIntegrity.nearWhiteWindows'),'near-white measurement missing');
+  assert.ok(source.includes('Math.ceil(total/60)+1'),'v101 duration-scaled visual sample density missing');
+  assert.ok(source.includes('visualSampledWindows=visualIntegrity.sampledWindows'),'v101 sample count evidence missing');
+  assert.ok(source.includes('visualMaxAllowedBlankWindows=visualIntegrity.maxAllowedBlankWindows'),'v101 blank tolerance evidence missing');
 
   console.log('CREATOR VISUAL INTEGRITY V93 SELFTEST PASS',JSON.stringify({blackWindow,whiteWindow,darkWindow,movingWindow,blackShort,whiteShort,movingShort,movingLong}));
 }finally{

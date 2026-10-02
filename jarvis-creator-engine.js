@@ -905,7 +905,10 @@ function probeRenderedVisualIntegrity(file,ffmpeg,duration,{mode='short'}={}){
     blankWindows:0,
     windows:[]
   };
-  const fractions=longform?[0.1,0.3,0.5,0.7,0.9]:[0.08,0.36,0.64,0.9];
+  const longformSamples=longform?Math.max(7,Math.min(13,Math.ceil(total/60)+1)):0;
+  const fractions=longform
+    ?Array.from({length:longformSamples},(_,index)=>0.05+((0.90*index)/Math.max(1,longformSamples-1)))
+    :[0.08,0.36,0.64,0.9];
   const span=1.1;
   const maxStart=Math.max(0,total-span);
   const windows=fractions.map(fraction=>{
@@ -914,8 +917,9 @@ function probeRenderedVisualIntegrity(file,ffmpeg,duration,{mode='short'}={}){
   });
   const usableWindows=windows.filter(x=>x&&x.ok).length;
   const blankWindows=windows.length-usableWindows;
-  const requiredWindows=longform?4:3;
-  const ok=usableWindows>=requiredWindows;
+  const requiredWindows=longform?Math.max(6,windows.length-1):3;
+  const maxAllowedBlankWindows=longform?1:1;
+  const ok=usableWindows>=requiredWindows&&blankWindows<=maxAllowedBlankWindows;
   return{
     ok,
     code:ok?'CREATOR_VISUAL_INTEGRITY_PASS':'CREATOR_VISUAL_INTEGRITY_FAILED',
@@ -923,6 +927,7 @@ function probeRenderedVisualIntegrity(file,ffmpeg,duration,{mode='short'}={}){
     duration:Number(total.toFixed(3)),
     usableWindows,
     requiredWindows,
+    maxAllowedBlankWindows,
     blankWindows,
     sampledWindows:windows.length,
     nearBlackWindows:windows.filter(x=>x&&x.nearBlack).length,
@@ -951,6 +956,8 @@ function applyRenderedVisualQuality(quality,file,ffmpeg,{mode='short'}={}){
   result.measured.visualUsableWindows=visualIntegrity.usableWindows;
   result.measured.visualRequiredWindows=visualIntegrity.requiredWindows;
   result.measured.visualBlankWindows=visualIntegrity.blankWindows;
+  result.measured.visualSampledWindows=visualIntegrity.sampledWindows;
+  result.measured.visualMaxAllowedBlankWindows=visualIntegrity.maxAllowedBlankWindows;
   result.measured.visualNearBlackWindows=visualIntegrity.nearBlackWindows;
   result.measured.visualNearWhiteWindows=visualIntegrity.nearWhiteWindows;
   result.ok=baseOk&&motionCoverage.ok&&visualIntegrity.ok;

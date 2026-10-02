@@ -14,7 +14,8 @@ for(const cap of [
   'creator_semantic_narrative_digest_v1',
   'creator_procedural_fallback_v1',
   'creator_scene_semantic_order_v1',
-  'creator_longform_repeat_pressure_v1'
+  'creator_longform_repeat_pressure_v1',
+  'creator_visual_integrity_density_v1'
 ]){
   assert.ok(worker.includes("'"+cap+"'"),cap+' missing');
 }
