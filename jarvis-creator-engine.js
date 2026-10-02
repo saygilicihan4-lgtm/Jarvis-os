@@ -458,7 +458,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
   let args=[];
   if(assets.length){
     args=['-y','-hide_banner','-loglevel','error'];
-    for(const scene of storyboard)args.push('-stream_loop','-1','-i',scene.file);
+    for(const asset of assets)args.push('-stream_loop','-1','-i',asset);
     args.push('-i',voicePath);
 
     const filters=[];
@@ -498,7 +498,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
       '-t',duration.toFixed(3),
       '-filter_complex',filters.join(';'),
       '-map','['+videoLabel+']',
-      '-map',String(storyboard.length)+':a:0',
+      '-map',String(assets.length)+':a:0',
       '-c:v','libx264','-preset','veryfast','-crf','20','-pix_fmt','yuv420p',
       '-c:a','aac','-b:a','160k','-af','apad=pad_dur=1',
       '-movflags','+faststart',
@@ -558,7 +558,6 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     storyboard:storyboard.map(x=>({...x,file:path.relative(workspace,x.file)})),
     captionsBurned,
     quality,
-    visualEdit,
     output:path.relative(workspace,outFile),
     subtitle:path.relative(workspace,srtFile),
     profile:{width:1080,height:1920,fps:30,codec:'H.264',audio:'AAC',durationTarget:'12-18s',multiScene:true,transition:'fade'}
@@ -574,11 +573,10 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     asset:assets[0]||null,
     assets,
     storyboard,
-    sceneCount:storyboard.length,
+    sceneCount:assets.length,
     captionsBurned,
     duration,
     quality,
-    visualEdit,
     profileVersion:CREATOR_PROFILE_VERSION
   };
 }
@@ -637,7 +635,7 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
   let args=[];
   if(assets.length){
     args=['-y','-hide_banner','-loglevel','error'];
-    for(const asset of assets)args.push('-stream_loop','-1','-i',asset);
+    for(const scene of storyboard)args.push('-stream_loop','-1','-i',scene.file);
     args.push('-i',voicePath);
 
     const filters=[];
@@ -679,7 +677,7 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
       '-t',duration.toFixed(3),
       '-filter_complex',filters.join(';'),
       '-map','['+videoLabel+']',
-      '-map',String(assets.length)+':a:0',
+      '-map',String(storyboard.length)+':a:0',
       '-c:v','libx264','-preset','veryfast','-crf','20','-pix_fmt','yuv420p',
       '-c:a','aac','-b:a','192k','-af','apad=pad_dur=1',
       '-movflags','+faststart',
@@ -740,6 +738,7 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     storyboard:storyboard.map(x=>({...x,file:path.relative(workspace,x.file)})),
     captionsBurned,
     quality,
+    visualEdit,
     output:path.relative(workspace,outFile),
     subtitle:path.relative(workspace,srtFile),
     profile:{width:1920,height:1080,fps:30,codec:'H.264',audio:'AAC',durationTarget:'9-11m',multiScene:true,transition:'varied',sceneTarget:'20-30s',motion:'subtle-pan-crop'}
@@ -755,10 +754,11 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     asset:assets[0]||null,
     assets,
     storyboard,
-    sceneCount:assets.length,
+    sceneCount:storyboard.length,
     captionsBurned,
     duration,
     quality,
+    visualEdit,
     profileVersion:CREATOR_PROFILE_VERSION
   };
 }
