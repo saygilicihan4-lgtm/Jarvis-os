@@ -42,7 +42,9 @@ assert.ok(worker.includes("excludePaths=[]"),'auto-web excludePaths option missi
 assert.ok(worker.includes('const batchWebSeen=new Set()'),'batch-scoped seen set missing');
 assert.ok(worker.includes('excludePaths:[...batchWebSeen]'),'batch seen assets must be passed to auto-web');
 assert.ok(worker.includes("for(const rel of assets)batchWebSeen.add"),'selected batch web assets must be remembered');
-assert.ok(worker.includes('const ordered=creatorPreferUnseenAssetPaths(motionOrdered,batchExcluded,wanted)'),'diversity must run after freshness + real-motion ordering');
+assert.ok(worker.includes('const unseenOrdered=creatorPreferUnseenAssetPaths(motionOrdered,batchExcluded,wanted)'),'diversity must run after freshness + media-kind hook ordering');
+assert.ok(worker.includes('const hookRank=creatorPreferVerifiedMotionHookAssets(unseenOrdered,orientation,ready.ffmpeg);'),'verified hook ranking must run after batch diversity');
+assert.ok(worker.includes('const ordered=hookRank.paths.slice(0,wanted)'),'final ordering must preserve batch diversity except for verified hook promotion');
 assert.ok(worker.includes('unseenCount'),'diversity evidence missing');
 assert.ok(worker.includes('batchExcludedCount:batchExcluded.size'),'batch exclusion evidence missing');
 
