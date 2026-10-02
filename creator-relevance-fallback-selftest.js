@@ -24,7 +24,7 @@ const web=[row('web-a'),row('web-b')];
 const semantic=[row('semantic-a')];
 const fallback=[row('random-a'),row('random-b'),row('random-c')];
 
-const relevant=choose(web,semantic,fallback,12);
+const relevant=choose(web,semantic,12);
 assert.deepStrictEqual(
   relevant.map(x=>x.path),
   ['creator-assets/web-a.mp4','creator-assets/web-b.mp4','creator-assets/semantic-a.mp4'],
@@ -32,17 +32,17 @@ assert.deepStrictEqual(
 );
 assert.ok(!relevant.some(x=>/random-/.test(x.path)),'irrelevant filler leaked into a relevant daily selection');
 
-const semanticOnly=choose([],semantic,fallback,12);
+const semanticOnly=choose([],semantic,12);
 assert.deepStrictEqual(semanticOnly.map(x=>x.path),['creator-assets/semantic-a.mp4']);
 
-const fallbackOnly=choose([],[],fallback,2);
+const fallbackOnly=choose([],[],2);
 assert.deepStrictEqual(
-  fallbackOnly.map(x=>x.path),
-  ['creator-assets/random-a.mp4','creator-assets/random-b.mp4'],
-  'deterministic local fallback must remain available when no relevant asset exists'
+  fallbackOnly,
+  [],
+  'no relevant asset must leave an empty baseline for procedural fallback'
 );
 
-const deduped=choose([row('shared','same')],[row('shared','same'),row('semantic-b')],fallback,12);
+const deduped=choose([row('shared','same')],[row('shared','same'),row('semantic-b')],12);
 assert.deepStrictEqual(
   deduped.map(x=>x.path),
   ['creator-assets/shared.mp4','creator-assets/semantic-b.mp4'],
@@ -50,7 +50,8 @@ assert.deepStrictEqual(
 );
 
 assert.ok(worker.includes("'creator_relevance_preserving_fallback_v1'"),'v96 capability missing');
-assert.ok(worker.includes('chooseCreatorDailyBaselines(web,semantic,creatorDailyAutoAssetBaselines(dateKey,12),12)'),'daily planner must use relevance-preserving fallback policy');
+assert.ok(worker.includes("'creator_procedural_fallback_v1'"),'procedural fallback capability missing');
+assert.ok(worker.includes('chooseCreatorDailyBaselines(web,semantic,12)'),'daily planner must use relevance-only baseline policy');
 assert.ok(!worker.includes('mergeCreatorAssetBaselines(web,mergeCreatorAssetBaselines(semantic,creatorDailyAutoAssetBaselines(dateKey,12),12),12)'),'old random-padding chain must be removed');
 
 const dailyStart=worker.indexOf('async function serviceCreatorDailyPlan');
