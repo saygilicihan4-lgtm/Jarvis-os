@@ -32,6 +32,7 @@ assert.ok(creator.includes("probeRenderedAudioLoudness,")&&creator.includes("app
 assert.ok(creator.includes("probeAudioContinuity,"),'audio continuity probe export missing');
 assert.ok(creator.includes("probeRenderedMotionCoverage,")&&creator.includes("applyRenderedVisualQuality,"),'final visual quality exports missing');
 assert.ok(creator.includes("probeRenderedExposureWindow,")&&creator.includes("probeRenderedVisualIntegrity,"),'visual integrity exports missing');
+assert.ok(creator.includes("creatorAssetResolutionQuality,")&&creator.includes("preflightAssetSelection,"),'asset resolution quality exports missing');
 assert.ok(creator.includes("creatorAudioMasterFilter,")&&creator.includes("creatorAudioMasterProfile,"),'audio master exports missing');
 assert.ok(creator.includes("probeRenderedShort,")&&creator.includes("probeRenderedLongform,")&&creator.includes("listAssets,"),'quality probe exports missing');
 
