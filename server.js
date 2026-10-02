@@ -485,7 +485,8 @@ function sanitizeMissionTelemetry(raw){
       queued:Math.max(0,Math.min(10000,Number(counts.queued)||0)),
       waitingDependency:Math.max(0,Math.min(10000,Number(counts.waitingDependency)||0)),
       needsVerification:Math.max(0,Math.min(10000,Number(counts.needsVerification)||0)),
-      running:Math.max(0,Math.min(10000,Number(counts.running)||0))
+      running:Math.max(0,Math.min(10000,Number(counts.running)||0)),
+      paused:Math.max(0,Math.min(10000,Number(counts.paused)||0))
     },
     queue,
     lastRunAt:Number(raw.lastRunAt)||null,
