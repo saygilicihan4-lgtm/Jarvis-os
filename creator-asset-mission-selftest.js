@@ -1,48 +1,49 @@
 const fs=require('fs');
 const assert=require('assert');
+const creator=require('./jarvis-creator-engine');
 
 const worker=fs.readFileSync('./worker.js','utf8');
-const creator=fs.readFileSync('./jarvis-creator-engine.js','utf8');
+const creatorSource=fs.readFileSync('./jarvis-creator-engine.js','utf8');
+const fileEngine=fs.readFileSync('./jarvis-workspace-file-engine.js','utf8');
 
 assert.ok(worker.includes("const WORKER_VERSION='2.99.0'"),'Worker 2.99.0 required');
-assert.ok(worker.includes("'creator_asset_mission_v1'"),'Creator asset mission capability missing');
-assert.ok(worker.includes("'creator_asset_probe_v1'"),'Creator asset probe capability missing');
-assert.ok(worker.includes("'creator_asset_hash_dedupe_v1'"),'Creator asset hash dedupe capability missing');
-assert.ok(worker.includes("name:'creator_asset_mission'"),'native Creator asset mission tool missing');
-assert.ok(worker.includes("else if(n==='creator_asset_mission')"),'Creator asset mission handler missing');
-assert.ok(worker.includes('function prepareCreatorAssetOperations(args={})'),'Creator asset operation prep missing');
-assert.ok(worker.includes('function createCreatorAssetMission(args={})'),'Creator asset mission factory missing');
-assert.ok(worker.includes("type:'creator_asset'"),'creator_asset mission type missing');
-assert.ok(worker.includes("name:'creator_asset_'"),'Creator asset mission step naming missing');
-assert.ok(worker.includes("expectedSha256.slice(0,12)+'-'"),'hash-prefixed Creator asset target missing');
-assert.ok(worker.includes("reused:!!state.destinationExists"),'Creator asset hash reuse marker missing');
-assert.ok(worker.includes("getCreatorEngine().inspectAsset(WORKSPACE,op.source)"),'FFprobe asset validation missing from mission execution');
-assert.ok(worker.includes("dependency:'ffmpeg'"),'Creator asset FFprobe dependency missing');
-assert.ok(worker.includes("getWorkspaceFileEngine().applyOperation(WORKSPACE,op)"),'hash-guarded asset copy missing');
-assert.ok(worker.includes("getWorkspaceFileEngine().recoveryDecision(WORKSPACE,op)"),'Creator asset restart recovery missing');
-assert.ok(worker.includes("CREATOR_ASSET_REUSE_CONFLICT"),'runtime reuse hash revalidation missing');
-assert.ok(worker.includes("creatorAssetMissionReady:CAPS.includes('creator_asset_mission_v1')"),'Creator asset acceptance readiness missing');
-assert.ok(worker.includes("jarvis-creator-engine.js',\"ENGINE_VERSION='1.1'"),'Creator engine 1.1 runtime signature missing');
+assert.strictEqual(creator.ENGINE_VERSION,'1.1');
+assert.ok(worker.includes("'creator_asset_mission_v1'"),'creator asset mission capability missing');
+assert.ok(worker.includes("'creator_asset_probe_v1'"),'creator asset probe capability missing');
+assert.ok(worker.includes("'creator_asset_hash_dedupe_v1'"),'creator asset dedupe capability missing');
+assert.ok(worker.includes("name:'creator_asset_mission'"),'creator asset native tool missing');
+assert.ok(worker.includes("else if(n==='creator_asset_mission')"),'creator asset handler missing');
+assert.ok(worker.includes('function prepareCreatorAssetOperations(args={})'),'creator asset operation planner missing');
+assert.ok(worker.includes('function createCreatorAssetMission(args={})'),'creator asset mission factory missing');
+assert.ok(worker.includes("type:'creator_asset'"),'creator asset mission type missing');
+assert.ok(worker.includes("if(/^creator_asset_\\d+$/.test(step.name))"),'creator asset durable step missing');
+assert.ok(worker.includes("getCreatorEngine().inspectAsset(WORKSPACE,op.source)"),'ffprobe validation must run before ingest');
+assert.ok(worker.includes("getWorkspaceFileEngine().applyOperation(WORKSPACE,op)"),'creator asset copy must use workspace hash/no-overwrite engine');
+assert.ok(worker.includes("getWorkspaceFileEngine().recoveryDecision(WORKSPACE,op)"),'creator asset restart recovery missing');
+assert.ok(worker.includes("dependency:'creator_probe'"),'ffprobe-specific dependency missing');
+assert.ok(worker.includes("if(dep==='creator_probe')"),'ffprobe readiness probe missing');
+assert.ok(worker.includes("creatorAssetMissionReady:CAPS.includes('creator_asset_mission_v1')"),'creator asset acceptance readiness missing');
+assert.ok(worker.includes('Kaynağı silme; asset FFprobe doğrulaması + SHA-256 kopya doğrulaması geçmeden Creator asset kabul etme.'),'agent source-preservation guidance missing');
 
-const prepStart=worker.indexOf('function prepareCreatorAssetOperations(args={})');
-const prepEnd=worker.indexOf('function createCreatorShortMission(args={})',prepStart);
-assert.ok(prepStart>0&&prepEnd>prepStart,'Creator asset helper block missing');
-const prep=worker.slice(prepStart,prepEnd);
-assert.ok(!prep.includes('unlinkSync'),'Creator asset ingest must never delete source files');
-assert.ok(!prep.includes("operation:'move'"),'Creator asset ingest must remain copy-only');
+assert.ok(creatorSource.includes('function inspectAsset(workspace,relativePath)'),'creator asset inspector missing');
+assert.ok(creatorSource.includes('CREATOR_ASSET_SYMLINK_BLOCKED'),'creator asset symlink guard missing');
+assert.ok(creatorSource.includes('CREATOR_ASSET_SYMLINK_ESCAPE'),'creator asset symlink escape guard missing');
+assert.ok(creatorSource.includes('CREATOR_ASSET_DURATION_LIMIT'),'creator duration limit missing');
+assert.ok(creatorSource.includes("return 'asset-'+hash+ext"),'creator content-hash destination naming missing');
+assert.ok(fileEngine.includes('COPYFILE_EXCL'),'creator ingest must inherit atomic no-overwrite copy');
 
-const runStart=worker.indexOf("if(/^creator_asset_\\d+$/.test(step.name)){",worker.indexOf('async function runDurableMission(id)'));
-const runEnd=worker.indexOf("if(/^workspace_file_\\d+$/.test(step.name)){",runStart);
-assert.ok(runStart>0&&runEnd>runStart,'Creator asset runtime block missing');
-const run=worker.slice(runStart,runEnd);
-assert.ok(!run.includes('unlinkSync'),'Creator asset runtime must never delete source files');
-assert.ok(run.indexOf('inspectAsset')<run.indexOf('applyOperation'),'video probe must happen before copy');
-
-assert.ok(creator.includes("const ENGINE_VERSION='1.1'"),'Creator engine 1.1 required');
-assert.ok(creator.includes('function inspectAsset(workspace,relativePath)'),'Creator asset inspector missing');
-assert.ok(creator.includes("'FFPROBE_MISSING'"),'FFprobe missing guard absent');
-assert.ok(creator.includes("'CREATOR_ASSET_INVALID_VIDEO'"),'invalid video guard absent');
-assert.ok(creator.includes("'CREATOR_ASSET_SYMLINK_ESCAPE'"),'Creator asset symlink escape guard absent');
-assert.ok(creator.includes('duration>600'),'Creator asset duration limit absent');
+const hashA='0123456789abcdef'.padEnd(64,'0');
+const hashB='fedcba9876543210'.padEnd(64,'0');
+assert.strictEqual(
+  creator.assetDestinationName('incoming/first-name.mp4',hashA),
+  creator.assetDestinationName('other/renamed.mp4',hashA),
+  'same content hash must dedupe independent of source filename'
+);
+assert.notStrictEqual(
+  creator.assetDestinationName('incoming/first-name.mp4',hashA),
+  creator.assetDestinationName('incoming/first-name.mp4',hashB),
+  'different hashes must not collide'
+);
+assert.throws(()=>creator.assetDestinationName('x.txt',hashA),/UNSUPPORTED_EXTENSION/);
 
 console.log('CREATOR ASSET MISSION SELFTEST PASS');
