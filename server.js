@@ -528,6 +528,74 @@ function publicState(){
   };
 }
 
+function missionTransitionEvent(previous,next,atMs=Date.now()){
+  const prev=previous&&previous.lastResult&&typeof previous.lastResult==='object'?previous.lastResult:null;
+  const curr=next&&next.lastResult&&typeof next.lastResult==='object'?next.lastResult:null;
+  if(!curr)return null;
+  const status=String(curr.status||'');
+  const missionId=String(curr.missionId||'');
+  if(!missionId||!['completed','needs_verification','waiting_dependency'].includes(status))return null;
+  const eventAt=Date.parse(String(curr.at||''));
+  if(!Number.isFinite(eventAt)||Math.abs(Number(atMs)-eventAt)>180000)return null;
+  const key=[missionId,status,String(curr.dependency||''),String(curr.at||'')].join('|');
+  const prevKey=prev?[String(prev.missionId||''),String(prev.status||''),String(prev.dependency||''),String(prev.at||'')].join('|'):'';
+  if(key===prevKey)return null;
+
+  if(status==='completed'){
+    return{
+      key,
+      status,
+      missionId,
+      title:'JARVIS · Kalıcı görev tamamlandı',
+      body:'JARVIS görevi başarıyla tamamladı. Sonuç ve çıktılar görev ekranında hazır.',
+      tag:'jarvis-mission-'+missionId
+    };
+  }
+  if(status==='needs_verification'){
+    return{
+      key,
+      status,
+      missionId,
+      title:'JARVIS · Görev doğrulama bekliyor',
+      body:'Bir dış işlem belirsiz kaldı. JARVIS kopya işlem yapmamak için otomatik tekrar denemeyi durdurdu.',
+      tag:'jarvis-mission-'+missionId
+    };
+  }
+  const dep=String(curr.dependency||'bağlantı').replace(/[_-]+/g,' ').trim().slice(0,80);
+  return{
+    key,
+    status,
+    missionId,
+    title:'JARVIS · Görev bağlantı bekliyor',
+    body:'Kalıcı görev '+dep+' hazır olduğunda kaldığı yerden otomatik devam edecek.',
+    tag:'jarvis-mission-'+missionId
+  };
+}
+async function pushMissionTransition(previous,next){
+  const event=missionTransitionEvent(previous,next);
+  if(!event)return 0;
+  log('MISSION_EVENT',event.missionId+' '+event.status);
+  if(!VAPID_PUBLIC||!VAPID_PRIVATE)return 0;
+  const ids=Object.keys(state.pushSubscriptions);
+  if(!ids.length)return 0;
+  const payload=JSON.stringify({title:event.title,body:event.body,url:'/',tag:event.tag});
+  let delivered=0;
+  for(const id of ids){
+    const sub=state.pushSubscriptions[id];
+    if(!sub)continue;
+    try{
+      await webpush.sendNotification({endpoint:sub.endpoint,keys:sub.keys},payload,{TTL:1800});
+      sub.lastSuccessAt=now();
+      delivered++;
+    }catch(e){
+      if(e&&[404,410].includes(e.statusCode))delete state.pushSubscriptions[id];
+      log('MISSION_PUSH_FAIL',id+' '+String(e&&e.statusCode||e&&e.message||'send failed').slice(0,120));
+    }
+  }
+  if(delivered)log('MISSION_PUSH',event.missionId+' '+event.status+' delivered '+delivered);
+  return delivered;
+}
+
 async function pushPhoneTaskResult(t){
   if(!t||t.source!=='phone-web')return 0;
   if(!['completed','failed'].includes(t.status))return 0;
@@ -1109,6 +1177,7 @@ const server=http.createServer((req,res)=>{
       const deviceId=d.deviceId?String(d.deviceId).replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80):null;
       if(deviceId){
         const previous=state.workers.devices[deviceId];
+        const previousMissions=previous&&previous.missions||null;
         const priorAllowed=previous&&Array.isArray(previous.allowedCapabilities)?previous.allowedCapabilities:[];
         const safeNew=snapshot.capabilities.filter(x=>SAFE_AUTO_CAPS.has(x));
         const allowedCapabilities=[...new Set([...priorAllowed,...safeNew])].filter(x=>snapshot.capabilities.includes(x));
@@ -1120,6 +1189,7 @@ const server=http.createServer((req,res)=>{
           authMode:previous&&previous.authMode||'signed',
           credentialIssuedAt:previous&&previous.credentialIssuedAt||now()
         };
+        pushMissionTransition(previousMissions,snapshot.missions).catch(e=>log('MISSION_PUSH_ERROR',String(e.message||e).slice(0,120)));
         for(const t of state.tasks){
           if(t.status!=='needs_tool')continue;
           if(!/Worker bu yeteneği desteklemiyor|Worker güncellemesi gerekli/i.test(String(t.message||'')))continue;
@@ -1131,7 +1201,11 @@ const server=http.createServer((req,res)=>{
             log('CAPABILITY_RECOVER','#'+t.id+' '+(support.need||'capability')+' yeniden etkin');
           }
         }
-      }else state.workers.pc=snapshot;
+      }else{
+        const previousMissions=state.workers.pc&&state.workers.pc.missions||null;
+        state.workers.pc=snapshot;
+        pushMissionTransition(previousMissions,snapshot.missions).catch(e=>log('MISSION_PUSH_ERROR',String(e.message||e).slice(0,120)));
+      }
       return json(res,200,{ok:true,at:snapshot.lastSeen,deviceId,approved:deviceId?!!state.workers.devices[deviceId].approved:true});
     });
   }
