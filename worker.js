@@ -33,10 +33,10 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.77.0';
+const WORKER_VERSION='2.78.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
 CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1','adaptive_model_router_v1','deep_model_fallback_v1','dynamic_chunk_prosody_v1','natural_pause_timing_v1','adaptive_turn_pacing_v1','latency_learning_v1','full_duplex_interrupt_v1','cancellable_agent_v1','adaptive_voice_profile_v1','spoken_voice_preference_v1','speaker_echo_rejection_v1','social_dialogue_v1','response_variation_v1','contextual_followup_v1','dialogue_feedback_learning_v1','social_preference_adaptation_v1','dynamic_wake_ack_v1','wake_ack_turn_timing_v1','auto_quality_escalation_v1','weak_response_escalation_v1','repair_quality_escalation_v1','social_momentum_v1','elliptical_turn_resolution_v1','conversation_cadence_v1','brevity_mirroring_v1','adaptive_response_length_v1','interruption_continuity_v1','spoken_resume_v1','partial_stream_resume_v1');
-CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1');
+CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -2348,6 +2348,61 @@ function nativeAgentTools(){
     {
       type:'function',
       function:{
+        name:'creator_status',
+        description:'JARVIS yerel video/Shorts üretim motorunun durumunu kontrol et. Bu araç hiçbir şey yayınlamaz.',
+        parameters:{type:'object',properties:{},additionalProperties:false}
+      }
+    },
+    {
+      type:'function',
+      function:{
+        name:'creator_render_short',
+        description:'Kullanıcı açıkça video veya YouTube Shorts üretmeni istediğinde, yerel bilgisayarda 9:16 MP4 hazırla. Bu araç videoyu yalnızca yerel dosya olarak üretir; YouTube veya başka bir yere yayınlamaz.',
+        parameters:{
+          type:'object',
+          properties:{
+            name:{type:'string',description:'Kısa dosya/proje adı.'},
+            script:{type:'string',description:'Videoda okunacak Türkçe anlatım metni. 12-18 saniyeye uygun kısa tutulmalı.'}
+          },
+          required:['script'],
+          additionalProperties:false
+        }
+      }
+    },
+    {
+      type:'function',
+      function:{
+        name:'shopify_status',
+        description:'VAROVA/Shopify yerel bağlantısının hazır olup olmadığını kontrol et. Mağazada değişiklik yapmaz.',
+        parameters:{type:'object',properties:{},additionalProperties:false}
+      }
+    },
+    {
+      type:'function',
+      function:{
+        name:'shopify_create_draft',
+        description:'Kullanıcı açıkça mağazasına ürün eklemek veya ürün taslağı hazırlamak istediğinde Shopify üzerinde yalnızca DRAFT ürün oluştur. Bu araç ürünü yayınlamaz. Eksik kritik bilgiyi uydurma.',
+        parameters:{
+          type:'object',
+          properties:{
+            title:{type:'string',description:'Ürün başlığı.'},
+            description:{type:'string',description:'Ürün açıklaması.'},
+            price:{type:'number',description:'Satış fiyatı, TRY.'},
+            compareAtPrice:{type:'number',description:'Varsa karşılaştırma/eski fiyat.'},
+            sku:{type:'string',description:'Varsa SKU.'},
+            vendor:{type:'string',description:'Marka/vendor; VAROVA olabilir.'},
+            productType:{type:'string',description:'Ürün tipi.'},
+            tags:{type:'array',items:{type:'string'},description:'Ürün etiketleri.'},
+            images:{type:'array',items:{type:'string'},description:'HTTPS görsel URL listesi.'}
+          },
+          required:['title'],
+          additionalProperties:false
+        }
+      }
+    },
+    {
+      type:'function',
+      function:{
         name:'workspace_search',
         description:'JARVIS çalışma alanındaki güvenli metin dosyalarında arama yap. Hassas dosyalar otomatik dışlanır.',
         parameters:{
@@ -2426,6 +2481,57 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
     const vision=await analyzeCurrentScreen(q);
     if(!vision||!vision.ok)return{ok:false,message:'Yerel ekran analizi başarısız: '+String(vision&&vision.error||'unknown')};
     return{ok:true,message:'YEREL EKRAN ANALİZİ: '+String(vision.reply||'').slice(0,1800)};
+  }else if(n==='creator_status'){
+    const status=getCreatorEngine().ffmpegStatus(WORKSPACE);
+    return{
+      ok:true,
+      message:'Creator motoru · FFmpeg '+(status.ok?'READY':'MISSING')+' · '+status.assets+' yerel klip · çıktı '+status.outputDir
+    };
+  }else if(n==='creator_render_short'){
+    if(!/(?:video|shorts?|youtube|reels?)/i.test(String(userText||''))){
+      return{ok:false,message:'Video üretimi yalnızca açık kullanıcı isteğiyle çalışır.'};
+    }
+    const script=String(a.script||'').replace(/\s+/g,' ').trim().slice(0,1800);
+    const name=String(a.name||('short-'+Date.now())).replace(/[\r\n]/g,' ').trim().slice(0,90);
+    if(!script)return{ok:false,message:'Video anlatım metni boş.'};
+    const ready=getCreatorEngine().prepare(WORKSPACE,{allowInstall:true});
+    if(!ready.ok)return{ok:false,message:'Creator motoru hazır değil; FFmpeg kurulamadı.'};
+    try{
+      const voice=await renderCreatorVoiceFile(script,name+'-voice');
+      const out=getCreatorEngine().renderShort({workspace:WORKSPACE,name,script,voicePath:voice});
+      return{ok:true,message:'YEREL SHORTS HAZIR · '+out.output+' · '+Math.round(Number(out.duration||0)*10)/10+' sn · yayınlanmadı'};
+    }catch(e){
+      return{ok:false,message:'Shorts üretilemedi: '+String(e.message||e).slice(0,500)};
+    }
+  }else if(n==='shopify_status'){
+    const status=await getCommerceEngine().status(WORKSPACE);
+    return{ok:!!status.ok,message:status.message};
+  }else if(n==='shopify_create_draft'){
+    const intent=String(userText||'').toLocaleLowerCase('tr-TR');
+    if(!/(?:shopify|varova|mağaza|magaza)/i.test(intent)||!/(?:ürün|urun|product|ekle|taslak)/i.test(intent)){
+      return{ok:false,message:'Mağaza ürün taslağı yalnızca açık kullanıcı isteğiyle oluşturulur.'};
+    }
+    const product={
+      title:String(a.title||'').replace(/\s+/g,' ').trim(),
+      description:String(a.description||'').trim(),
+      price:a.price,
+      compareAtPrice:a.compareAtPrice,
+      sku:String(a.sku||'').trim(),
+      vendor:String(a.vendor||'VAROVA').trim()||'VAROVA',
+      productType:String(a.productType||'').trim(),
+      tags:Array.isArray(a.tags)?a.tags:[],
+      images:Array.isArray(a.images)?a.images:[]
+    };
+    if(!product.title)return{ok:false,message:'Ürün başlığı olmadan Shopify taslağı oluşturulmadı.'};
+    try{
+      const out=await getCommerceEngine().createDraft(WORKSPACE,product);
+      return{ok:true,message:'SHOPIFY DRAFT HAZIR · '+out.product.title+' · '+out.product.id+' · ürün yayınlanmadı'};
+    }catch(e){
+      if(String(e.message||e)==='SHOPIFY_NOT_CONNECTED'){
+        return{ok:false,message:'Shopify yerel bağlantısı henüz kurulmamış. Bir kez "Shopify bağlantısını kur" komutu gerekli.'};
+      }
+      return{ok:false,message:'Shopify taslağı oluşturulamadı: '+String(e.message||e).slice(0,500)};
+    }
   }else if(n==='workspace_search'){
     const query=String(a.query||'').replace(/[\r\n]/g,' ').trim().slice(0,240);
     command=query?'dosyalarda ara '+query:'';
@@ -2508,6 +2614,9 @@ async function runNativeAgent(message,{maxRounds=4,signal=null}={}){
     'Native tool loop da yerel ses sözlüğünden geçirilmiş kullanıcı metnini esas alır; yanlış duyulan eski ifadeyi geri üretme.',
     'Elindeki yerel araçları yalnızca gerçekten gerektiğinde kullan. Araç kullanmadan cevap verebiliyorsan doğrudan cevap ver.',
     'Bir araç sonucuna göre başka bir araca ihtiyaç varsa sonucu gördükten sonra ikinci aracı çağır. Körlemesine peş peşe araç çağırma.',
+    'Video üretiminde creator_render_short yerel MP4 oluşturur ama yayınlamaz. Kullanıcı yalnızca fikir soruyorsa bu aracı çağırma.',
+    'Mağaza işlerinde önce shopify_status ile bağlantıyı kontrol edebilirsin. shopify_create_draft yalnızca DRAFT ürün oluşturur; eksik fiyat, SKU veya görseli uydurma.',
+    'Ürünü halka açık mağazada yayınlama native ajan aracı değildir. Yayınlama ancak kullanıcının açık yayınlama komutuyla ayrı güvenli akıştan yapılır.',
     'Araç sonuçlarında olmayan bilgiyi uydurma. Bir eylem başarısızsa başarılı olmuş gibi konuşma.',
     'workspace_read kullanmadan önce mümkünse workspace_search ile doğru dosya yolunu bul.',
     'Gizli dosya, parola, token, anahtar veya credential aramaya çalışma.',
