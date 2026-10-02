@@ -43,10 +43,15 @@ assert.strictEqual(board.length,3);
 assert.strictEqual(board[0].start,0);
 assert.ok(board[1].start>0);
 assert.ok(Math.abs(board[board.length-1].end-15)<0.01);
+const shortBoard=engine.buildShortStoryboard(selected.slice(0,1),15,0.18,3.2,7);
+assert.ok(shortBoard.length>=4,'single asset should be cut into multiple short scenes');
+assert.ok(shortBoard.every(x=>x.duration<=4.5),'Short scenes should stay under edit-rhythm cap');
+assert.ok(new Set(shortBoard.map(x=>x.sourceOffset)).size>1,'reused Short asset should use varied source offsets');
+assert.ok(new Set(shortBoard.map(x=>x.transition).filter(Boolean)).size>1,'Short transitions should be varied');
 assert.ok(engine.ffmpegFilterPath(path.join(tmp,'creator jobs','x.srt')).includes('/'),'filter path must normalize separators');
 
 const source=fs.readFileSync('./jarvis-creator-engine.js','utf8');
-assert.ok(source.includes('xfade=transition=fade'),'multi-scene transition missing');
+assert.ok(source.includes('xfade=transition='),'multi-scene transition missing');
 assert.ok(source.includes('subtitles=filename='),'burned caption filter missing');
 assert.ok(source.includes("multiScene:true"),'multi-scene metadata missing');
 assert.ok(source.includes("captionsBurned"),'caption verification metadata missing');
@@ -65,6 +70,6 @@ assert.ok(source.includes("Math.abs(fps-30)<=0.05"),'30 FPS quality check missin
 assert.ok(source.includes("duration>=11.8&&duration<=18.8"),'Shorts duration quality check missing');
 assert.ok(source.includes("audio:!!audio"),'audio stream quality check missing');
 assert.ok(source.includes("quality=probeRenderedShort(outFile,status.ffprobe)"),'post-render quality gate missing');
-assert.ok(source.includes("quality,\n    output:path.relative(workspace,outFile)"),'quality metadata missing');
+assert.ok(source.includes("quality,\n    visualEdit,\n    output:path.relative(workspace,outFile)"),'quality + visual edit metadata missing');
 
 console.log('CREATOR ENGINE SELFTEST PASS');
