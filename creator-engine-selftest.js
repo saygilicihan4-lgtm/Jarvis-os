@@ -4,9 +4,11 @@ const fs=require('fs');
 const path=require('path');
 const engine=require('./jarvis-creator-engine');
 
-assert.strictEqual(engine.ENGINE_VERSION,'1.0');
+assert.strictEqual(engine.ENGINE_VERSION,'1.1');
 assert.strictEqual(engine.CREATOR_PROFILE_VERSION,'2.0');
 assert.strictEqual(engine.safeName('Benim Shorts / Test'),'Benim-Shorts-Test');
+assert.strictEqual(engine.assetSafeName('incoming/My Clip.MP4'),'My-Clip.mp4');
+
 
 const srt=engine.buildSrt('Birinci cümle burada. İkinci cümle burada ve devam ediyor.',15);
 assert.ok(srt.includes('1'));
@@ -14,6 +16,10 @@ assert.ok(srt.includes('-->'));
 assert.ok(srt.includes('Birinci'));
 
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'jarvis-creator-test-'));
+fs.writeFileSync(path.join(tmp,'bad.txt'),Buffer.alloc(2048,1));
+assert.strictEqual(engine.inspectAsset(tmp,'bad.txt').code,'CREATOR_ASSET_UNSUPPORTED_EXTENSION');
+assert.strictEqual(engine.inspectAsset(tmp,'../outside.mp4').code,'CREATOR_ASSET_BAD_PATH');
+
 const status=engine.ffmpegStatus(tmp);
 assert.strictEqual(typeof status.ok,'boolean');
 assert.ok(status.assetDir.includes('creator-assets'));
@@ -37,5 +43,9 @@ assert.ok(source.includes('xfade=transition=fade'),'multi-scene transition missi
 assert.ok(source.includes('subtitles=filename='),'burned caption filter missing');
 assert.ok(source.includes("multiScene:true"),'multi-scene metadata missing');
 assert.ok(source.includes("captionsBurned"),'caption verification metadata missing');
+assert.ok(source.includes('function inspectAsset(workspace,relativePath)'),'Creator asset ffprobe inspector missing');
+assert.ok(source.includes('CREATOR_ASSET_INVALID_VIDEO'),'invalid-video guard missing');
+assert.ok(source.includes('CREATOR_ASSET_SYMLINK_ESCAPE'),'asset symlink escape guard missing');
+assert.ok(source.includes('duration>600'),'Creator asset duration limit missing');
 
 console.log('CREATOR ENGINE SELFTEST PASS');

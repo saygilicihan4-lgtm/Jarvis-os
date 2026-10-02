@@ -4,7 +4,7 @@ const os=require('os');
 const childProcess=require('child_process');
 const crypto=require('crypto');
 
-const ENGINE_VERSION='1.0';
+const ENGINE_VERSION='1.1';
 const CREATOR_PROFILE_VERSION='2.0';
 
 function execFile(exe,args,opts={}){
@@ -39,12 +39,82 @@ function creatorDirs(workspace){
     jobs:ensureDir(path.join(workspace,'creator-jobs'))
   };
 }
+const CREATOR_ASSET_EXTENSIONS=new Set(['.mp4','.mov','.mkv','.webm','.m4v']);
+function safeWorkspaceVideo(workspace,relativePath){
+  const root=path.resolve(String(workspace||''));
+  const original=String(relativePath||'').trim();
+  if(!original||original.includes('\0')||/^[\\/]/.test(original)||/^[A-Za-z]:[\\/]/.test(original))throw new Error('CREATOR_ASSET_BAD_PATH');
+  const rel=original.replace(/\\/g,'/').replace(/^\/+/, '').trim();
+  if(!rel||rel.split('/').some(x=>x==='.'||x==='..'))throw new Error('CREATOR_ASSET_BAD_PATH');
+  const lower=rel.toLocaleLowerCase('tr-TR');
+  if(/(?:^|\/)(?:\.git|node_modules|\.jarvis-memory|\.jarvis-missions|\.jarvis-browser-profile)(?:\/|$)/.test(lower))throw new Error('CREATOR_ASSET_INTERNAL_PATH');
+  const full=path.resolve(root,rel);
+  if(!(full===root||full.startsWith(root+path.sep)))throw new Error('CREATOR_ASSET_OUTSIDE_WORKSPACE');
+  if(!fs.existsSync(full))throw new Error('CREATOR_ASSET_SOURCE_MISSING');
+  const lst=fs.lstatSync(full);
+  if(lst.isSymbolicLink())throw new Error('CREATOR_ASSET_SYMLINK_BLOCKED');
+  if(!lst.isFile())throw new Error('CREATOR_ASSET_NOT_FILE');
+  const realRoot=fs.realpathSync(root),real=fs.realpathSync(full);
+  if(!(real===realRoot||real.startsWith(realRoot+path.sep)))throw new Error('CREATOR_ASSET_SYMLINK_ESCAPE');
+  const ext=path.extname(full).toLowerCase();
+  if(!CREATOR_ASSET_EXTENSIONS.has(ext))throw new Error('CREATOR_ASSET_UNSUPPORTED_EXTENSION');
+  if(lst.size<1024)throw new Error('CREATOR_ASSET_TOO_SMALL');
+  if(lst.size>1024*1024*1024)throw new Error('CREATOR_ASSET_TOO_LARGE');
+  return{root,rel,full,real,ext,bytes:lst.size};
+}
+function assetSafeName(relativePath){
+  const input=String(relativePath||'');
+  const originalExt=path.extname(input);
+  const ext=originalExt.toLowerCase();
+  const stem=path.basename(input,originalExt);
+  return safeName(stem)+ext;
+}
+function inspectAsset(workspace,relativePath){
+  let info;
+  try{info=safeWorkspaceVideo(workspace,relativePath)}catch(e){return{ok:false,code:String(e.message||e)}}
+  const status=ffmpegStatus(workspace);
+  if(!status.ffprobe)return{ok:false,code:'FFPROBE_MISSING',file:info.rel};
+  try{
+    const raw=execFile(status.ffprobe,[
+      '-v','error',
+      '-select_streams','v:0',
+      '-show_entries','stream=codec_name,width,height:format=duration',
+      '-of','json',
+      info.full
+    ],{timeout:20000,maxBuffer:1024*1024}).trim();
+    const data=JSON.parse(raw||'{}');
+    const stream=Array.isArray(data.streams)&&data.streams[0]?data.streams[0]:null;
+    const duration=Number(data&&data.format&&data.format.duration);
+    const width=Number(stream&&stream.width),height=Number(stream&&stream.height);
+    if(!stream||!Number.isFinite(width)||width<16||!Number.isFinite(height)||height<16||!Number.isFinite(duration)||duration<=0){
+      return{ok:false,code:'CREATOR_ASSET_INVALID_VIDEO',file:info.rel};
+    }
+    if(duration>600)return{ok:false,code:'CREATOR_ASSET_DURATION_LIMIT',file:info.rel,duration};
+    return{
+      ok:true,
+      file:info.rel,
+      bytes:info.bytes,
+      duration:Number(duration.toFixed(3)),
+      width,
+      height,
+      codec:String(stream.codec_name||'').slice(0,40)
+    };
+  }catch(e){
+    return{ok:false,code:'CREATOR_ASSET_PROBE_FAILED',file:info.rel,message:String(e.message||e).slice(0,400)};
+  }
+}
+function assetDestinationName(relativePath,sha256){
+  const ext=path.extname(String(relativePath||'')).toLowerCase();
+  if(!CREATOR_ASSET_EXTENSIONS.has(ext))throw new Error('CREATOR_ASSET_UNSUPPORTED_EXTENSION');
+  const hash=String(sha256||'').replace(/[^a-f0-9]/gi,'').toLowerCase().slice(0,16);
+  if(hash.length<16)throw new Error('CREATOR_ASSET_HASH_REQUIRED');
+  return 'asset-'+hash+ext;
+}
 function listAssets(workspace){
   const dirs=creatorDirs(workspace);
-  const allowed=new Set(['.mp4','.mov','.mkv','.webm','.m4v']);
   try{
     return fs.readdirSync(dirs.assets,{withFileTypes:true})
-      .filter(x=>x.isFile()&&allowed.has(path.extname(x.name).toLowerCase()))
+      .filter(x=>x.isFile()&&CREATOR_ASSET_EXTENSIONS.has(path.extname(x.name).toLowerCase()))
       .map(x=>path.join(dirs.assets,x.name))
       .sort((a,b)=>a.localeCompare(b));
   }catch(_){return[]}
@@ -340,5 +410,9 @@ module.exports={
   supportsSubtitles,
   ffmpegFilterPath,
   renderShort,
-  listAssets
+  listAssets,
+  inspectAsset,
+  assetSafeName,
+  assetDestinationName,
+  CREATOR_ASSET_EXTENSIONS
 };

@@ -5,7 +5,7 @@ const worker=fs.readFileSync('./worker.js','utf8');
 const commerce=fs.readFileSync('./jarvis-commerce-engine.js','utf8');
 const youtube=fs.readFileSync('./jarvis-youtube-studio.js','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.98.0'"),'Worker 2.98.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.99.0'"),'Worker 2.99.0 required');
 assert.ok(worker.includes("'approval_gate_v1'"),'approval gate capability missing');
 assert.ok(worker.includes("'shopify_publish_approval_v1'"),'Shopify publish approval capability missing');
 assert.ok(worker.includes('function approveMissionGate('),'approval helper missing');
