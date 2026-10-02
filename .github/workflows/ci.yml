@@ -226,6 +226,8 @@ jobs:
         run: node bluetooth-secure-selftest.js
       - name: Bluetooth audio router selftest
         run: node bluetooth-audio-selftest.js
+      - name: Bluetooth native tool selftest
+        run: node bluetooth-native-tool-selftest.js
       - name: Safe PC mission selftest
         run: node pc-mission-selftest.js
       - name: Workspace file engine selftest
