@@ -14,7 +14,8 @@ const single=creator.buildShortStoryboard(['/tmp/a.mp4'],15,0.18,3.2,7);
 assert.ok(single.length>=4&&single.length<=7,'one clip must become a paced multi-scene Short');
 assert.strictEqual(single[0].start,0);
 assert.ok(Math.abs(single[single.length-1].end-15)<0.01,'Short storyboard must cover target duration');
-assert.ok(single.every(x=>Number(x.duration)>2&&Number(x.duration)<=4.5),'Short scenes must stay in fast edit range');
+assert.ok(single[0].hook===true&&single[0].duration>=0.75&&single[0].duration<=1.05,'Short first scene must be a bounded micro-hook');
+assert.ok(single.slice(1).every(x=>Number(x.duration)>2&&Number(x.duration)<=4.5),'Short post-hook scenes must stay in fast edit range');
 assert.ok(new Set(single.map(x=>x.sourceOffset)).size>1,'reused clip must use different source offsets');
 assert.ok(new Set(single.map(x=>x.motionPhase)).size>1,'reused clip must use different motion phases');
 assert.ok(new Set(single.map(x=>x.transition).filter(Boolean)).size>1,'Short must use varied safe transitions');
@@ -32,6 +33,7 @@ assert.ok(source.includes("const transitionName=String(storyboard[i].transition|
 assert.ok(source.includes("'-map',String(storyboard.length)+':a:0'"),'audio input index must follow expanded Short storyboard inputs');
 assert.ok(source.includes("motion:assets.length?'dynamic-pan-crop':'procedural'"),'Short motion evidence missing');
 assert.ok(source.includes("e.code='CREATOR_SHORT_EDIT_RHYTHM_FAILED'"),'Short edit rhythm must fail closed');
+assert.ok(source.includes("hookTarget:'0.75-1.05s'"),'Short profile micro-hook target missing');
 assert.ok(source.includes("sceneTarget:'2.5-4s'"),'Short profile scene target missing');
 assert.ok(source.includes("transition:'varied'"),'Short profile varied transition metadata missing');
 
