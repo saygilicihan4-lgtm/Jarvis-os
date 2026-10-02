@@ -1,7 +1,7 @@
 const fs=require('fs');
 const path=require('path');
 
-const YOUTUBE_STUDIO_VERSION='1.0';
+const YOUTUBE_STUDIO_VERSION='1.1';
 const STUDIO_URL='https://studio.youtube.com/';
 
 function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
@@ -237,6 +237,113 @@ async function prepareDraft(operator,workspace,{file,title='',description='',mis
   };
 }
 
+function publishContextReady(snap){
+  const url=String(snap&&snap.url||'').toLowerCase();
+  const text=String(snap&&snap.text||'').toLocaleLowerCase('tr-TR');
+  return /studio\.youtube\.com/.test(url)&&/(?:görünürlük|gorunurluk|visibility|ayrıntılar|ayrintilar|details|kontroller|checks|video öğeleri|video ogeleri|video elements|ileri|next)/i.test(text);
+}
+function publishSuccess(snap){
+  const text=String(snap&&snap.text||'').toLocaleLowerCase('tr-TR');
+  return /(?:video\s+(?:yayınlandı|yayinlandi)|(?:yayınlandı|yayinlandi)\s+video|video\s+published|published\s+successfully)/i.test(text);
+}
+async function selectPublicVisibility(operator,workspace){
+  const expression=[
+    "(()=>{",
+    "const els=[...document.querySelectorAll('tp-yt-paper-radio-button,[role=radio],label')];",
+    "const txt=e=>String(e.innerText||e.textContent||e.getAttribute('aria-label')||'').trim().toLocaleLowerCase('tr-TR');",
+    "const e=els.find(x=>/^(herkese açık|herkese acik|public)$/.test(txt(x)))||els.find(x=>/(herkese açık|herkese acik|public)/.test(txt(x)));",
+    "if(!e)return{ok:false};",
+    "e.scrollIntoView({block:'center'});e.click();",
+    "return{ok:true,text:String(e.innerText||e.textContent||'').trim().slice(0,120)}",
+    "})()"
+  ].join('');
+  try{return await operator.evaluate(workspace,expression)}catch(e){return{ok:false,error:String(e.message||e)}}
+}
+async function advanceToVisibility(operator,workspace){
+  for(let i=0;i<4;i++){
+    const snap=await snapshot(operator,workspace);
+    const text=String(snap&&snap.text||'').toLocaleLowerCase('tr-TR');
+    if(/(?:görünürlük|gorunurluk|visibility)/i.test(text))return{ok:true,snapshot:snap};
+    const next=await clickAny(operator,workspace,['İleri','Ileri','Next']);
+    if(!next.ok)return{ok:false,snapshot:snap};
+    await sleep(650);
+  }
+  const snap=await snapshot(operator,workspace);
+  return{ok:/(?:görünürlük|gorunurluk|visibility)/i.test(String(snap&&snap.text||'')),snapshot:snap};
+}
+async function publishPreparedDraft(operator,workspace,{missionId='',approvedAt=''}={}){
+  if(!operator)throw new Error('browser operator required');
+  const id=String(missionId||'').trim();
+  const proof=String(approvedAt||'').trim();
+  if(!id)throw new Error('mission id required for YouTube publish');
+  if(!proof)throw new Error('explicit approval proof required for YouTube publish');
+  const receipt=missionReceiptFile(workspace,id);
+  const existing=readReceipt(workspace,id);
+  if(!existing)return{ok:false,code:'YOUTUBE_DRAFT_RECEIPT_MISSING',retryable:false,message:'YouTube publish için mission draft receipt bulunamadı.'};
+  if(existing.state==='published'&&existing.published===true){
+    return{ok:true,code:'YOUTUBE_PUBLISHED',reused:true,published:true,receipt,title:existing.title||'',message:'YouTube videosu bu mission için zaten PUBLIC olarak doğrulanmış.'};
+  }
+  if(existing.state==='publish_started'){
+    return{ok:false,code:'YOUTUBE_PUBLISH_UNCERTAIN',retryable:false,uncertain:true,receipt,message:'Önceki YouTube Publish tıklaması tamamlanmış olabilir. Kopya/yanlış tekrar riskine karşı otomatik publish tekrar edilmiyor; Studio ekranı doğrulanmalı.'};
+  }
+  if(existing.state!=='draft_prepared'){
+    return{ok:false,code:'YOUTUBE_DRAFT_NOT_READY',retryable:false,receipt,message:'YouTube PUBLIC için önce aynı mission taslağı hazırlanmalı.'};
+  }
+
+  const browser=await operator.status(workspace);
+  if(!browser.running){
+    return{ok:false,code:'YOUTUBE_PUBLISH_CONTEXT_REQUIRED',retryable:true,receipt,message:'YouTube taslak penceresi açık değil. PUBLIC adımı uygulanmadı.'};
+  }
+  let snap=await snapshot(operator,workspace);
+  if(authRequired(snap))return{ok:false,code:'YOUTUBE_AUTH_REQUIRED',retryable:true,receipt,message:'YouTube Studio oturumu gerekli. PUBLIC adımı uygulanmadı.'};
+  if(!publishContextReady(snap)){
+    return{ok:false,code:'YOUTUBE_PUBLISH_CONTEXT_REQUIRED',retryable:true,receipt,message:'Doğru YouTube yükleme/taslak ekranı doğrulanamadı. Yanlış videoyu yayınlamamak için PUBLIC adımı durduruldu.'};
+  }
+
+  const advanced=await advanceToVisibility(operator,workspace);
+  if(!advanced.ok){
+    return{ok:false,code:'YOUTUBE_VISIBILITY_STEP_NOT_FOUND',retryable:true,receipt,message:'YouTube görünürlük adımına ulaşılamadı. PUBLIC adımı uygulanmadı.'};
+  }
+  const selected=await selectPublicVisibility(operator,workspace);
+  if(!selected||selected.ok!==true){
+    return{ok:false,code:'YOUTUBE_PUBLIC_OPTION_NOT_FOUND',retryable:true,receipt,message:'YouTube Public/Herkese Açık seçeneği bulunamadı. PUBLIC adımı uygulanmadı.'};
+  }
+
+  const preflight={
+    ...existing,
+    updatedAt:new Date().toISOString(),
+    action:'PUBLIC_PUBLISH_STARTED',
+    state:'publish_started',
+    approvedAt:proof,
+    published:false
+  };
+  writeReceipt(receipt,preflight);
+
+  const clicked=await clickAny(operator,workspace,['Yayınla','Yayinla','Publish']);
+  if(!clicked.ok){
+    writeReceipt(receipt,{...preflight,updatedAt:new Date().toISOString(),action:'DRAFT_PREPARED',state:'draft_prepared',published:false,publishError:'publish_button_not_found'});
+    return{ok:false,code:'YOUTUBE_PUBLISH_BUTTON_NOT_FOUND',retryable:true,receipt,message:'YouTube Publish/Yayınla düğmesi bulunamadı. Video PUBLIC yapılmadı.'};
+  }
+
+  await sleep(1200);
+  snap=await snapshot(operator,workspace);
+  if(!publishSuccess(snap)){
+    return{ok:false,code:'YOUTUBE_PUBLISH_UNCERTAIN',retryable:false,uncertain:true,receipt,message:'Publish tıklaması yapıldı ancak PUBLIC sonucu doğrulanamadı. Otomatik tekrar engellendi; Studio ekranı doğrulanmalı.'};
+  }
+
+  const record={
+    ...preflight,
+    updatedAt:new Date().toISOString(),
+    action:'PUBLIC_PUBLISHED',
+    state:'published',
+    published:true,
+    publishedAt:new Date().toISOString(),
+    studioUrl:String(snap&&snap.url||existing.studioUrl||STUDIO_URL)
+  };
+  writeReceipt(receipt,record);
+  return{ok:true,code:'YOUTUBE_PUBLISHED',published:true,receipt,title:record.title||'',message:'YouTube videosu açık onay sonrası PUBLIC olarak doğrulandı.'};
+}
+
 module.exports={
   YOUTUBE_STUDIO_VERSION,
   STUDIO_URL,
@@ -246,5 +353,6 @@ module.exports={
   status,
   missionReceiptFile,
   readReceipt,
-  prepareDraft
+  prepareDraft,
+  publishPreparedDraft
 };
