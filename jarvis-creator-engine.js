@@ -1771,9 +1771,11 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
       }
       return{index,ratio:Number(ratio.toFixed(3)),section:String(best.label||'ANLATIM')};
     });
+    const narrativeHueShift=narrativeSections.length>=3?24:18;
+    const narrativeCycleSeconds=narrativeSections.length>=3?60:90;
     const graph='color=c=0x0b1324:s=1920x1080:r=30:d='+duration.toFixed(3)+
       ',noise=alls=9:allf=t+u'+
-      ",hue=H='18*sin(2*PI*t/90)':s='0.72+0.12*sin(2*PI*t/30)'"+
+      ",hue=H='"+narrativeHueShift+"*sin(2*PI*t/"+narrativeCycleSeconds+")':s='0.72+0.12*sin(2*PI*t/30)'"+
       ",eq=brightness='0.018*sin(2*PI*t/30)':contrast='1.04+0.03*sin(2*PI*t/60)'"+
       ',vignette=PI/5';
     args=[
@@ -1878,7 +1880,7 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     audioMaster:creatorAudioMasterProfile(),
     narrationActivity,
     assetSelection,
-    proceduralVisual:proceduralAssets?{sceneSeconds:proceduralSceneSeconds,sceneCount:proceduralSceneCount,profile:'animated-hue-noise-vignette',narrativeSections:narrativeSections.map(x=>String(x.label||'')),phases:proceduralNarrativePhases}:null,
+    proceduralVisual:proceduralAssets?{sceneSeconds:proceduralSceneSeconds,sceneCount:proceduralSceneCount,profile:'narrative-phased-hue-noise-vignette',hueShift:narrativeHueShift,cycleSeconds:narrativeCycleSeconds,narrativeSections:narrativeSections.map(x=>String(x.label||'')),phases:proceduralNarrativePhases}:null,
     profileVersion:CREATOR_PROFILE_VERSION
   };
 }
