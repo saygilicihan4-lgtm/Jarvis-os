@@ -772,6 +772,36 @@ function probeRenderedAudioLoudness(file,ffmpeg,{targetLufs=-16,toleranceLufs=3,
   }
 }
 
+function applyRenderedAudioQuality(quality,file,ffmpeg,{mode='short'}={}){
+  const result=quality&&typeof quality==='object'?quality:{ok:false,code:'CREATOR_QUALITY_FAILED',message:'Creator quality result missing.'};
+  if(!result.checks||typeof result.checks!=='object')result.checks={};
+  if(!result.measured||typeof result.measured!=='object')result.measured={};
+  const baseOk=!!result.ok;
+  const outputAudioActivity=probeNarrationActivity(file,ffmpeg,{minMeanDb:-45,minPeakDb:-30});
+  const outputLoudness=probeRenderedAudioLoudness(file,ffmpeg);
+  result.checks.audioSignal=outputAudioActivity.ok;
+  result.checks.audioLoudness=outputLoudness.ok;
+  result.measured.audioMeanDb=outputAudioActivity.meanDb;
+  result.measured.audioPeakDb=outputAudioActivity.maxDb;
+  result.measured.audioIntegratedLufs=outputLoudness.integratedLufs;
+  result.measured.audioTruePeakDb=outputLoudness.truePeakDb;
+  result.audioSignal=outputAudioActivity;
+  result.audioLoudness=outputLoudness;
+  result.ok=baseOk&&outputAudioActivity.ok&&outputLoudness.ok;
+  if(baseOk&&!outputAudioActivity.ok){
+    result.code='CREATOR_AUDIO_SIGNAL_MISSING';
+    result.message=mode==='longform'
+      ?'Creator long-form final ses sinyali kalite kapısı başarısız.'
+      :'Creator Shorts final ses sinyali kalite kapısı başarısız.';
+  }else if(baseOk&&!outputLoudness.ok){
+    result.code='CREATOR_AUDIO_LOUDNESS_OUT_OF_RANGE';
+    result.message=mode==='longform'
+      ?'Creator long-form final loudness kalite kapısı başarısız.'
+      :'Creator Shorts final loudness kalite kapısı başarısız.';
+  }
+  return result;
+}
+
 function streamTimelineCoverage(stream,containerDuration){
   const finite=value=>value!==null&&value!==undefined&&String(value).trim()!==''&&Number.isFinite(Number(value))?Number(value):null;
   const start=finite(stream&&stream.start_time);
@@ -1178,27 +1208,12 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
   }
 
   if(!fs.existsSync(outFile)||fs.statSync(outFile).size<10000)throw new Error('Rendered MP4 verification failed');
-  const quality=probeRenderedShort(outFile,status.ffprobe);
-  const outputAudioActivity=probeNarrationActivity(outFile,status.ffmpeg,{minMeanDb:-45,minPeakDb:-30});
-  quality.checks.audioSignal=outputAudioActivity.ok;
-  quality.measured.audioMeanDb=outputAudioActivity.meanDb;
-  quality.measured.audioPeakDb=outputAudioActivity.maxDb;
-  quality.audioSignal=outputAudioActivity;
-  if(!outputAudioActivity.ok){
-    quality.ok=false;
-    quality.code='CREATOR_AUDIO_SIGNAL_MISSING';
-    quality.message='Creator Shorts final ses sinyali kalite kapısı başarısız.';
-  }
-  const outputLoudness=probeRenderedAudioLoudness(outFile,status.ffmpeg);
-  quality.checks.audioLoudness=outputLoudness.ok;
-  quality.measured.audioIntegratedLufs=outputLoudness.integratedLufs;
-  quality.measured.audioTruePeakDb=outputLoudness.truePeakDb;
-  quality.audioLoudness=outputLoudness;
-  if(!outputLoudness.ok){
-    quality.ok=false;
-    quality.code='CREATOR_AUDIO_LOUDNESS_OUT_OF_RANGE';
-    quality.message='Creator Shorts final loudness kalite kapısı başarısız.';
-  }
+  const quality=applyRenderedAudioQuality(
+    probeRenderedShort(outFile,status.ffprobe),
+    outFile,
+    status.ffmpeg,
+    {mode:'short'}
+  );
   if(!quality.ok){
     const e=new Error(String(quality.message||'Creator Shorts quality gate failed')+' · '+String(quality.code||'CREATOR_QUALITY_FAILED'));
     e.code=String(quality.code||'CREATOR_QUALITY_FAILED');
@@ -1413,27 +1428,12 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
   }
 
   if(!fs.existsSync(outFile)||fs.statSync(outFile).size<1024*1024)throw new Error('Rendered long-form MP4 verification failed');
-  const quality=probeRenderedLongform(outFile,status.ffprobe);
-  const outputAudioActivity=probeNarrationActivity(outFile,status.ffmpeg,{minMeanDb:-45,minPeakDb:-30});
-  quality.checks.audioSignal=outputAudioActivity.ok;
-  quality.measured.audioMeanDb=outputAudioActivity.meanDb;
-  quality.measured.audioPeakDb=outputAudioActivity.maxDb;
-  quality.audioSignal=outputAudioActivity;
-  if(!outputAudioActivity.ok){
-    quality.ok=false;
-    quality.code='CREATOR_AUDIO_SIGNAL_MISSING';
-    quality.message='Creator long-form final ses sinyali kalite kapısı başarısız.';
-  }
-  const outputLoudness=probeRenderedAudioLoudness(outFile,status.ffmpeg);
-  quality.checks.audioLoudness=outputLoudness.ok;
-  quality.measured.audioIntegratedLufs=outputLoudness.integratedLufs;
-  quality.measured.audioTruePeakDb=outputLoudness.truePeakDb;
-  quality.audioLoudness=outputLoudness;
-  if(!outputLoudness.ok){
-    quality.ok=false;
-    quality.code='CREATOR_AUDIO_LOUDNESS_OUT_OF_RANGE';
-    quality.message='Creator long-form final loudness kalite kapısı başarısız.';
-  }
+  const quality=applyRenderedAudioQuality(
+    probeRenderedLongform(outFile,status.ffprobe),
+    outFile,
+    status.ffmpeg,
+    {mode:'longform'}
+  );
   if(!quality.ok){
     const e=new Error(String(quality.message||'Creator long-form quality gate failed')+' · '+String(quality.code||'CREATOR_LONGFORM_QUALITY_FAILED'));
     e.code=String(quality.code||'CREATOR_LONGFORM_QUALITY_FAILED');
@@ -1529,6 +1529,7 @@ module.exports={
   creatorAudioMasterProfile,
   probeNarrationActivity,
   probeRenderedAudioLoudness,
+  applyRenderedAudioQuality,
   probeHookMotion,
   findHookMotionWindow,
   listAssets,
