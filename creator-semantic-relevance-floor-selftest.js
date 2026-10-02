@@ -2,7 +2,7 @@ const fs=require('fs');
 const assert=require('assert');
 const semantic=require('./jarvis-creator-semantic-quality');
 
-assert.strictEqual(semantic.SEMANTIC_QUALITY_VERSION,'1.2');
+assert.strictEqual(semantic.SEMANTIC_QUALITY_VERSION,'1.3');
 
 const zero=[
   {path:'creator-assets/beach.mp4',sha256:'a',score:0,tags:['sahil','deniz'],summary:'Güneşli sahil görüntüsü.'},
@@ -35,7 +35,7 @@ assert.strictEqual(mixed.evidence.rejectedLowRelevanceCount,2);
 
 const worker=fs.readFileSync('./worker.js','utf8');
 assert.ok(worker.includes("'creator_semantic_relevance_floor_v1'"),'v97 capability missing');
-assert.ok(worker.includes("SEMANTIC_QUALITY_VERSION='1.2'"),'runtime sync must require semantic quality v1.2');
+assert.ok(worker.includes("SEMANTIC_QUALITY_VERSION='1.3'"),'runtime sync must require semantic quality v1.3');
 assert.ok(worker.includes("minScore:1"),'worker semantic relevance floor missing');
 assert.ok(worker.includes("allowPaths:modelPickedPaths"),'local semantic model allowlist exception missing');
 assert.ok(worker.includes("const fallbackEligible=ordered.filter(x=>Number(x&&x.score||0)>=1||modelPickedPaths.includes(String(x&&x.path||'')))"),'Worker fallback must enforce the same relevance floor when semantic module sync fails');
