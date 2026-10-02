@@ -4,7 +4,7 @@ const assert=require('assert');
 const worker=fs.readFileSync('./worker.js','utf8');
 const server=fs.readFileSync('./server.js','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.87.0'"),'Worker 2.87.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.88.0'"),'Worker 2.88.0 required');
 assert.ok(worker.includes("name:'creator_render_short'"),'native creator render tool missing');
 assert.ok(worker.includes("name:'creator_status'"),'native creator status tool missing');
 assert.ok(worker.includes("name:'shopify_status'"),'native Shopify status tool missing');
