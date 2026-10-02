@@ -10,7 +10,7 @@ const block=worker.slice(start,end);
 assert.ok(block.includes("mission.status==='needs_verification'"),'uncertain mission gate missing');
 assert.ok(block.includes("mission.status==='waiting_dependency'"),'dependency wait gate missing');
 assert.ok(block.includes('missionDependencyReady(mission)'),'dependency readiness check missing');
-assert.ok(block.includes('runDurableMission(mission.id)'),'durable resume execution missing');
+assert.ok(block.includes('runDurableMission(candidate.id)')||block.includes('runDurableMission(mission.id)'),'durable resume execution missing');
 assert.ok(!block.includes('publishProduct('),'auto-resume must never publish Shopify products');
 assert.ok(!block.includes("clickByText(workspace,'Publish'"),'auto-resume must never click YouTube Publish');
 assert.ok(!block.includes("clickByText(workspace,'Yayınla'"),'auto-resume must never click YouTube Yayınla');
