@@ -4,6 +4,7 @@ const os=require('os');
 const crypto=require('crypto');
 const childProcess=require('child_process');
 const http=require('http');
+const creatorEngine=require('./jarvis-creator-engine');
 
 const BASE=(process.env.JARVIS_URL||'https://jarvis-os-1iuv.onrender.com').replace(/\/$/,'');
 const TOKEN=process.env.JARVIS_TOKEN||'';
@@ -27,9 +28,10 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.73.0';
+const WORKER_VERSION='2.74.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
 CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1','adaptive_model_router_v1','deep_model_fallback_v1','dynamic_chunk_prosody_v1','natural_pause_timing_v1','adaptive_turn_pacing_v1','latency_learning_v1','full_duplex_interrupt_v1','cancellable_agent_v1','adaptive_voice_profile_v1','spoken_voice_preference_v1','speaker_echo_rejection_v1','social_dialogue_v1','response_variation_v1','contextual_followup_v1','dialogue_feedback_learning_v1','social_preference_adaptation_v1','dynamic_wake_ack_v1','wake_ack_turn_timing_v1','auto_quality_escalation_v1','weak_response_escalation_v1','repair_quality_escalation_v1','social_momentum_v1','elliptical_turn_resolution_v1','conversation_cadence_v1','brevity_mirroring_v1','adaptive_response_length_v1','interruption_continuity_v1','spoken_resume_v1','partial_stream_resume_v1');
+CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -802,7 +804,10 @@ function isLocalSafeControlCommand(command){
   return /^(?:sistem durumu|system status|pc durumu|disk durumu|disk status|depolama durumu|ağ durumu|ag durumu|network status|internet durumu|pil durumu|batarya durumu|güç durumu|guc durumu|power status|sesi yükselt|sesi yukselt|ses yükselt|ses yukselt|sesi artır|sesi arttır|ses artır|volume up|sesi azalt|ses azalt|sesi kıs|sesi kis|ses kıs|ses kis|volume down|sessize al|sesi kapat|sesi sustur|mute|sesi aç|sesi ac|unmute|oynat|duraklat|devam ettir|oynat duraklat|play pause|play|pause|sonraki|sonraki şarkı|sonraki sarki|sonraki medya|next track|önceki|onceki|önceki şarkı|onceki sarki|previous track|medyayı durdur|medyayi durdur|stop media)$/i.test(c)
     || /^(?:dosyalarda ara|dosyalarda arat|workspace search)\s+.+$/i.test(c)
     || /^(?:aç|ac|open|uygulama aç|uygulama ac|program aç|program ac|site aç|site ac)\s+.+$/i.test(c)
-    || /^.+?\s+(?:aç|ac)$/i.test(c);
+    || /^.+?\s+(?:aç|ac)$/i.test(c)
+    || /^(?:creator motor durumu|creator engine status|video motor durumu)$/i.test(c)
+    || /^(?:creator motorunu hazırla|creator motorunu hazirla|creator engine hazırla|creator engine hazirla)$/i.test(c)
+    || /^(?:shorts oluştur|shorts olustur|video oluştur|video olustur)(?:\s+[^:]+)?\s*:\s*[\s\S]+$/i.test(c);
 }
 function speechLexiconKey(text){
   return String(text||'')
@@ -1874,7 +1879,7 @@ async function callLocalBrain(message){
     'Kullanıcı aynı cümlede iki veya daha fazla güvenli eylem isterse type=plan kullan ve commands alanına en fazla dört komutu doğru sırayla koy.',
     'Tek eylem için type=command kullan; command alanına tek standart komut yaz ve commands boş dizi olsun.',
     'Sohbet için type=chat kullan; command null ve commands boş dizi olsun.',
-    'Desteklenen güvenli komutlar: sistem durumu, disk durumu, ağ durumu, pil durumu, sesi yükselt, sesi azalt, sessize al, oynat, duraklat, sonraki, önceki, medyayı durdur, youtube aç, google aç, github aç, chatgpt aç, opera gx aç, chrome aç, edge aç, not defteri aç, hesap makinesi aç, dosya gezgini aç, görev yöneticisi aç, ayarlar aç, ses ayarları aç, bluetooth ayarları aç, wifi ayarları aç, çalışma alanı aç, dosyalarda ara <arama ifadesi>.',
+    'Desteklenen güvenli komutlar: sistem durumu, disk durumu, ağ durumu, pil durumu, sesi yükselt, sesi azalt, sessize al, oynat, duraklat, sonraki, önceki, medyayı durdur, youtube aç, google aç, github aç, chatgpt aç, opera gx aç, chrome aç, edge aç, not defteri aç, hesap makinesi aç, dosya gezgini aç, görev yöneticisi aç, ayarlar aç, ses ayarları aç, bluetooth ayarları aç, wifi ayarları aç, çalışma alanı aç, dosyalarda ara <arama ifadesi>, creator motor durumu, creator motorunu hazırla, shorts oluştur <ad>: <anlatım metni>.',
     'Güvenli katalog dışındaki eylemleri type=chat olarak ele al; açık ve kısa biçimde henüz bağlı olmadığını söyle.',
     'Belirsizse tek kısa soru sor. Gereksiz teyit isteme.',
     'Kullanıcının açık tercihlerini hatırla ancak hassas özellikler hakkında çıkarım yapma.',
@@ -4008,6 +4013,44 @@ async function execute(task){
   if(openTarget){
     const r=openKnownDesktopTarget(openTarget[1]);
     return{ok:!!r.ok,retryable:false,message:r.message};
+  }
+
+  if(/^(?:creator motor durumu|creator engine status|video motor durumu)$/i.test(c)){
+    const s=creatorEngine.ffmpegStatus(WORKSPACE);
+    return{
+      ok:true,
+      message:'Creator motoru · FFmpeg '+(s.ok?'READY':'MISSING')+' · '+s.assets+' yerel klip · '+s.assetDir+(s.ok?'':' · gerekirse otomatik ücretsiz kurulum kullanılabilir')
+    };
+  }
+
+  if(/^(?:creator motorunu hazırla|creator motorunu hazirla|creator engine hazırla|creator engine hazirla)$/i.test(c)){
+    const s=creatorEngine.prepare(WORKSPACE,{allowInstall:true});
+    return{
+      ok:!!s.ok,
+      retryable:false,
+      message:s.ok
+        ?'Creator motoru hazır · FFmpeg doğrulandı · çıktı: '+s.outputDir
+        :'Creator motoru hazırlanamadı · FFmpeg bulunamadı ve otomatik kurulum kullanılamadı'
+    };
+  }
+
+  const creatorVideo=c.match(/^(?:shorts oluştur|shorts olustur|video oluştur|video olustur)(?:\s+([^:]+))?\s*:\s*([\s\S]+)$/i);
+  if(creatorVideo){
+    const requestedName=(creatorVideo[1]||('short-'+Date.now())).trim();
+    const narration=String(creatorVideo[2]||'').trim();
+    const ready=creatorEngine.prepare(WORKSPACE,{allowInstall:true});
+    if(!ready.ok)return{ok:false,retryable:false,message:'Creator motoru hazır değil · FFmpeg kurulamadı'};
+    const voice=await renderCreatorVoiceFile(narration,requestedName+'-voice');
+    const out=creatorEngine.renderShort({
+      workspace:WORKSPACE,
+      name:requestedName,
+      script:narration,
+      voicePath:voice
+    });
+    return{
+      ok:true,
+      message:out.message+' · altyazı dosyası: '+out.subtitle
+    };
   }
 
   const creatorVoice=c.match(/^(?:creator sesi oluştur|creator sesi olustur|video sesi oluştur|video sesi olustur|shorts sesi oluştur|shorts sesi olustur)(?:\s+([^:]+))?\s*:\s*([\s\S]+)$/i);
