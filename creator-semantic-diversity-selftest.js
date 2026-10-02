@@ -1,7 +1,7 @@
 const assert=require('assert');
 const semantic=require('./jarvis-creator-semantic-quality');
 
-assert.strictEqual(semantic.SEMANTIC_QUALITY_VERSION,'1.1');
+assert.strictEqual(semantic.SEMANTIC_QUALITY_VERSION,'1.2');
 
 const rows=[
   {
