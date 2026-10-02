@@ -6,7 +6,7 @@ const server=fs.readFileSync('./server.js','utf8');
 const html=fs.readFileSync('./public/index.html','utf8');
 const css=fs.readFileSync('./public/style.css','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.98.0'"),'Worker 2.98.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.99.0'"),'Worker 2.99.0 required');
 assert.ok(worker.includes("'mission_control_v1'"),'mission control capability missing');
 assert.ok(worker.includes("'mission_pause_v1'"),'mission pause capability missing');
 assert.ok(worker.includes("'mission_cancel_v1'"),'mission cancel capability missing');
@@ -20,6 +20,10 @@ assert.ok(worker.includes("if(candidates.length>1)throw new Error('Birden fazla 
 assert.ok(worker.includes("mission.status='paused'"),'pause status transition missing');
 assert.ok(worker.includes("mission.status='cancelled'"),'cancel status transition missing');
 assert.ok(worker.includes("mission.status=resumeStatus"),'resume status restoration missing');
+assert.ok(worker.includes("if(op==='pause'&&!pauseable.has(status))throw new Error('Bu görev şu anda duraklatılamaz.')"),'repeated pause must be rejected so gated resumeStatus cannot be overwritten');
+assert.ok(worker.includes("if(op==='cancel'&&!cancellable.has(status))throw new Error('Bu görev şu anda iptal edilemez.')"),'cancel must validate mission state');
+assert.ok(worker.includes("'workspace_file_mission_v1'"),'v62 workspace file capability must remain');
+assert.ok(worker.includes("workspaceFileMissionReady:CAPS.includes('workspace_file_mission_v1')"),'v62 workspace file readiness must remain');
 assert.ok(worker.includes("['waiting_dependency','needs_verification'].includes(currentStatus)"),'pause must preserve gated/verification state');
 assert.ok(worker.includes("['waiting_dependency','needs_verification'].includes(String(mission.control&&mission.control.resumeStatus||''))"),'resume must restore gated/verification state');
 assert.ok(worker.includes("if(status!=='running')return applyPendingMissionControl(mission)"),'running control must wait for safe boundary');
