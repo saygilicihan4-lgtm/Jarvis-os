@@ -2604,6 +2604,7 @@ function speakPhoneTaskResults(taskList){
     speak(prefix+msg,'tr-TR');
   }
 }
+function workerVersionSupported(value){const m=String(value||'').match(/^(\d+)\.(\d+)\.(\d+)$/);return !!m&&(Number(m[1])>2||(Number(m[1])===2&&Number(m[2])>=13));}
 async function load(){
   const d=await api('/api/state');
   speakPhoneTaskResults(d.tasks||[]);
@@ -2636,7 +2637,7 @@ async function load(){
   }
   if(window.remoteQueue){const rc=d.remoteControl||{};remoteQueue.textContent=String(rc.queued||0)+' WAITING · '+String(rc.running||0)+' RUNNING';}
   if(window.remoteMode){const rc=d.remoteControl||{};remoteMode.textContent=rc.pcOnline?'READY':'PC OFFLINE';remoteMode.style.color=rc.pcOnline?'#65ffbf':'#ffca66';}
-  const workerCurrent=pc.online&&/^2\.(?:1[3-9]|[2-9]\d)\./.test(String(pc.version||''));
+  const workerCurrent=pc.online&&workerVersionSupported(pc.version);
   workerSetup.textContent=!pc.online?'RUN LAUNCHER ON PC':workerCurrent?('CONNECTED v'+pc.version):'UPDATE REQUIRED';
   workerReadout.textContent=pc.online?'ON':'OFF';
   const pcCaps=Array.isArray(pc.capabilities)?pc.capabilities:[];
