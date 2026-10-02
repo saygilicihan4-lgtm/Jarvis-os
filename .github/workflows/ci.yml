@@ -29,6 +29,7 @@ jobs:
           node --check mission-engine-selftest.js
           node --check mission-autoresume-selftest.js
           node --check pc-acceptance-selftest.js
+          node --check pc-self-repair-selftest.js
           node --check youtube-studio-selftest.js
           node --check commerce-engine-selftest.js
           node --check business-tools-selftest.js
@@ -58,6 +59,8 @@ jobs:
         run: node mission-autoresume-selftest.js
       - name: PC acceptance snapshot selftest
         run: node pc-acceptance-selftest.js
+      - name: PC self-repair selftest
+        run: node pc-self-repair-selftest.js
       - name: Routing selftest
         run: node routing-selftest.js
       - name: Bootstrap bridge selftest
