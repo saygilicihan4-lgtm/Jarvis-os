@@ -54,6 +54,13 @@ const status=creator.ffmpegStatus(workspace);
 assert.strictEqual(status.ok,true,'Creator engine must find ffmpeg');
 assert.ok(status.ffprobe,'Creator engine must find ffprobe');
 
+const movingHook=creator.findHookMotionWindow(a,ffmpeg,{windowSeconds:0.95,maxOffsetSeconds:3,stepSeconds:0.5,fps:8});
+const staticHook=creator.findHookMotionWindow(b,ffmpeg,{windowSeconds:0.95,maxOffsetSeconds:1,stepSeconds:0.5,fps:8});
+assert.strictEqual(movingHook.ok,true,'moving synthetic clip must pass hook motion evidence');
+assert.strictEqual(movingHook.offset,0,'moving synthetic clip should be usable immediately');
+assert.ok(movingHook.sampleCount>=3&&movingHook.meanDifference>=0.12&&movingHook.peakDifference>=0.25,'moving hook frame-difference evidence missing');
+assert.strictEqual(staticHook.ok,false,'static synthetic clip must fail real hook motion evidence');
+
 const out=creator.renderShort({
   workspace,
   name:'render-smoke',
@@ -75,6 +82,8 @@ assert.ok(out.sceneCount>=4,'Short smoke render must use paced multi-scene editi
 assert.ok(out.visualEdit&&out.visualEdit.ok===true,'visual edit gate must pass');
 assert.ok(out.visualEdit.hookSeconds>=0.75&&out.visualEdit.hookSeconds<=1.05,'real render micro-hook timing evidence missing');
 assert.strictEqual(out.visualEdit.hookAssetIndex,0,'real render hook must use first prioritized asset');
+assert.ok(out.visualEdit.hookMotion&&out.visualEdit.hookMotion.ok===true,'real render hook motion evidence missing');
+assert.strictEqual(out.visualEdit.hookMotion.offset,0,'real render moving hook should start at source offset 0');
 
 const probe=creator.probeRenderedShort(out.output,status.ffprobe);
 assert.strictEqual(probe.ok,true,'rendered MP4 must pass Creator quality gate');
@@ -94,6 +103,7 @@ assert.ok(Array.isArray(meta.storyboard)&&meta.storyboard.length>=4,'storyboard 
 assert.strictEqual(meta.storyboard[0].hook,true,'stored storyboard first scene must be the micro-hook');
 assert.ok(meta.storyboard[0].duration>=0.75&&meta.storyboard[0].duration<=1.05,'stored storyboard micro-hook duration invalid');
 assert.strictEqual(meta.storyboard[0].sourceOffset,0,'stored hook must begin at source offset 0');
+assert.ok(meta.visualEdit&&meta.visualEdit.hookMotion&&meta.visualEdit.hookMotion.ok===true,'stored hook motion evidence missing');
 assert.strictEqual(meta.profile.hookTarget,'0.75-1.05s','stored profile micro-hook target missing');
 assert.strictEqual(meta.quality.ok,true,'stored quality evidence missing');
 

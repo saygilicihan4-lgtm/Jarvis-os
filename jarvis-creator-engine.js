@@ -428,6 +428,68 @@ function fitNarrationRatePercent(measuredSeconds,targetSeconds=600,currentRatePe
   const next=(desiredFactor-1)*100;
   return Math.max(-30,Math.min(25,Math.round(next)));
 }
+function probeHookMotion(file,ffmpeg,{start=0,seconds=0.95,fps=8}={}){
+  if(!ffmpeg)return{ok:false,code:'FFMPEG_MISSING',start:Number(start)||0};
+  if(!file||!fs.existsSync(file))return{ok:false,code:'CREATOR_HOOK_ASSET_MISSING',start:Number(start)||0};
+  const at=Math.max(0,Number(start)||0);
+  const span=Math.max(0.6,Math.min(1.2,Number(seconds)||0.95));
+  const rate=Math.max(4,Math.min(12,Math.round(Number(fps)||8)));
+  try{
+    const raw=execFile(ffmpeg,[
+      '-hide_banner','-loglevel','error',
+      '-ss',at.toFixed(3),'-i',file,
+      '-t',span.toFixed(3),
+      '-an',
+      '-vf','fps='+rate+',scale=64:64:flags=area,format=gray,tblend=all_mode=difference,signalstats,metadata=mode=print:key=lavfi.signalstats.YAVG:file=-',
+      '-f','null','-'
+    ],{timeout:20000,maxBuffer:1024*1024*2});
+    const diffs=String(raw||'').split(/\r?\n/)
+      .map(x=>x.trim())
+      .filter(x=>x.startsWith('lavfi.signalstats.YAVG='))
+      .map(x=>Number(x.split('=').pop()))
+      .filter(x=>Number.isFinite(x)&&x>=0);
+    const sampleCount=diffs.length;
+    const meanDifference=sampleCount?diffs.reduce((a,b)=>a+b,0)/sampleCount:0;
+    const peakDifference=sampleCount?Math.max(...diffs):0;
+    const activeFrames=diffs.filter(x=>x>=0.12).length;
+    const activeRatio=sampleCount?activeFrames/sampleCount:0;
+    const ok=sampleCount>=3&&meanDifference>=0.12&&peakDifference>=0.25&&activeRatio>=0.35;
+    return{
+      ok,
+      code:ok?'CREATOR_HOOK_MOTION_PASS':'CREATOR_HOOK_MOTION_LOW',
+      start:Number(at.toFixed(3)),
+      seconds:Number(span.toFixed(3)),
+      fps:rate,
+      sampleCount,
+      meanDifference:Number(meanDifference.toFixed(4)),
+      peakDifference:Number(peakDifference.toFixed(4)),
+      activeFrames,
+      activeRatio:Number(activeRatio.toFixed(3))
+    };
+  }catch(e){
+    return{ok:false,code:'CREATOR_HOOK_MOTION_PROBE_FAILED',start:Number(at.toFixed(3)),message:String(e.message||e).slice(0,300)};
+  }
+}
+function findHookMotionWindow(file,ffmpeg,{windowSeconds=0.95,maxOffsetSeconds=3,stepSeconds=0.5,fps=8}={}){
+  const maxOffset=Math.max(0,Math.min(6,Number(maxOffsetSeconds)||3));
+  const step=Math.max(0.25,Math.min(1,Number(stepSeconds)||0.5));
+  const attempts=[];
+  let best=null;
+  for(let offset=0;offset<=maxOffset+0.001;offset+=step){
+    const probe=probeHookMotion(file,ffmpeg,{start:offset,seconds:windowSeconds,fps});
+    attempts.push(probe);
+    if(!best||Number(probe.meanDifference||0)>Number(best.meanDifference||0))best=probe;
+    if(probe.ok)return{...probe,offset:Number(offset.toFixed(3)),attempts:attempts.length};
+  }
+  return{
+    ...(best||{ok:false,code:'CREATOR_HOOK_MOTION_LOW',meanDifference:0,peakDifference:0,activeFrames:0,activeRatio:0,sampleCount:0}),
+    ok:false,
+    code:'CREATOR_HOOK_MOTION_NOT_FOUND',
+    offset:Number(best&&best.start||0),
+    attempts:attempts.length
+  };
+}
+
 function probeRenderedShort(file,ffprobe){
   if(!ffprobe)return{ok:false,code:'FFPROBE_MISSING',message:'Rendered Shorts kalite doğrulaması için FFprobe gerekli.'};
   if(!file||!fs.existsSync(file))return{ok:false,code:'CREATOR_OUTPUT_MISSING',message:'Rendered MP4 bulunamadı.'};
@@ -661,20 +723,31 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
   const assets=explicitAssets?resolveAssetSelection(workspace,assetFiles,5):selectAssets(workspace,base,5);
   const transition=assets.length?0.18:0;
   const storyboard=buildShortStoryboard(assets,duration,transition,3.2,7,0.9);
+  const hookMotion=assets.length
+    ?findHookMotionWindow(assets[0],status.ffmpeg,{windowSeconds:0.95,maxOffsetSeconds:3,stepSeconds:0.5,fps:8})
+    :{ok:true,code:'CREATOR_HOOK_PROCEDURAL',offset:0,attempts:0,changeRatio:1,sampleCount:0,uniqueFrames:0};
+  if(assets.length&&hookMotion.ok&&storyboard[0])storyboard[0].sourceOffset=Number(hookMotion.offset||0);
   const maxSceneDuration=storyboard.length?Math.max(...storyboard.map(x=>Number(x.duration||0))):0;
   const hookScene=storyboard[0]||null;
   const hookSeconds=Number(hookScene&&hookScene.duration||0);
   const visualEdit={
-    ok:!assets.length||(storyboard.length>=Math.min(4,Math.ceil(duration/4.2))&&maxSceneDuration<=4.5&&hookSeconds>=0.75&&hookSeconds<=1.05&&hookScene&&hookScene.hook===true),
+    ok:!assets.length||(storyboard.length>=Math.min(4,Math.ceil(duration/4.2))&&maxSceneDuration<=4.5&&hookSeconds>=0.75&&hookSeconds<=1.05&&hookScene&&hookScene.hook===true&&hookMotion.ok===true),
     sceneCount:storyboard.length,
     distinctAssets:assets.length,
     averageSceneSeconds:storyboard.length?Number((duration/storyboard.length).toFixed(3)):0,
     maxSceneSeconds:Number(maxSceneDuration.toFixed(3)),
     hookSeconds:Number(hookSeconds.toFixed(3)),
     hookAssetIndex:hookScene?Number(hookScene.assetIndex):-1,
+    hookMotion,
     transitions:[...new Set(storyboard.map(x=>x.transition).filter(Boolean))],
     motion:assets.length?'dynamic-pan-crop':'procedural'
   };
+  if(assets.length&&!hookMotion.ok){
+    const e=new Error('Creator Shorts hook gerçek hareket doğrulaması başarısız.');
+    e.code='CREATOR_SHORT_HOOK_MOTION_MISSING';
+    e.visualEdit=visualEdit;
+    throw e;
+  }
   if(assets.length&&!visualEdit.ok){
     const e=new Error('Creator Shorts edit rhythm quality gate failed.');
     e.code='CREATOR_SHORT_EDIT_RHYTHM_FAILED';
@@ -1021,6 +1094,8 @@ module.exports={
   fitNarrationRatePercent,
   probeRenderedShort,
   probeRenderedLongform,
+  probeHookMotion,
+  findHookMotionWindow,
   listAssets,
   resolveAssetSelection,
   inspectAsset,
