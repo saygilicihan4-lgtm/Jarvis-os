@@ -43,7 +43,7 @@ const UPDATE_STATE_FILE=path.join(MEMORY_DIR,'update-state.json');
 const WORKER_VERSION='2.102.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
 CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1','adaptive_model_router_v1','deep_model_fallback_v1','dynamic_chunk_prosody_v1','natural_pause_timing_v1','adaptive_turn_pacing_v1','latency_learning_v1','full_duplex_interrupt_v1','cancellable_agent_v1','adaptive_voice_profile_v1','spoken_voice_preference_v1','speaker_echo_rejection_v1','social_dialogue_v1','response_variation_v1','contextual_followup_v1','dialogue_feedback_learning_v1','social_preference_adaptation_v1','dynamic_wake_ack_v1','wake_ack_turn_timing_v1','auto_quality_escalation_v1','weak_response_escalation_v1','repair_quality_escalation_v1','social_momentum_v1','elliptical_turn_resolution_v1','conversation_cadence_v1','brevity_mirroring_v1','adaptive_response_length_v1','interruption_continuity_v1','spoken_resume_v1','partial_stream_resume_v1');
-CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1','mission_auto_resume_v1','mission_health_v1','pc_acceptance_snapshot_v1','silent_startup_diagnostics_v1','pc_acceptance_hardened_v1','bootstrap_migration_v6','mission_fair_scheduler_v1','pc_self_repair_v1','creator_multiscene_v2','creator_burned_captions_v1','cloud_mission_telemetry_v1','creator_short_mission_v1','shopify_product_mission_v1','developer_project_mission_v1','approval_gate_v1','shopify_publish_approval_v1','browser_form_mission_v1','browser_form_prepare_v1','browser_click_approval_v1','youtube_publish_approval_v1','youtube_publish_receipt_v1','developer_patch_mission_v1','developer_patch_rollback_v1','pc_safe_mission_v1','pc_safe_action_catalog_v1','pc_mission_resume_v1','workspace_file_mission_v1','workspace_file_hash_guard_v1','workspace_file_no_overwrite_v1','mission_control_v1','mission_pause_v1','mission_cancel_v1','creator_asset_mission_v1','creator_asset_probe_v1','creator_asset_hash_dedupe_v1','creator_storyboard_v1','creator_explicit_assets_v1','creator_render_mission_bind_v1','creator_batch_mission_v1','creator_batch_child_dedupe_v1','creator_batch_youtube_draft_v1','mission_cooperative_yield_v1','creator_batch_storyboard_lock_v1','creator_batch_render_binding_v1','creator_quality_gate_v1','creator_quality_recovery_v1','creator_longform_mission_v1','creator_longform_quality_v1','creator_longform_recovery_v1','creator_multilingual_voice_v1','creator_daily_longform_v1','creator_daily_idempotency_v1');
+CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1','mission_auto_resume_v1','mission_health_v1','pc_acceptance_snapshot_v1','silent_startup_diagnostics_v1','pc_acceptance_hardened_v1','bootstrap_migration_v6','mission_fair_scheduler_v1','pc_self_repair_v1','creator_multiscene_v2','creator_burned_captions_v1','cloud_mission_telemetry_v1','creator_short_mission_v1','shopify_product_mission_v1','developer_project_mission_v1','approval_gate_v1','shopify_publish_approval_v1','browser_form_mission_v1','browser_form_prepare_v1','browser_click_approval_v1','youtube_publish_approval_v1','youtube_publish_receipt_v1','developer_patch_mission_v1','developer_patch_rollback_v1','pc_safe_mission_v1','pc_safe_action_catalog_v1','pc_mission_resume_v1','workspace_file_mission_v1','workspace_file_hash_guard_v1','workspace_file_no_overwrite_v1','mission_control_v1','mission_pause_v1','mission_cancel_v1','creator_asset_mission_v1','creator_asset_probe_v1','creator_asset_hash_dedupe_v1','creator_storyboard_v1','creator_explicit_assets_v1','creator_render_mission_bind_v1','creator_batch_mission_v1','creator_batch_child_dedupe_v1','creator_batch_youtube_draft_v1','mission_cooperative_yield_v1','creator_batch_storyboard_lock_v1','creator_batch_render_binding_v1','creator_quality_gate_v1','creator_quality_recovery_v1','creator_longform_mission_v1','creator_longform_quality_v1','creator_longform_recovery_v1','creator_multilingual_voice_v1','creator_daily_longform_v1','creator_daily_idempotency_v1','creator_longform_duration_fit_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -763,11 +763,23 @@ function normalizeCreatorVoiceName(value){
   if(!/^[a-z]{2,3}-[A-Z]{2}-[A-Za-z0-9]+Neural$/.test(voice))throw new Error('Geçersiz Creator Neural voice: '+voice);
   return voice;
 }
-async function renderCreatorVoiceFile(text,name='creator-voice',voice=CREATOR_TTS_VOICE){
+function normalizeCreatorTtsRate(value=CREATOR_TTS_RATE){
+  const raw=String(value==null?CREATOR_TTS_RATE:value).trim();
+  const m=raw.match(/^([+-]?)(\d{1,2})%$/);
+  if(!m)throw new Error('Geçersiz Creator TTS rate: '+raw);
+  const signed=Number((m[1]==='-'?'-':'')+m[2]);
+  const bounded=Math.max(-30,Math.min(25,signed));
+  return(bounded>=0?'+':'')+String(bounded)+'%';
+}
+function creatorTtsRateNumber(value=CREATOR_TTS_RATE){
+  return Number(normalizeCreatorTtsRate(value).replace('%',''));
+}
+async function renderCreatorVoiceFile(text,name='creator-voice',voice=CREATOR_TTS_VOICE,rate=CREATOR_TTS_RATE){
   if(!TTS_ENABLED)throw new Error('local TTS disabled');
   const clean=String(text||'').replace(/\s+/g,' ').trim().slice(0,1600);
   if(!clean)throw new Error('text required');
   const selectedVoice=normalizeCreatorVoiceName(voice);
+  const selectedRate=normalizeCreatorTtsRate(rate);
   const dir=path.join(WORKSPACE,'creator-audio');
   fs.mkdirSync(dir,{recursive:true});
   const safeName=String(name||'creator-voice').replace(/[^A-Za-z0-9._-]/g,'-').replace(/-+/g,'-').slice(0,80)||'creator-voice';
@@ -776,7 +788,7 @@ async function renderCreatorVoiceFile(text,name='creator-voice',voice=CREATOR_TT
   await runHidden('py',[
     '-m','edge_tts',
     '--voice',selectedVoice,
-    '--rate='+CREATOR_TTS_RATE,
+    '--rate='+selectedRate,
     '--pitch='+CREATOR_TTS_PITCH,
     '--volume='+CREATOR_TTS_VOLUME,
     '--text',clean,
@@ -784,6 +796,19 @@ async function renderCreatorVoiceFile(text,name='creator-voice',voice=CREATOR_TT
   ],60000);
   if(!fs.existsSync(out)||fs.statSync(out).size<512)throw new Error('creator audio render failed');
   return out;
+}
+function creatorAudioDurationSeconds(file){
+  const status=getCreatorEngine().ffmpegStatus(WORKSPACE);
+  if(!status.ffprobe)throw new Error('FFprobe long-form narration ölçümü için gerekli.');
+  const out=childProcess.execFileSync(status.ffprobe,[
+    '-v','error',
+    '-show_entries','format=duration',
+    '-of','default=noprint_wrappers=1:nokey=1',
+    file
+  ],{encoding:'utf8',windowsHide:true,timeout:20000,maxBuffer:128*1024}).trim();
+  const seconds=Number(out);
+  if(!Number.isFinite(seconds)||seconds<=0)throw new Error('Long-form narration duration ölçülemedi.');
+  return seconds;
 }
 function splitCreatorNarrationChunks(text,maxChars=1350){
   const clean=String(text||'').replace(/\s+/g,' ').trim();
@@ -827,24 +852,50 @@ async function renderCreatorLongformVoiceFile(text,name='creator-longform-voice'
   fs.mkdirSync(dir,{recursive:true});
   const safeName=String(name||'creator-longform-voice').replace(/[^A-Za-z0-9._-]/g,'-').replace(/-+/g,'-').slice(0,70)||'creator-longform-voice';
   const out=path.join(dir,safeName+'.mp3');
-  const parts=[];
-  try{
-    for(let i=0;i<chunks.length;i++){
-      const part=await renderCreatorVoiceFile(chunks[i],safeName+'-part-'+String(i+1).padStart(2,'0'),selectedVoice);
-      parts.push(part);
+  const status=getCreatorEngine().ffmpegStatus(WORKSPACE);
+  if(!status.ffmpeg||!status.ffprobe)throw new Error('FFmpeg + FFprobe long-form narration fit için gerekli.');
+
+  let rate=normalizeCreatorTtsRate(CREATOR_TTS_RATE);
+  let last=null;
+  for(let attempt=1;attempt<=3;attempt++){
+    const parts=[];
+    try{
+      for(let i=0;i<chunks.length;i++){
+        const part=await renderCreatorVoiceFile(
+          chunks[i],
+          safeName+'-fit-'+attempt+'-part-'+String(i+1).padStart(2,'0'),
+          selectedVoice,
+          rate
+        );
+        parts.push(part);
+      }
+      try{if(fs.existsSync(out))fs.unlinkSync(out)}catch(_){}
+      const args=['-y','-hide_banner','-loglevel','error'];
+      for(const part of parts)args.push('-i',part);
+      const labels=parts.map((_,i)=>'['+i+':a]').join('');
+      args.push('-filter_complex',labels+'concat=n='+parts.length+':v=0:a=1[aout]','-map','[aout]','-c:a','libmp3lame','-b:a','160k',out);
+      await runHidden(status.ffmpeg,args,20*60*1000);
+      if(!fs.existsSync(out)||fs.statSync(out).size<4096)throw new Error('creator long-form audio render failed');
+
+      const duration=creatorAudioDurationSeconds(out);
+      last={path:out,duration:Number(duration.toFixed(3)),rate,attempts:attempt};
+      if(duration>=570&&duration<=630)return last;
+
+      const nextPercent=getCreatorEngine().fitNarrationRatePercent(duration,600,creatorTtsRateNumber(rate));
+      const nextRate=normalizeCreatorTtsRate((nextPercent>=0?'+':'')+nextPercent+'%');
+      if(nextRate===rate)break;
+      rate=nextRate;
+    }finally{
+      for(const part of parts){try{if(part!==out&&fs.existsSync(part))fs.unlinkSync(part)}catch(_){}}
     }
-    const status=getCreatorEngine().ffmpegStatus(WORKSPACE);
-    if(!status.ffmpeg)throw new Error('FFmpeg long-form narration concat için gerekli.');
-    const args=['-y','-hide_banner','-loglevel','error'];
-    for(const part of parts)args.push('-i',part);
-    const labels=parts.map((_,i)=>'['+i+':a]').join('');
-    args.push('-filter_complex',labels+'concat=n='+parts.length+':v=0:a=1[aout]','-map','[aout]','-c:a','libmp3lame','-b:a','160k',out);
-    await runHidden(status.ffmpeg,args,20*60*1000);
-    if(!fs.existsSync(out)||fs.statSync(out).size<4096)throw new Error('creator long-form audio render failed');
-    return out;
-  }finally{
-    for(const part of parts){try{if(part!==out&&fs.existsSync(part))fs.unlinkSync(part)}catch(_){}}
   }
+
+  if(last&&last.duration>=540&&last.duration<=660)return last;
+  const e=new Error('Long-form anlatım süresi otomatik ayara rağmen 9-11 dakika aralığına getirilemedi: '+Number(last&&last.duration||0).toFixed(1)+' sn.');
+  e.code='LONGFORM_VOICE_DURATION_FIT_FAILED';
+  e.duration=Number(last&&last.duration||0);
+  e.rate=String(last&&last.rate||rate);
+  throw e;
 }
 function queueJarvisSpeech(text,tone='balanced'){
   if(!TTS_ENABLED)return;
@@ -5868,7 +5919,7 @@ async function runDurableMission(id){
             return mission;
           }
         }
-        const voice=await renderCreatorLongformVoiceFile(
+        const voiceFit=await renderCreatorLongformVoiceFile(
           String(input.script||''),
           String(input.campaignName||'longform')+'-voice',
           String(input.creatorVoice||CREATOR_TTS_VOICE)
@@ -5877,7 +5928,7 @@ async function runDurableMission(id){
           workspace:WORKSPACE,
           name:String(input.campaignName||'longform'),
           script:String(input.script||''),
-          voicePath:voice,
+          voicePath:voiceFit.path,
           assetFiles:selected.map(x=>x.path),
           assetHashes:selected.map(x=>x.sha256),
           missionId:id
@@ -5890,7 +5941,10 @@ async function runDurableMission(id){
           quality:out.quality,
           assets:out.assets.map(x=>path.relative(WORKSPACE,x).replace(/\\/g,'/')),
           assetSelection:selected.length?'explicit':'automatic',
-          creatorVoice:String(input.creatorVoice||CREATOR_TTS_VOICE)
+          creatorVoice:String(input.creatorVoice||CREATOR_TTS_VOICE),
+          voiceDuration:voiceFit.duration,
+          voiceRate:voiceFit.rate,
+          voiceFitAttempts:voiceFit.attempts
         }});
         continue;
       }
@@ -6428,7 +6482,7 @@ async function buildPcAcceptanceSnapshot(){
   try{commerce=await getCommerceEngine().status(WORKSPACE)}catch(e){commerce={ok:false,connected:false,error:String(e.message||e).slice(0,240)}}
   try{youtube=await getYoutubeStudio().status(getBrowserOperator(),WORKSPACE)}catch(e){youtube={ok:false,running:false,loggedIn:false,error:String(e.message||e).slice(0,240)}}
   const missions=missionHealthSnapshot();
-  const checks={workerVersion:WORKER_VERSION==='2.102.0',creatorQualityGateReady:CAPS.includes('creator_quality_gate_v1')&&CAPS.includes('creator_quality_recovery_v1'),creatorLongformReady:CAPS.includes('creator_longform_mission_v1')&&CAPS.includes('creator_longform_quality_v1')&&CAPS.includes('creator_longform_recovery_v1')&&CAPS.includes('creator_multilingual_voice_v1')&&CAPS.includes('creator_daily_longform_v1')&&CAPS.includes('creator_daily_idempotency_v1'),creatorBatchMissionReady:CAPS.includes('creator_batch_mission_v1')&&CAPS.includes('creator_batch_child_dedupe_v1')&&CAPS.includes('creator_batch_youtube_draft_v1')&&CAPS.includes('mission_cooperative_yield_v1')&&CAPS.includes('creator_batch_storyboard_lock_v1')&&CAPS.includes('creator_batch_render_binding_v1'),creatorAssetMissionReady:CAPS.includes('creator_asset_mission_v1')&&CAPS.includes('creator_asset_probe_v1')&&CAPS.includes('creator_asset_hash_dedupe_v1'),creatorStoryboardReady:CAPS.includes('creator_storyboard_v1')&&CAPS.includes('creator_explicit_assets_v1')&&CAPS.includes('creator_render_mission_bind_v1'),pcMissionReady:CAPS.includes('pc_safe_mission_v1')&&CAPS.includes('pc_safe_action_catalog_v1'),workspaceFileMissionReady:CAPS.includes('workspace_file_mission_v1')&&CAPS.includes('workspace_file_hash_guard_v1')&&CAPS.includes('workspace_file_no_overwrite_v1'),missionControlReady:CAPS.includes('mission_control_v1')&&CAPS.includes('mission_pause_v1')&&CAPS.includes('mission_cancel_v1'),missionRuntime:!!(missions&&missions.ok&&missions.autoResume),creatorEngineLoaded:!!(creator&&!creator.error),browserOperatorLoaded:!!(browser&&!browser.error),commerceEngineLoaded:!!(commerce&&!commerce.error),youtubeStudioLoaded:!!(youtube&&!youtube.error),silentStartup:process.platform==='win32'?startup.silentOk:true,autoUpdateReady:!!(startup.selfUpdate&&startup.selfUpdate.configured)};
+  const checks={workerVersion:WORKER_VERSION==='2.102.0',creatorQualityGateReady:CAPS.includes('creator_quality_gate_v1')&&CAPS.includes('creator_quality_recovery_v1'),creatorLongformReady:CAPS.includes('creator_longform_mission_v1')&&CAPS.includes('creator_longform_quality_v1')&&CAPS.includes('creator_longform_recovery_v1')&&CAPS.includes('creator_multilingual_voice_v1')&&CAPS.includes('creator_daily_longform_v1')&&CAPS.includes('creator_daily_idempotency_v1')&&CAPS.includes('creator_longform_duration_fit_v1'),creatorBatchMissionReady:CAPS.includes('creator_batch_mission_v1')&&CAPS.includes('creator_batch_child_dedupe_v1')&&CAPS.includes('creator_batch_youtube_draft_v1')&&CAPS.includes('mission_cooperative_yield_v1')&&CAPS.includes('creator_batch_storyboard_lock_v1')&&CAPS.includes('creator_batch_render_binding_v1'),creatorAssetMissionReady:CAPS.includes('creator_asset_mission_v1')&&CAPS.includes('creator_asset_probe_v1')&&CAPS.includes('creator_asset_hash_dedupe_v1'),creatorStoryboardReady:CAPS.includes('creator_storyboard_v1')&&CAPS.includes('creator_explicit_assets_v1')&&CAPS.includes('creator_render_mission_bind_v1'),pcMissionReady:CAPS.includes('pc_safe_mission_v1')&&CAPS.includes('pc_safe_action_catalog_v1'),workspaceFileMissionReady:CAPS.includes('workspace_file_mission_v1')&&CAPS.includes('workspace_file_hash_guard_v1')&&CAPS.includes('workspace_file_no_overwrite_v1'),missionControlReady:CAPS.includes('mission_control_v1')&&CAPS.includes('mission_pause_v1')&&CAPS.includes('mission_cancel_v1'),missionRuntime:!!(missions&&missions.ok&&missions.autoResume),creatorEngineLoaded:!!(creator&&!creator.error),browserOperatorLoaded:!!(browser&&!browser.error),commerceEngineLoaded:!!(commerce&&!commerce.error),youtubeStudioLoaded:!!(youtube&&!youtube.error),silentStartup:process.platform==='win32'?startup.silentOk:true,autoUpdateReady:!!(startup.selfUpdate&&startup.selfUpdate.configured)};
   const corePass=Object.values(checks).every(Boolean);
   const accountSetup={shopifyConnected:!!(commerce&&commerce.ok&&commerce.connected),youtubeLoggedIn:!!(youtube&&youtube.ok&&youtube.loggedIn)};
   const snapshot={ok:true,generatedAt,worker:{version:WORKER_VERSION,name:NAME,platform:process.platform,arch:process.arch},checks,corePass,startup,update:startup.selfUpdate,creator:{ready:!!(creator&&creator.ok),assets:Number(creator&&creator.assets||0),outputDir:creator&&creator.outputDir||null,installable:!!(creator&&creator.installable)},browser:{running:!!(browser&&browser.running),browser:browser&&browser.browser||null,tabs:Array.isArray(browser&&browser.tabs)?browser.tabs.length:0,profile:browser&&browser.profile||null},commerce:{connected:accountSetup.shopifyConnected,shop:commerce&&commerce.shop||null,apiVersion:commerce&&commerce.apiVersion||null,message:String(commerce&&commerce.message||'').slice(0,300)},youtube:{running:!!(youtube&&youtube.running),loggedIn:accountSetup.youtubeLoggedIn,title:youtube&&youtube.title||null,url:youtube&&youtube.url||null,message:String(youtube&&youtube.message||'').slice(0,300)},missions,accountSetup};
