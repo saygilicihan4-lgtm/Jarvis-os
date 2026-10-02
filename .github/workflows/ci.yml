@@ -232,6 +232,8 @@ jobs:
         run: node bluetooth-named-audio-selftest.js
       - name: Windows audio endpoint selftest
         run: node windows-audio-endpoint-selftest.js
+      - name: Core Audio switch selftest
+        run: node coreaudio-switch-selftest.js
       - name: Safe PC mission selftest
         run: node pc-mission-selftest.js
       - name: Workspace file engine selftest
