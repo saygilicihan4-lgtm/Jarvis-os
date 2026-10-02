@@ -6,6 +6,8 @@ const server=fs.readFileSync('./server.js','utf8');
 
 assert.ok(worker.includes("const WORKER_VERSION='2.83.0'"),'Worker 2.83.0 required');
 assert.ok(worker.includes("name:'pc_self_repair'"),'native self-repair tool missing');
+assert.ok(worker.includes('jarvis kendini düzelt'),'deterministic self-repair command missing');
+assert.ok(worker.includes('jarvis testi'),'deterministic acceptance command missing');
 assert.ok(worker.includes('async function repairLocalRuntime()'),'self-repair function missing');
 assert.ok(worker.includes("syncRepoRuntimeFile('"),'trusted runtime sync path missing');
 assert.ok(worker.includes("'silent_startup_registration'"),'silent startup repair missing');
