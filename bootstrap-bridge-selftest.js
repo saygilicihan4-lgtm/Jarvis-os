@@ -13,7 +13,7 @@ assert.ok(worker.includes('bootstrap_migration_v6'),'bootstrap v6 capability mis
 assert.ok(worker.includes('function bootstrapRuntimeUpgrade()'),'bootstrap migration function missing');
 assert.ok(worker.includes("['jarvis-self-update.ps1',\"UPDATER_VERSION='5.0'\"]"),'updater bootstrap missing');
 assert.ok(worker.includes("['jarvis-update-manifest.json','\"schema\": 1']"),'manifest bootstrap missing');
-assert.ok(worker.includes("['jarvis-creator-engine.js',\"ENGINE_VERSION='1.0'\"]"),'creator engine bootstrap missing');
+assert.ok(worker.includes("['jarvis-creator-engine.js',\"ENGINE_VERSION='1.1'\"]"),'creator engine bootstrap missing');
 assert.ok(worker.includes("['jarvis-browser-operator.js',\"BROWSER_OPERATOR_VERSION='1.0'\"]"),'browser operator bootstrap missing');
 assert.ok(worker.includes("['jarvis-commerce-engine.js',\"ENGINE_VERSION='1.0'\"]"),'commerce engine bootstrap missing');
 assert.ok(worker.includes("['jarvis-shopify-connect.ps1','SHOPIFY SECURE CONNECT']"),'Shopify connector bootstrap missing');
