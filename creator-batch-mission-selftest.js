@@ -3,7 +3,7 @@ const assert=require('assert');
 
 const worker=fs.readFileSync('./worker.js','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.101.0'"),'Worker 2.101.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.102.0'"),'Worker 2.102.0 required');
 assert.ok(worker.includes("'creator_batch_mission_v1'"),'creator batch mission capability missing');
 assert.ok(worker.includes("'creator_batch_child_dedupe_v1'"),'creator batch child dedupe capability missing');
 assert.ok(worker.includes("'creator_batch_youtube_draft_v1'"),'creator batch YouTube draft capability missing');

@@ -40,10 +40,10 @@ const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
 const UPDATE_STATE_FILE=path.join(MEMORY_DIR,'update-state.json');
-const WORKER_VERSION='2.101.0';
+const WORKER_VERSION='2.102.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
 CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1','adaptive_model_router_v1','deep_model_fallback_v1','dynamic_chunk_prosody_v1','natural_pause_timing_v1','adaptive_turn_pacing_v1','latency_learning_v1','full_duplex_interrupt_v1','cancellable_agent_v1','adaptive_voice_profile_v1','spoken_voice_preference_v1','speaker_echo_rejection_v1','social_dialogue_v1','response_variation_v1','contextual_followup_v1','dialogue_feedback_learning_v1','social_preference_adaptation_v1','dynamic_wake_ack_v1','wake_ack_turn_timing_v1','auto_quality_escalation_v1','weak_response_escalation_v1','repair_quality_escalation_v1','social_momentum_v1','elliptical_turn_resolution_v1','conversation_cadence_v1','brevity_mirroring_v1','adaptive_response_length_v1','interruption_continuity_v1','spoken_resume_v1','partial_stream_resume_v1');
-CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1','mission_auto_resume_v1','mission_health_v1','pc_acceptance_snapshot_v1','silent_startup_diagnostics_v1','pc_acceptance_hardened_v1','bootstrap_migration_v6','mission_fair_scheduler_v1','pc_self_repair_v1','creator_multiscene_v2','creator_burned_captions_v1','cloud_mission_telemetry_v1','creator_short_mission_v1','shopify_product_mission_v1','developer_project_mission_v1','approval_gate_v1','shopify_publish_approval_v1','browser_form_mission_v1','browser_form_prepare_v1','browser_click_approval_v1','youtube_publish_approval_v1','youtube_publish_receipt_v1','developer_patch_mission_v1','developer_patch_rollback_v1','pc_safe_mission_v1','pc_safe_action_catalog_v1','pc_mission_resume_v1','workspace_file_mission_v1','workspace_file_hash_guard_v1','workspace_file_no_overwrite_v1','mission_control_v1','mission_pause_v1','mission_cancel_v1','creator_asset_mission_v1','creator_asset_probe_v1','creator_asset_hash_dedupe_v1','creator_storyboard_v1','creator_explicit_assets_v1','creator_render_mission_bind_v1','creator_batch_mission_v1','creator_batch_child_dedupe_v1','creator_batch_youtube_draft_v1','mission_cooperative_yield_v1','creator_batch_storyboard_lock_v1','creator_batch_render_binding_v1','creator_quality_gate_v1','creator_quality_recovery_v1');
+CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1','mission_auto_resume_v1','mission_health_v1','pc_acceptance_snapshot_v1','silent_startup_diagnostics_v1','pc_acceptance_hardened_v1','bootstrap_migration_v6','mission_fair_scheduler_v1','pc_self_repair_v1','creator_multiscene_v2','creator_burned_captions_v1','cloud_mission_telemetry_v1','creator_short_mission_v1','shopify_product_mission_v1','developer_project_mission_v1','approval_gate_v1','shopify_publish_approval_v1','browser_form_mission_v1','browser_form_prepare_v1','browser_click_approval_v1','youtube_publish_approval_v1','youtube_publish_receipt_v1','developer_patch_mission_v1','developer_patch_rollback_v1','pc_safe_mission_v1','pc_safe_action_catalog_v1','pc_mission_resume_v1','workspace_file_mission_v1','workspace_file_hash_guard_v1','workspace_file_no_overwrite_v1','mission_control_v1','mission_pause_v1','mission_cancel_v1','creator_asset_mission_v1','creator_asset_probe_v1','creator_asset_hash_dedupe_v1','creator_storyboard_v1','creator_explicit_assets_v1','creator_render_mission_bind_v1','creator_batch_mission_v1','creator_batch_child_dedupe_v1','creator_batch_youtube_draft_v1','mission_cooperative_yield_v1','creator_batch_storyboard_lock_v1','creator_batch_render_binding_v1','creator_quality_gate_v1','creator_quality_recovery_v1','creator_longform_mission_v1','creator_longform_quality_v1','creator_longform_recovery_v1','creator_multilingual_voice_v1','creator_daily_longform_v1','creator_daily_idempotency_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -77,6 +77,7 @@ const LOCAL_BRAIN_PERSONA_FILE=path.join(MEMORY_DIR,'brain-persona.json');
 const SPEECH_LEXICON_FILE=path.join(MEMORY_DIR,'speech-lexicon.json');
 const VOICE_PREFS_FILE=path.join(MEMORY_DIR,'voice-preferences.json');
 const DIALOGUE_FEEDBACK_FILE=path.join(MEMORY_DIR,'dialogue-feedback.json');
+const CREATOR_DAILY_PLAN_FILE=path.join(MEMORY_DIR,'creator-daily-longform.json');
 const TEST_MODE=process.env.JARVIS_TEST_MODE==='1';
 const FORCE_LOCAL_BRIDGE=process.env.JARVIS_LOCAL_BRIDGE_FORCE==='1';
 const LOCAL_STT_PORT=Number(process.env.JARVIS_STT_PORT||8768);
@@ -757,17 +758,24 @@ async function renderJarvisMp3Base64(text,tone='balanced'){
     try{if(fs.existsSync(mp3))fs.unlinkSync(mp3)}catch(e){}
   }
 }
-async function renderCreatorVoiceFile(text,name='creator-voice'){
+function normalizeCreatorVoiceName(value){
+  const voice=String(value||CREATOR_TTS_VOICE).trim().slice(0,96);
+  if(!/^[a-z]{2,3}-[A-Z]{2}-[A-Za-z0-9]+Neural$/.test(voice))throw new Error('Geçersiz Creator Neural voice: '+voice);
+  return voice;
+}
+async function renderCreatorVoiceFile(text,name='creator-voice',voice=CREATOR_TTS_VOICE){
   if(!TTS_ENABLED)throw new Error('local TTS disabled');
   const clean=String(text||'').replace(/\s+/g,' ').trim().slice(0,1600);
   if(!clean)throw new Error('text required');
+  const selectedVoice=normalizeCreatorVoiceName(voice);
   const dir=path.join(WORKSPACE,'creator-audio');
   fs.mkdirSync(dir,{recursive:true});
   const safeName=String(name||'creator-voice').replace(/[^A-Za-z0-9._-]/g,'-').replace(/-+/g,'-').slice(0,80)||'creator-voice';
   const out=path.join(dir,safeName+(safeName.toLowerCase().endsWith('.mp3')?'':'.mp3'));
+  try{if(fs.existsSync(out))fs.unlinkSync(out)}catch(_){}
   await runHidden('py',[
     '-m','edge_tts',
-    '--voice',CREATOR_TTS_VOICE,
+    '--voice',selectedVoice,
     '--rate='+CREATOR_TTS_RATE,
     '--pitch='+CREATOR_TTS_PITCH,
     '--volume='+CREATOR_TTS_VOLUME,
@@ -776,6 +784,67 @@ async function renderCreatorVoiceFile(text,name='creator-voice'){
   ],60000);
   if(!fs.existsSync(out)||fs.statSync(out).size<512)throw new Error('creator audio render failed');
   return out;
+}
+function splitCreatorNarrationChunks(text,maxChars=1350){
+  const clean=String(text||'').replace(/\s+/g,' ').trim();
+  if(!clean)return[];
+  const sentences=clean.split(/(?<=[.!?…])\s+/).filter(Boolean);
+  const chunks=[];
+  let current='';
+  const pushWords=(sentence)=>{
+    const words=String(sentence||'').split(/\s+/).filter(Boolean);
+    let part='';
+    for(const word of words){
+      const candidate=part?part+' '+word:word;
+      if(candidate.length>maxChars&&part){chunks.push(part);part=word}
+      else part=candidate;
+    }
+    if(part)return part;
+    return'';
+  };
+  for(const sentence of sentences.length?sentences:[clean]){
+    if(sentence.length>maxChars){
+      if(current){chunks.push(current);current=''}
+      const part=pushWords(sentence);
+      if(part)current=part;
+      continue;
+    }
+    const candidate=current?current+' '+sentence:sentence;
+    if(candidate.length>maxChars&&current){chunks.push(current);current=sentence}
+    else current=candidate;
+  }
+  if(current)chunks.push(current);
+  return chunks.filter(Boolean).slice(0,24);
+}
+async function renderCreatorLongformVoiceFile(text,name='creator-longform-voice',voice=CREATOR_TTS_VOICE){
+  if(!TTS_ENABLED)throw new Error('local TTS disabled');
+  const clean=String(text||'').replace(/\s+/g,' ').trim().slice(0,18000);
+  if(!clean)throw new Error('text required');
+  const selectedVoice=normalizeCreatorVoiceName(voice);
+  const chunks=splitCreatorNarrationChunks(clean,1350);
+  if(!chunks.length)throw new Error('long-form narration chunks missing');
+  const dir=path.join(WORKSPACE,'creator-audio');
+  fs.mkdirSync(dir,{recursive:true});
+  const safeName=String(name||'creator-longform-voice').replace(/[^A-Za-z0-9._-]/g,'-').replace(/-+/g,'-').slice(0,70)||'creator-longform-voice';
+  const out=path.join(dir,safeName+'.mp3');
+  const parts=[];
+  try{
+    for(let i=0;i<chunks.length;i++){
+      const part=await renderCreatorVoiceFile(chunks[i],safeName+'-part-'+String(i+1).padStart(2,'0'),selectedVoice);
+      parts.push(part);
+    }
+    const status=getCreatorEngine().ffmpegStatus(WORKSPACE);
+    if(!status.ffmpeg)throw new Error('FFmpeg long-form narration concat için gerekli.');
+    const args=['-y','-hide_banner','-loglevel','error'];
+    for(const part of parts)args.push('-i',part);
+    const labels=parts.map((_,i)=>'['+i+':a]').join('');
+    args.push('-filter_complex',labels+'concat=n='+parts.length+':v=0:a=1[aout]','-map','[aout]','-c:a','libmp3lame','-b:a','160k',out);
+    await runHidden(status.ffmpeg,args,20*60*1000);
+    if(!fs.existsSync(out)||fs.statSync(out).size<4096)throw new Error('creator long-form audio render failed');
+    return out;
+  }finally{
+    for(const part of parts){try{if(part!==out&&fs.existsSync(part))fs.unlinkSync(part)}catch(_){}}
+  }
 }
 function queueJarvisSpeech(text,tone='balanced'){
   if(!TTS_ENABLED)return;
@@ -2743,6 +2812,49 @@ function nativeAgentTools(){
     {
       type:'function',
       function:{
+        name:'creator_longform_mission',
+        description:'Yaklaşık 10 dakikalık 16:9 HD YouTube videosunu kalıcı, restart-safe Creator görevi olarak üret. Yerel TTS, çok sahneli kurgu, altyazı ve teknik kalite kapısı kullanılır. includeYouTube=true yalnızca YouTube Studio DRAFT hazırlar. publish=true bile PUBLIC adımı ayrı approval gate bekler.',
+        parameters:{
+          type:'object',
+          properties:{
+            campaignName:{type:'string'},
+            script:{type:'string',description:'Yaklaşık 9-11 dakikalık anlatıma uygun tam metin.'},
+            youtubeTitle:{type:'string'},
+            youtubeDescription:{type:'string'},
+            creatorVoice:{type:'string',description:'Edge TTS Neural voice adı; ör. tr-TR-EmelNeural veya en-US-AriaNeural.'},
+            creatorAssets:{type:'array',maxItems:20,items:{type:'string'},description:'İsteğe bağlı creator-assets/... klipleri; sıra storyboard sırasıdır.'},
+            includeYouTube:{type:'boolean',description:'true ise render sonrası YouTube Studio DRAFT hazırlanır.'},
+            publish:{type:'boolean',description:'true yalnızca PUBLIC approval adımını sıraya koyar; bu çağrıda yayınlamaz.'}
+          },
+          required:['script'],
+          additionalProperties:false
+        }
+      }
+    },
+    {
+      type:'function',
+      function:{
+        name:'creator_daily_longform_plan',
+        description:'Her takvim günü en fazla bir yaklaşık 10 dakikalık Creator long-form görevi üreten kalıcı planı aç/kapat/durumunu göster. Plan local model ile farklı evergreen konular seçer, restart sonrası devam eder ve aynı gün duplicate mission oluşturmaz. YouTube yalnız DRAFT olabilir; günlük plan hiçbir zaman PUBLIC adımı oluşturmaz.',
+        parameters:{
+          type:'object',
+          properties:{
+            action:{type:'string',enum:['enable','disable','status']},
+            timezone:{type:'string',description:'IANA timezone; varsayılan Europe/Istanbul.'},
+            language:{type:'string',description:'Anlatım dili.'},
+            creatorVoice:{type:'string',description:'Seçilen dil için Edge TTS Neural voice adı.'},
+            topicPrompt:{type:'string',description:'Konu çeşitliliği ve kanal yönü.'},
+            includeYouTube:{type:'boolean',description:'true ise günlük video render sonrası YouTube Studio DRAFT hazırlanır; PUBLIC olmaz.'},
+            creatorAssets:{type:'array',maxItems:20,items:{type:'string'},description:'İsteğe bağlı sabit Creator klip havuzu seçimi; SHA-256 baseline ile korunur.'}
+          },
+          required:['action'],
+          additionalProperties:false
+        }
+      }
+    },
+    {
+      type:'function',
+      function:{
         name:'varova_campaign_mission',
         description:'Kullanıcı VAROVA için ürün + reklam videosu + isteğe bağlı YouTube Studio taslağı gibi çok adımlı işi tek görev olarak istediğinde kalıcı ve devam ettirilebilir kampanya görevi başlat. Shopify ürünü DRAFT kalır. publishYouTube=true yalnızca YouTube PUBLIC adımını approval gate arkasına sıraya koyar; bu çağrıda yayınlamaz.',
         parameters:{
@@ -3120,6 +3232,31 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
       };
     }catch(e){
       return{ok:false,message:'Creator batch görevi başlatılamadı: '+String(e.message||e).slice(0,700)};
+    }
+  }else if(n==='creator_longform_mission'){
+    const intent=String(userText||'').toLocaleLowerCase('tr-TR');
+    if(!/(?:youtube|video|uzun|long\s*-?form|10\s*(?:dk|dakika)|belgesel)/i.test(intent)||!/(?:hazırla|hazirla|oluştur|olustur|üret|uret|yap|yükle|yukle|yayınla|yayinla|publish)/i.test(intent)){
+      return{ok:false,message:'Kalıcı long-form görevi yalnızca açık uzun video üretim isteğiyle başlatılır.'};
+    }
+    if(a.publish===true&&!/(?:youtube.{0,40}(?:yayınla|yayinla|publish|public)|(?:yayınla|yayinla|publish|public).{0,40}youtube)/i.test(intent)){
+      return{ok:false,message:'YouTube PUBLIC adımını sıraya koymak için bu turda açık yayınlama isteği gerekli.'};
+    }
+    try{
+      const mission=createCreatorLongformMission(a);
+      return{ok:true,message:missionSummaryText(mission)+' · long-form görev scheduler sırasına alındı'+(a.includeYouTube===true?' · YouTube yalnız DRAFT hazırlanacak':'')+(a.publish===true?' · PUBLIC için ayrıca approval gate beklenecek':' · PUBLIC yayın yok')};
+    }catch(e){
+      return{ok:false,message:'Kalıcı long-form görevi başlatılamadı: '+String(e.message||e).slice(0,700)};
+    }
+  }else if(n==='creator_daily_longform_plan'){
+    const intent=String(userText||'').toLocaleLowerCase('tr-TR');
+    if(!/(?:her\s*gün|günlük|gunluk|daily|günde\s*1|gunde\s*1)/i.test(intent)){
+      return{ok:false,message:'Günlük Creator planı yalnızca açık günlük üretim isteğiyle değiştirilebilir.'};
+    }
+    try{
+      const plan=configureCreatorDailyPlan(a);
+      return{ok:true,message:'CREATOR DAILY LONGFORM '+(plan.enabled?'ENABLED':'DISABLED')+' · timezone '+plan.timezone+' · dil '+plan.language+' · YouTube '+(plan.includeYouTube?'DRAFT':'kapalı')+' · PUBLIC otomasyonu yok'+(plan.lastMissionId?' · son mission '+plan.lastMissionId:'')};
+    }catch(e){
+      return{ok:false,message:'Günlük Creator planı güncellenemedi: '+String(e.message||e).slice(0,700)};
     }
   }else if(n==='creator_short_mission'){
     const intent=String(userText||'').toLocaleLowerCase('tr-TR');
@@ -4110,7 +4247,7 @@ function syncRepoRuntimeFile(filename,signature){
 }
 function getCreatorEngine(){
   if(creatorEngine)return creatorEngine;
-  const file=syncRepoRuntimeFile('jarvis-creator-engine.js',"ENGINE_VERSION='1.3'");
+  const file=syncRepoRuntimeFile('jarvis-creator-engine.js',"ENGINE_VERSION='1.4'");
   if(!file)throw new Error('Creator engine module could not be prepared');
   try{
     delete require.cache[require.resolve(file)];
@@ -4195,6 +4332,38 @@ function normalizeCreatorStoryboardAssets(raw){
     return{path:rel,sha256};
   });
 }
+function normalizeCreatorLongformAssets(raw){
+  const rows=Array.isArray(raw)?raw.slice(0,20):[];
+  if(!rows.length)return[];
+  const files=getWorkspaceFileEngine();
+  const creator=getCreatorEngine();
+  const normalized=rows.map(x=>files.normalizeRel(x));
+  const resolved=creator.resolveAssetSelection(WORKSPACE,normalized,20);
+  return resolved.map(full=>{
+    const rel=path.relative(WORKSPACE,full).replace(/\\/g,'/');
+    if(!/^creator-assets\//.test(rel))throw new Error('Creator long-form asset kapsam dışı: '+rel);
+    const sha256=files.hashFile(full);
+    if(!sha256)throw new Error('Creator long-form asset hash alınamadı: '+rel);
+    return{path:rel,sha256};
+  });
+}
+function verifyCreatorLongformBaselines(raw){
+  const rows=Array.isArray(raw)?raw.slice(0,20):[];
+  if(!rows.length)return[];
+  const files=getWorkspaceFileEngine();
+  return rows.map(row=>{
+    const rel=files.normalizeRel(row&&row.path);
+    const sha256=String(row&&row.sha256||'').toLowerCase();
+    if(!/^[a-f0-9]{64}$/.test(sha256))throw new Error('Creator long-form baseline hash geçersiz: '+rel);
+    const full=safeFile(rel);
+    if(!fs.existsSync(full)||!fs.statSync(full).isFile())throw new Error('Creator long-form baseline asset eksik: '+rel);
+    if(files.hashFile(full)!==sha256)throw new Error('CREATOR_LONGFORM_ASSET_HASH_CONFLICT: '+rel);
+    const inspected=getCreatorEngine().inspectAsset(WORKSPACE,rel);
+    if(!inspected.ok)throw new Error('CREATOR_LONGFORM_ASSET_INVALID: '+rel+' · '+String(inspected.code||'INVALID'));
+    return{path:rel,sha256};
+  });
+}
+
 function cleanCampaignArgs(args={}){
   const tags=Array.isArray(args.tags)?args.tags.map(x=>String(x||'').trim()).filter(Boolean).slice(0,30):[];
   const images=Array.isArray(args.images)?args.images.map(x=>String(x||'').trim()).filter(x=>/^https:\/\//i.test(x)).slice(0,12):[];
@@ -4412,6 +4581,254 @@ function createCreatorShortMission(args={}){
     steps
   });
 }
+function createCreatorLongformMission(args={}){
+  const campaignName=String(args.campaignName||args.name||('longform-'+Date.now())).replace(/[\r\n]/g,' ').trim().slice(0,90);
+  const script=String(args.script||'').replace(/\s+/g,' ').trim().slice(0,18000);
+  if(!script)throw new Error('Kalıcı long-form görevi için video anlatım metni gerekli.');
+  const includeYouTube=args.includeYouTube===true;
+  const publishYouTube=args.publish===true;
+  if(publishYouTube&&!includeYouTube)throw new Error('YouTube PUBLIC isteniyorsa includeYouTube=true olmalı.');
+  const creatorVoice=normalizeCreatorVoiceName(args.creatorVoice||CREATOR_TTS_VOICE);
+  const creatorAssets=Array.isArray(args._creatorAssetBaselines)
+    ?verifyCreatorLongformBaselines(args._creatorAssetBaselines)
+    :normalizeCreatorLongformAssets(args.creatorAssets);
+  const youtubeTitle=String(args.youtubeTitle||campaignName).replace(/\s+/g,' ').trim().slice(0,100);
+  const youtubeDescription=String(args.youtubeDescription||'').trim().slice(0,5000);
+  const input={
+    campaignName,
+    script,
+    creatorVoice,
+    creatorAssets,
+    includeShopify:false,
+    includeYouTube,
+    publishYouTube,
+    dailyPlanId:String(args._dailyPlanId||'').slice(0,90)||null,
+    dailyDate:String(args._dailyDate||'').slice(0,32)||null,
+    youtube:{title:youtubeTitle,description:youtubeDescription}
+  };
+  const steps=['render_longform'];
+  if(includeYouTube)steps.push('youtube_draft');
+  if(publishYouTube)steps.push({name:'youtube_publish',meta:{requiresApproval:true}});
+  return getMissionEngine().createMission(WORKSPACE,{
+    type:'creator_longform',
+    label:campaignName,
+    input,
+    steps
+  });
+}
+
+function creatorDailyDefaultPlan(){
+  return{
+    version:1,
+    planId:'creator-daily-longform-v1',
+    enabled:true,
+    timezone:'Europe/Istanbul',
+    language:'Türkçe',
+    creatorVoice:CREATOR_TTS_VOICE,
+    includeYouTube:true,
+    topicPrompt:'Her gün farklı bir alandan geniş kitleye hitap eden, merak uyandıran ve evergreen bir konu seç. Teknoloji, bilim, tarih, kültür, psikoloji, tasarım, uzay, internet kültürü ve günlük yaşam arasında çeşitlilik sağla.',
+    creatorAssets:[],
+    updatedAt:null,
+    lastAttemptAt:null,
+    lastAttemptDate:null,
+    lastCreatedDate:null,
+    lastMissionId:null,
+    lastError:null
+  };
+}
+function safeCreatorDailyTimezone(value){
+  const zone=String(value||'Europe/Istanbul').trim().slice(0,80)||'Europe/Istanbul';
+  try{new Intl.DateTimeFormat('en-US',{timeZone:zone}).format(new Date());return zone}catch(_){return'Europe/Istanbul'}
+}
+function readCreatorDailyPlan(){
+  const base=creatorDailyDefaultPlan();
+  try{
+    if(!fs.existsSync(CREATOR_DAILY_PLAN_FILE))return base;
+    const x=JSON.parse(fs.readFileSync(CREATOR_DAILY_PLAN_FILE,'utf8'));
+    if(!x||typeof x!=='object')return base;
+    return{
+      ...base,
+      ...x,
+      version:1,
+      planId:'creator-daily-longform-v1',
+      enabled:x.enabled===true,
+      timezone:safeCreatorDailyTimezone(x.timezone),
+      creatorVoice:normalizeCreatorVoiceName(x.creatorVoice||CREATOR_TTS_VOICE),
+      creatorAssets:Array.isArray(x.creatorAssets)?x.creatorAssets.slice(0,20):[]
+    };
+  }catch(e){
+    return{...base,lastError:'DAILY_PLAN_READ_FAILED: '+String(e.message||e).slice(0,220)};
+  }
+}
+function writeCreatorDailyPlan(plan){
+  fs.mkdirSync(MEMORY_DIR,{recursive:true});
+  const clean={...creatorDailyDefaultPlan(),...(plan||{}),version:1,planId:'creator-daily-longform-v1',updatedAt:new Date().toISOString()};
+  fs.writeFileSync(CREATOR_DAILY_PLAN_FILE,JSON.stringify(clean,null,2),'utf8');
+  return clean;
+}
+function configureCreatorDailyPlan(args={}){
+  const action=String(args.action||'status').trim().toLowerCase();
+  const current=readCreatorDailyPlan();
+  if(action==='status')return current;
+  if(action==='disable')return writeCreatorDailyPlan({...current,enabled:false,lastError:null});
+  if(action!=='enable')throw new Error('Creator günlük plan action enable/disable/status olmalı.');
+  const next={
+    ...current,
+    enabled:true,
+    timezone:safeCreatorDailyTimezone(args.timezone||current.timezone),
+    language:String(args.language||current.language||'Türkçe').replace(/[\r\n]+/g,' ').trim().slice(0,80)||'Türkçe',
+    creatorVoice:normalizeCreatorVoiceName(args.creatorVoice||current.creatorVoice||CREATOR_TTS_VOICE),
+    includeYouTube:args.includeYouTube!==false,
+    topicPrompt:String(args.topicPrompt||current.topicPrompt||'').replace(/\s+/g,' ').trim().slice(0,1200),
+    creatorAssets:Array.isArray(args.creatorAssets)?normalizeCreatorLongformAssets(args.creatorAssets):current.creatorAssets,
+    lastAttemptAt:null,
+    lastAttemptDate:null,
+    lastError:null
+  };
+  return writeCreatorDailyPlan(next);
+}
+function creatorDailyDateKey(timezone='Europe/Istanbul',date=new Date()){
+  const zone=safeCreatorDailyTimezone(timezone);
+  const parts=new Intl.DateTimeFormat('en-US',{
+    timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'
+  }).formatToParts(date);
+  const map={};
+  for(const part of parts)if(part.type!=='literal')map[part.type]=part.value;
+  return String(map.year||'0000')+'-'+String(map.month||'00')+'-'+String(map.day||'00');
+}
+function findCreatorDailyMission(planId,dateKey){
+  const pid=String(planId||'creator-daily-longform-v1');
+  const day=String(dateKey||'');
+  return getMissionEngine().listMissions(WORKSPACE,{limit:1000}).find(m=>
+    m&&m.type==='creator_longform'&&
+    String(m.input&&m.input.dailyPlanId||'')===pid&&
+    String(m.input&&m.input.dailyDate||'')===day
+  )||null;
+}
+function creatorDailyAutoAssetBaselines(dateKey,maxItems=12){
+  const all=getCreatorEngine().listAssets(WORKSPACE);
+  if(!all.length)return[];
+  const seed=crypto.createHash('sha256').update('daily-longform-assets|'+String(dateKey||'')).digest().readUInt32BE(0);
+  const offset=seed%all.length;
+  const rotated=all.slice(offset).concat(all.slice(0,offset));
+  const selected=rotated.slice(0,Math.min(Math.max(1,Number(maxItems)||12),12,rotated.length))
+    .map(full=>path.relative(WORKSPACE,full).replace(/\\/g,'/'));
+  return normalizeCreatorLongformAssets(selected);
+}
+function creatorDailyTheme(dateKey){
+  const themes=[
+    'teknoloji ve yapay zeka','bilim ve uzay','tarih ve şaşırtıcı olaylar','insan davranışı ve psikoloji',
+    'tasarım ve mühendislik','internet kültürü ve dijital yaşam','doğa ve dünya','gelecek fikirleri',
+    'günlük yaşamı değiştiren icatlar','oyun, eğlence ve yaratıcı kültür'
+  ];
+  const hash=crypto.createHash('sha1').update(String(dateKey||'daily')).digest();
+  return themes[hash.readUInt32BE(0)%themes.length];
+}
+async function generateCreatorDailyLongformBrief(plan,dateKey){
+  const status=await localBrainStatus();
+  if(!status.ready)throw new Error('DAILY_LOCAL_BRAIN_OFFLINE');
+  if(!status.installed)throw new Error('DAILY_LOCAL_MODEL_MISSING');
+  const model=status.deepInstalled&&status.deepModel?status.deepModel:status.model;
+  const schema={
+    type:'object',
+    properties:{
+      title:{type:'string'},
+      description:{type:'string'},
+      script:{type:'string'}
+    },
+    required:['title','description','script'],
+    additionalProperties:false
+  };
+  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),4*60*1000);
+  try{
+    const r=await fetch(LOCAL_BRAIN_URL+'/api/chat',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({
+        model,
+        stream:false,
+        think:false,
+        format:schema,
+        keep_alive:LOCAL_BRAIN_KEEP_ALIVE,
+        options:{temperature:0.68,top_p:0.9,repeat_penalty:1.08,num_ctx:LOCAL_BRAIN_CTX,num_predict:3600},
+        messages:[
+          {role:'system',content:[
+            'Sen JARVIS Creator editörüsün. Ücretli API veya dış kaynak kullanmadan yaklaşık 10 dakikalık YouTube anlatım metni hazırla.',
+            'Dil: '+String(plan.language||'Türkçe')+'.',
+            'Bugünün tema alanı: '+creatorDailyTheme(dateKey)+'.',
+            'Metin doğal seslendirmede yaklaşık 9.5-10.5 dakika sürmeli. Boş lafla uzatma; güçlü hook, anlaşılır bölümler ve net kapanış kullan.',
+            'Güncel/breaking haber iddiası, sahte kaynak, sahte alıntı veya doğrulanmamış kesin sayı üretme. Evergreen ve genel bilgi ağırlıklı kal.',
+            'Başlık merak uyandırsın ama yanıltıcı clickbait olmasın. Açıklama kısa ve yayın taslağına uygun olsun.',
+            'Yalnızca JSON şemasına uy.'
+          ].join(' ')},
+          {role:'user',content:'Tarih anahtarı: '+dateKey+'\nİçerik yönü: '+String(plan.topicPrompt||'Her gün farklı ilgi çekici konu seç.')}
+        ]
+      }),
+      signal:ctl.signal
+    });
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.error||('OLLAMA '+r.status));
+    const parsed=extractLocalBrainJson(j&&j.message&&j.message.content);
+    if(!parsed||!parsed.script)throw new Error('DAILY_CREATOR_BAD_JSON');
+    const script=String(parsed.script||'').replace(/\s+/g,' ').trim().slice(0,18000);
+    const words=script.split(/\s+/).filter(Boolean).length;
+    if(script.length<2500)throw new Error('DAILY_CREATOR_SCRIPT_TOO_SHORT');
+    if(words>400&&(words<1050||words>1750))throw new Error('DAILY_CREATOR_WORD_TARGET_MISS: '+words);
+    return{
+      title:String(parsed.title||('JARVIS Daily '+dateKey)).replace(/\s+/g,' ').trim().slice(0,100),
+      description:String(parsed.description||'').trim().slice(0,5000),
+      script
+    };
+  }finally{clearTimeout(timer)}
+}
+let creatorDailyServiceBusy=false;
+async function serviceCreatorDailyPlan({force=false}={}){
+  if(creatorDailyServiceBusy)return{ok:true,skipped:'busy'};
+  creatorDailyServiceBusy=true;
+  try{
+    let plan=readCreatorDailyPlan();
+    if(!plan.enabled)return{ok:true,status:'disabled'};
+    const dateKey=creatorDailyDateKey(plan.timezone);
+    const existing=findCreatorDailyMission(plan.planId,dateKey);
+    if(existing){
+      if(plan.lastCreatedDate!==dateKey||plan.lastMissionId!==existing.id){
+        plan=writeCreatorDailyPlan({...plan,lastCreatedDate:dateKey,lastMissionId:existing.id,lastError:null});
+      }
+      return{ok:true,status:'existing',dateKey,missionId:existing.id,missionStatus:existing.status};
+    }
+    const lastAttemptMs=Date.parse(String(plan.lastAttemptAt||''));
+    if(!force&&plan.lastAttemptDate===dateKey&&Number.isFinite(lastAttemptMs)&&(Date.now()-lastAttemptMs)<10*60*1000){
+      return{ok:true,status:'cooldown',dateKey,lastAttemptAt:plan.lastAttemptAt};
+    }
+    plan=writeCreatorDailyPlan({...plan,lastAttemptAt:new Date().toISOString(),lastAttemptDate:dateKey,lastError:null});
+    try{
+      const brief=await generateCreatorDailyLongformBrief(plan,dateKey);
+      const mission=createCreatorLongformMission({
+        campaignName:'daily-'+dateKey+'-'+brief.title,
+        script:brief.script,
+        youtubeTitle:brief.title,
+        youtubeDescription:brief.description,
+        creatorVoice:plan.creatorVoice,
+        includeYouTube:plan.includeYouTube!==false,
+        publish:false,
+        _creatorAssetBaselines:Array.isArray(plan.creatorAssets)&&plan.creatorAssets.length
+          ?verifyCreatorLongformBaselines(plan.creatorAssets)
+          :creatorDailyAutoAssetBaselines(dateKey,12),
+        _dailyPlanId:plan.planId,
+        _dailyDate:dateKey
+      });
+      writeCreatorDailyPlan({...plan,lastCreatedDate:dateKey,lastMissionId:mission.id,lastError:null});
+      remember({kind:'creator_daily_longform_created',dateKey,missionId:mission.id,includeYouTube:plan.includeYouTube!==false,published:false});
+      return{ok:true,status:'created',dateKey,missionId:mission.id};
+    }catch(e){
+      const error=String(e.message||e).slice(0,500);
+      writeCreatorDailyPlan({...plan,lastError:error});
+      remember({kind:'creator_daily_longform_error',dateKey,error});
+      return{ok:false,status:'error',dateKey,error};
+    }
+  }finally{creatorDailyServiceBusy=false}
+}
+
 function normalizePcMissionActions(args={}){
   const rows=Array.isArray(args.actions)?args.actions.slice(0,8):[];
   if(!rows.length)throw new Error('Kalıcı PC görevi için en az bir güvenli action gerekli.');
@@ -5011,6 +5428,35 @@ async function verifyUncertainCampaignStep(mission){
     return mission;
   }
 
+  if(step.name==='render_longform'){
+    const creator=getCreatorEngine();
+    const status=creator.ffmpegStatus(WORKSPACE);
+    const base=creator.safeName(input.campaignName);
+    const expected=path.join(status.outputDir,base+'.mp4');
+    const metaFile=path.join(WORKSPACE,'creator-jobs',base,'job.json');
+    if(fs.existsSync(expected)&&fs.statSync(expected).size>=1024*1024&&fs.existsSync(metaFile)){
+      try{
+        const meta=JSON.parse(fs.readFileSync(metaFile,'utf8'));
+        if(String(meta&&meta.missionId||'')===String(mission.id)&&String(meta&&meta.mode||'')==='longform'){
+          const quality=creator.probeRenderedLongform(expected,status.ffprobe);
+          if(quality.ok){
+            return engine.resolveUncertainStep(WORKSPACE,mission.id,{
+              completed:true,
+              artifact:{output:expected,metadata:metaFile,quality,recovered:true},
+              note:'long-form output + mission-bound metadata + quality gate verified on disk'
+            });
+          }
+          return mission;
+        }
+      }catch(_){}
+      return mission;
+    }
+    if(!fs.existsSync(expected)&&!fs.existsSync(metaFile)){
+      return engine.resolveUncertainStep(WORKSPACE,mission.id,{completed:false,note:'long-form render output absent; safe retry'});
+    }
+    return mission;
+  }
+
   if(step.name==='render_short'){
     const creator=getCreatorEngine();
     const status=creator.ffmpegStatus(WORKSPACE);
@@ -5392,6 +5838,63 @@ async function runDurableMission(id){
         continue;
       }
 
+      if(step.name==='render_longform'){
+        const input=mission.input||{};
+        const ready=getCreatorEngine().prepare(WORKSPACE,{allowInstall:true});
+        if(!ready.ok||!ready.ffprobe){
+          mission=engine.failStep(WORKSPACE,id,{
+            code:!ready.ok?'FFMPEG_NOT_READY':'FFPROBE_MISSING',
+            message:'Long-form Creator için FFmpeg + FFprobe hazır olmalı.',
+            retryable:true,
+            dependency:!ready.ok?'ffmpeg':'creator_probe'
+          });
+          return mission;
+        }
+        const selected=Array.isArray(input.creatorAssets)?input.creatorAssets:[];
+        for(const asset of selected){
+          const rel=String(asset&&asset.path||'');
+          const current=getWorkspaceFileEngine().hashFile(safeFile(rel));
+          if(!current||current!==String(asset&&asset.sha256||'')){
+            mission=engine.failStep(WORKSPACE,id,{code:'CREATOR_LONGFORM_ASSET_HASH_CONFLICT',message:'Seçili long-form Creator asset hash değişti: '+rel,retryable:false});
+            return mission;
+          }
+          const inspected=getCreatorEngine().inspectAsset(WORKSPACE,rel);
+          if(!inspected.ok){
+            if(inspected.code==='FFPROBE_MISSING'){
+              mission=engine.failStep(WORKSPACE,id,{code:'FFPROBE_MISSING',message:'Long-form storyboard doğrulaması için FFprobe gerekli.',retryable:true,dependency:'creator_probe'});
+              return mission;
+            }
+            mission=engine.failStep(WORKSPACE,id,{code:String(inspected.code||'CREATOR_LONGFORM_INVALID_ASSET'),message:'Seçili long-form Creator asset geçersiz: '+rel,retryable:false});
+            return mission;
+          }
+        }
+        const voice=await renderCreatorLongformVoiceFile(
+          String(input.script||''),
+          String(input.campaignName||'longform')+'-voice',
+          String(input.creatorVoice||CREATOR_TTS_VOICE)
+        );
+        const out=getCreatorEngine().renderLongform({
+          workspace:WORKSPACE,
+          name:String(input.campaignName||'longform'),
+          script:String(input.script||''),
+          voicePath:voice,
+          assetFiles:selected.map(x=>x.path),
+          assetHashes:selected.map(x=>x.sha256),
+          missionId:id
+        });
+        mission=engine.completeStep(WORKSPACE,id,{artifact:{
+          output:out.output,
+          subtitle:out.subtitle,
+          metadata:out.metadata,
+          duration:out.duration,
+          quality:out.quality,
+          assets:out.assets.map(x=>path.relative(WORKSPACE,x).replace(/\\/g,'/')),
+          assetSelection:selected.length?'explicit':'automatic',
+          creatorVoice:String(input.creatorVoice||CREATOR_TTS_VOICE)
+        }});
+        continue;
+      }
+
       if(step.name==='render_short'){
         const input=mission.input||{};
         const ready=getCreatorEngine().prepare(WORKSPACE,{allowInstall:true});
@@ -5478,7 +5981,7 @@ async function runDurableMission(id){
       }
 
       if(step.name==='youtube_draft'){
-        const rendered=mission.artifacts&&mission.artifacts.render_short;
+        const rendered=mission.artifacts&&(mission.artifacts.render_longform||mission.artifacts.render_short);
         const file=rendered&&rendered.output;
         if(!file){
           mission=engine.failStep(WORKSPACE,id,{code:'VIDEO_ARTIFACT_MISSING',message:'YouTube adımı için render çıktısı bulunamadı.',retryable:false});
@@ -5925,7 +6428,7 @@ async function buildPcAcceptanceSnapshot(){
   try{commerce=await getCommerceEngine().status(WORKSPACE)}catch(e){commerce={ok:false,connected:false,error:String(e.message||e).slice(0,240)}}
   try{youtube=await getYoutubeStudio().status(getBrowserOperator(),WORKSPACE)}catch(e){youtube={ok:false,running:false,loggedIn:false,error:String(e.message||e).slice(0,240)}}
   const missions=missionHealthSnapshot();
-  const checks={workerVersion:WORKER_VERSION==='2.101.0',creatorQualityGateReady:CAPS.includes('creator_quality_gate_v1')&&CAPS.includes('creator_quality_recovery_v1'),creatorBatchMissionReady:CAPS.includes('creator_batch_mission_v1')&&CAPS.includes('creator_batch_child_dedupe_v1')&&CAPS.includes('creator_batch_youtube_draft_v1')&&CAPS.includes('mission_cooperative_yield_v1')&&CAPS.includes('creator_batch_storyboard_lock_v1')&&CAPS.includes('creator_batch_render_binding_v1'),creatorAssetMissionReady:CAPS.includes('creator_asset_mission_v1')&&CAPS.includes('creator_asset_probe_v1')&&CAPS.includes('creator_asset_hash_dedupe_v1'),creatorStoryboardReady:CAPS.includes('creator_storyboard_v1')&&CAPS.includes('creator_explicit_assets_v1')&&CAPS.includes('creator_render_mission_bind_v1'),pcMissionReady:CAPS.includes('pc_safe_mission_v1')&&CAPS.includes('pc_safe_action_catalog_v1'),workspaceFileMissionReady:CAPS.includes('workspace_file_mission_v1')&&CAPS.includes('workspace_file_hash_guard_v1')&&CAPS.includes('workspace_file_no_overwrite_v1'),missionControlReady:CAPS.includes('mission_control_v1')&&CAPS.includes('mission_pause_v1')&&CAPS.includes('mission_cancel_v1'),missionRuntime:!!(missions&&missions.ok&&missions.autoResume),creatorEngineLoaded:!!(creator&&!creator.error),browserOperatorLoaded:!!(browser&&!browser.error),commerceEngineLoaded:!!(commerce&&!commerce.error),youtubeStudioLoaded:!!(youtube&&!youtube.error),silentStartup:process.platform==='win32'?startup.silentOk:true,autoUpdateReady:!!(startup.selfUpdate&&startup.selfUpdate.configured)};
+  const checks={workerVersion:WORKER_VERSION==='2.102.0',creatorQualityGateReady:CAPS.includes('creator_quality_gate_v1')&&CAPS.includes('creator_quality_recovery_v1'),creatorLongformReady:CAPS.includes('creator_longform_mission_v1')&&CAPS.includes('creator_longform_quality_v1')&&CAPS.includes('creator_longform_recovery_v1')&&CAPS.includes('creator_multilingual_voice_v1')&&CAPS.includes('creator_daily_longform_v1')&&CAPS.includes('creator_daily_idempotency_v1'),creatorBatchMissionReady:CAPS.includes('creator_batch_mission_v1')&&CAPS.includes('creator_batch_child_dedupe_v1')&&CAPS.includes('creator_batch_youtube_draft_v1')&&CAPS.includes('mission_cooperative_yield_v1')&&CAPS.includes('creator_batch_storyboard_lock_v1')&&CAPS.includes('creator_batch_render_binding_v1'),creatorAssetMissionReady:CAPS.includes('creator_asset_mission_v1')&&CAPS.includes('creator_asset_probe_v1')&&CAPS.includes('creator_asset_hash_dedupe_v1'),creatorStoryboardReady:CAPS.includes('creator_storyboard_v1')&&CAPS.includes('creator_explicit_assets_v1')&&CAPS.includes('creator_render_mission_bind_v1'),pcMissionReady:CAPS.includes('pc_safe_mission_v1')&&CAPS.includes('pc_safe_action_catalog_v1'),workspaceFileMissionReady:CAPS.includes('workspace_file_mission_v1')&&CAPS.includes('workspace_file_hash_guard_v1')&&CAPS.includes('workspace_file_no_overwrite_v1'),missionControlReady:CAPS.includes('mission_control_v1')&&CAPS.includes('mission_pause_v1')&&CAPS.includes('mission_cancel_v1'),missionRuntime:!!(missions&&missions.ok&&missions.autoResume),creatorEngineLoaded:!!(creator&&!creator.error),browserOperatorLoaded:!!(browser&&!browser.error),commerceEngineLoaded:!!(commerce&&!commerce.error),youtubeStudioLoaded:!!(youtube&&!youtube.error),silentStartup:process.platform==='win32'?startup.silentOk:true,autoUpdateReady:!!(startup.selfUpdate&&startup.selfUpdate.configured)};
   const corePass=Object.values(checks).every(Boolean);
   const accountSetup={shopifyConnected:!!(commerce&&commerce.ok&&commerce.connected),youtubeLoggedIn:!!(youtube&&youtube.ok&&youtube.loggedIn)};
   const snapshot={ok:true,generatedAt,worker:{version:WORKER_VERSION,name:NAME,platform:process.platform,arch:process.arch},checks,corePass,startup,update:startup.selfUpdate,creator:{ready:!!(creator&&creator.ok),assets:Number(creator&&creator.assets||0),outputDir:creator&&creator.outputDir||null,installable:!!(creator&&creator.installable)},browser:{running:!!(browser&&browser.running),browser:browser&&browser.browser||null,tabs:Array.isArray(browser&&browser.tabs)?browser.tabs.length:0,profile:browser&&browser.profile||null},commerce:{connected:accountSetup.shopifyConnected,shop:commerce&&commerce.shop||null,apiVersion:commerce&&commerce.apiVersion||null,message:String(commerce&&commerce.message||'').slice(0,300)},youtube:{running:!!(youtube&&youtube.running),loggedIn:accountSetup.youtubeLoggedIn,title:youtube&&youtube.title||null,url:youtube&&youtube.url||null,message:String(youtube&&youtube.message||'').slice(0,300)},missions,accountSetup};
@@ -5950,7 +6453,7 @@ async function repairLocalRuntime(){
     ['jarvis-startup.ps1','JARVIS_CINEMATIC_STARTUP_V1'],
     ['JARVIS-STARTUP-HIDDEN.vbs','jarvis-startup.ps1'],
     ['install-jarvis-startup.ps1','JARVIS Silent Startup'],
-    ['jarvis-creator-engine.js',"ENGINE_VERSION='1.3'"],
+    ['jarvis-creator-engine.js',"ENGINE_VERSION='1.4'"],
     ['jarvis-browser-operator.js',"BROWSER_OPERATOR_VERSION='1.0'"],
     ['jarvis-commerce-engine.js',"ENGINE_VERSION='1.0'"],
     ['jarvis-shopify-connect.ps1','SHOPIFY SECURE CONNECT'],
@@ -6116,11 +6619,11 @@ function openShopifyConnectWindow(){
 }
 function bootstrapRuntimeUpgrade(){
   if(process.platform!=='win32'||TEST_MODE)return{ok:false,skipped:true};
-  const marker=path.join(MEMORY_DIR,'bootstrap-v47.json');
+  const marker=path.join(MEMORY_DIR,'bootstrap-v48.json');
   try{
     if(fs.existsSync(marker)){
       const x=JSON.parse(fs.readFileSync(marker,'utf8'));
-      if(x&&x.version===47&&x.ok)return{ok:true,already:true};
+      if(x&&x.version===48&&x.ok)return{ok:true,already:true};
     }
   }catch(_){}
 
@@ -6130,7 +6633,7 @@ function bootstrapRuntimeUpgrade(){
     ['jarvis-startup.ps1','JARVIS_CINEMATIC_STARTUP_V1'],
     ['JARVIS-STARTUP-HIDDEN.vbs','jarvis-startup.ps1'],
     ['install-jarvis-startup.ps1','JARVIS Silent Startup'],
-    ['jarvis-creator-engine.js',"ENGINE_VERSION='1.3'"],
+    ['jarvis-creator-engine.js',"ENGINE_VERSION='1.4'"],
     ['jarvis-browser-operator.js',"BROWSER_OPERATOR_VERSION='1.0'"],
     ['jarvis-commerce-engine.js',"ENGINE_VERSION='1.0'"],
     ['jarvis-shopify-connect.ps1','SHOPIFY SECURE CONNECT'],
@@ -6157,9 +6660,9 @@ function bootstrapRuntimeUpgrade(){
 
   fs.mkdirSync(MEMORY_DIR,{recursive:true});
   fs.writeFileSync(marker,JSON.stringify({
-    version:47,ok:true,at:new Date().toISOString(),worker:WORKER_VERSION,synced
+    version:48,ok:true,at:new Date().toISOString(),worker:WORKER_VERSION,synced
   },null,2),'utf8');
-  console.log('[JARVIS] BOOTSTRAP MIGRATION V47: READY');
+  console.log('[JARVIS] BOOTSTRAP MIGRATION V48: READY');
   return{ok:true,synced};
 }
 function cleanupOrphanedJarvisHelpers(){
@@ -7362,6 +7865,7 @@ if(!TEST_MODE){
   },900);
   setTimeout(()=>prewarmJarvisBackchannels().catch(()=>{}),2200);
   setTimeout(()=>serviceDurableMissions().catch(()=>{}),5000);
+  setTimeout(()=>serviceCreatorDailyPlan().catch(()=>{}),12000);
 }
 console.log('Cloud:',BASE);
 console.log('Workspace:',WORKSPACE);
@@ -7375,6 +7879,7 @@ if(!TEST_MODE){
   // Previously authorized draft-only missions may continue after their
   // dependency becomes ready. The service never auto-publishes content.
   setInterval(()=>serviceDurableMissions().catch(()=>{}),20000);
+  setInterval(()=>serviceCreatorDailyPlan().catch(()=>{}),60000);
 }else{
   console.log('[JARVIS] TEST MODE: cloud polling and Windows helpers disabled');
 }

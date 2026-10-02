@@ -4,7 +4,7 @@ const fs=require('fs');
 const path=require('path');
 const engine=require('./jarvis-creator-engine');
 
-assert.strictEqual(engine.ENGINE_VERSION,'1.3');
+assert.strictEqual(engine.ENGINE_VERSION,'1.4');
 assert.strictEqual(engine.CREATOR_PROFILE_VERSION,'2.0');
 assert.strictEqual(engine.safeName('Benim Shorts / Test'),'Benim-Shorts-Test');
 assert.strictEqual(engine.assetSafeName('incoming/My Clip.MP4'),'My-Clip.mp4');
