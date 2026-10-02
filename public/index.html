@@ -2639,11 +2639,11 @@ async function load(){
   workerSetup.textContent=!pc.online?'RUN LAUNCHER ON PC':workerCurrent?('CONNECTED v'+pc.version):'UPDATE REQUIRED';
   workerReadout.textContent=pc.online?'ON':'OFF';
   const pcCaps=Array.isArray(pc.capabilities)?pc.capabilities:[];
-  const developerReady=pc.online&&workerCurrent&&pcCaps.includes('developer_project_mission_v1')&&pcCaps.includes('workspace_search_v1');
+  const developerReady=pc.online&&workerCurrent&&pcCaps.includes('developer_project_mission_v1')&&pcCaps.includes('developer_patch_mission_v1')&&pcCaps.includes('developer_patch_rollback_v1')&&pcCaps.includes('workspace_search_v1');
   devAgent.textContent=!pc.online?'STANDBY':developerReady?('READY v'+pc.version):'UPDATE REQUIRED';
   devAgent.style.color=developerReady?'#65ffbf':pc.online?'#ffca66':'';
   if(window.devAgentDetail)devAgentDetail.textContent=developerReady
-    ?'Durable workspace app builder · conflict-safe source writes'
+    ?'Durable app builder · SHA-guarded patch · verified rollback'
     :(pc.online?'Developer capability update required':'PC Worker dependent');
   const creatorReady=pc.online&&pcCaps.includes('creator_multiscene_v2')&&pcCaps.includes('creator_short_mission_v1');
   creatorAgent.textContent=!pc.online?'STANDBY':creatorReady?'READY':'UPDATE REQUIRED';
