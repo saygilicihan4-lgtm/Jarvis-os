@@ -57,6 +57,39 @@ const yt=require('./jarvis-youtube-studio');
   assert.strictEqual(second.reused,true);
   assert.strictEqual(uploads,1,'mission retry must not duplicate YouTube upload');
 
+  const denied=await yt.publishPreparedDraft(fakeOperator,tmp,{
+    missionId:'M-TEST-1234567890',
+    approved:false
+  });
+  assert.strictEqual(denied.ok,false,'publish without explicit approval must be blocked');
+  assert.strictEqual(denied.code,'EXPLICIT_APPROVAL_REQUIRED');
+
+  let publishPhase='details';
+  const publishClicks=[];
+  const fakePublishOperator={
+    status:async()=>({running:true,profile:'test',browser:'fake'}),
+    pageSnapshot:async()=>{
+      if(publishPhase==='published')return{ok:true,url:'https://studio.youtube.com/',title:'Studio',text:'Video published Published successfully'};
+      if(publishPhase==='visibility')return{ok:true,url:'https://studio.youtube.com/',title:'Studio',text:'Visibility Public Private Unlisted'};
+      return{ok:true,url:'https://studio.youtube.com/',title:'Studio',text:'Details Checks'};
+    },
+    evaluate:async()=>({ok:true,text:'public'}),
+    clickByText:async(_workspace,label)=>{
+      publishClicks.push(label);
+      if(['İleri','Ileri','Next'].includes(label)){publishPhase='visibility';return{ok:true}}
+      if(['Yayınla','Yayinla','Publish'].includes(label)){publishPhase='published';return{ok:true}}
+      return{ok:false};
+    }
+  };
+  const published=await yt.publishPreparedDraft(fakePublishOperator,tmp,{
+    missionId:'M-TEST-1234567890',
+    approved:true
+  });
+  assert.strictEqual(published.ok,true,'approved YouTube publish should complete when Studio evidence is present');
+  assert.strictEqual(published.published,true);
+  assert.strictEqual(yt.readReceipt(tmp,'M-TEST-1234567890').state,'published');
+  assert.ok(publishClicks.some(x=>['Yayınla','Yayinla','Publish'].includes(x)),'publish click missing after approval');
+
   const source=fs.readFileSync('./jarvis-youtube-studio.js','utf8');
   const worker=fs.readFileSync('./worker.js','utf8');
   const server=fs.readFileSync('./server.js','utf8');
