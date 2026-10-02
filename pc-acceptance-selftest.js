@@ -2,11 +2,12 @@ const fs=require('fs');
 const assert=require('assert');
 
 const worker=fs.readFileSync('./worker.js','utf8');
-assert.ok(worker.includes("const WORKER_VERSION='2.82.0'"),'Worker 2.82.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.83.0'"),'Worker 2.83.0 required');
 assert.ok(worker.includes("name:'pc_acceptance_snapshot'"),'native acceptance tool missing');
 assert.ok(worker.includes("req.url==='/acceptance-snapshot'"),'acceptance endpoint missing');
 assert.ok(worker.includes("'pc_acceptance_snapshot_v1'"),'acceptance capability missing');
 assert.ok(worker.includes("'silent_startup_diagnostics_v1'"),'silent startup diagnostics capability missing');
+assert.ok(worker.includes("'pc_acceptance_hardened_v1'"),'hardened acceptance capability missing');
 
 const start=worker.indexOf('async function buildPcAcceptanceSnapshot()');
 const end=worker.indexOf('function acceptanceSummaryText',start);
@@ -23,5 +24,7 @@ assert.ok(!block.includes('createDraft('),'acceptance snapshot must not create S
 assert.ok(!block.includes('prepareDraft('),'acceptance snapshot must not upload YouTube data');
 assert.ok(!block.includes('TOKEN'),'acceptance snapshot must not expose cloud token');
 assert.ok(!block.includes('DEVICE_TOKEN'),'acceptance snapshot must not expose device token');
+assert.ok(!block.includes('deviceId'),'acceptance snapshot must not expose stable device id');
+assert.ok(worker.includes("(taskRegistered&&hiddenTaskAction)||fallbackRegistered"),'scheduled task must prove hidden launcher action');
 
 console.log('PC ACCEPTANCE SNAPSHOT SELFTEST PASS');
