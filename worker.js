@@ -4878,11 +4878,47 @@ function creatorSceneWebQueries(title,script,{maxQueries=3,maxTerms=7}={}){
   }
   return out;
 }
+function creatorNarrativeWebQueries(title,script,{maxQueries=4,maxTerms=8}={}){
+  const words=String(script||'').trim().split(/\s+/).filter(Boolean);
+  const limit=Math.max(1,Math.min(4,Math.floor(Number(maxQueries)||4)));
+  const slots=Math.min(limit,Math.max(1,Math.ceil(words.length/20)));
+  const queries=[],seen=new Set();
+  for(let i=0;i<slots;i++){
+    // Contiguous word windows include the opening and closing, without letting
+    // a repeated title displace the visual concepts of every chapter.
+    const segment=words.slice(Math.floor(i*words.length/slots),Math.floor((i+1)*words.length/slots)).join(' ');
+    const q=creatorAutoWebQuery('',segment,maxTerms)||creatorAutoWebQuery(title,'',maxTerms);
+    if(!q||seen.has(q))continue;
+    seen.add(q);queries.push(q);
+  }
+  return queries;
+}
+function creatorSelectNarrativeWebAssets(groups,recent,excluded,maxItems=12){
+  const limit=Math.max(1,Math.min(12,Math.floor(Number(maxItems)||12)));
+  const ranked=groups.map(group=>creatorPreferUnseenAssetPaths(
+    creatorPreferFreshAssetPaths(group,recent,12),excluded,12
+  ));
+  const selected=ranked.map(()=>[]),seen=new Set();
+  // Give each available chapter a slot before filling additional slots.
+  while(seen.size<limit){
+    let added=false;
+    for(let i=0;i<ranked.length&&seen.size<limit;i++){
+      const rel=ranked[i].find(x=>!seen.has(x));
+      if(!rel)continue;
+      seen.add(rel);selected[i].push(rel);added=true;
+    }
+    if(!added)break;
+  }
+  const assetQueryOrder=selected.flatMap((paths,queryIndex)=>paths.map(path=>({path,queryIndex})));
+  return{paths:assetQueryOrder.map(x=>x.path),assetQueryOrder};
+}
 async function creatorAutoWebAssets({title='',script='',query='',provider='auto',orientation='portrait',count=5,maxQueries=3,manifestId='',excludePaths=[]}={}){
   const explicit=String(query||'').replace(/[\r\n]+/g,' ').trim().slice(0,140);
+  const narrative=String(orientation||'').toLowerCase()==='landscape';
+  const queryPlanner=narrative?creatorNarrativeWebQueries:creatorSceneWebQueries;
   const queries=explicit
     ?[explicit]
-    :creatorSceneWebQueries(title,script,{maxQueries,maxTerms:orientation==='landscape'?8:7});
+    :queryPlanner(title,script,{maxQueries,maxTerms:narrative?8:7});
   if(!queries.length)return[];
   try{
     const ready=getCreatorEngine().prepare(WORKSPACE,{allowInstall:true});
@@ -4890,15 +4926,21 @@ async function creatorAutoWebAssets({title='',script='',query='',provider='auto'
     const wanted=Math.max(1,Math.min(12,Number(count)||5));
     const candidateTarget=Math.min(12,wanted+Math.min(4,queries.length));
     const unique=[],seen=new Set();
+    const groups=queries.map(()=>[]);
     const perQuery=Math.max(1,Math.min(4,Math.ceil(wanted/queries.length)));
     const fetchPerQuery=Math.max(perQuery,Math.min(4,perQuery+1));
     for(let i=0;i<queries.length&&unique.length<candidateTarget;i++){
       try{
+        // Reserve capacity for every remaining narrative query, even when the
+        // first providers return their full allowance of clips.
+        const requestCount=narrative
+          ?Math.min(fetchPerQuery,Math.ceil((candidateTarget-unique.length)/(queries.length-i)))
+          :Math.min(fetchPerQuery,candidateTarget-unique.length);
         const media=await getCreatorWebMedia().searchAndIngest(WORKSPACE,{
           query:queries[i],
           provider:String(provider||'auto'),
           orientation:String(orientation||'portrait'),
-          count:Math.min(fetchPerQuery,candidateTarget-unique.length),
+          count:requestCount,
           inspect:(rel)=>getCreatorEngine().inspectAsset(WORKSPACE,rel),
           animateImage:(rel,opts)=>getCreatorEngine().animateStillAsset(WORKSPACE,rel,opts),
           manifestId:(String(manifestId||'auto').slice(0,78)+'-q'+String(i+1).padStart(2,'0')).slice(0,90)
@@ -4906,13 +4948,34 @@ async function creatorAutoWebAssets({title='',script='',query='',provider='auto'
         for(const rel of Array.isArray(media&&media.assets)?media.assets:[]){
           const key=String(rel||'');
           if(!key||seen.has(key))continue;
-          seen.add(key);unique.push(key);
-          if(unique.length>=candidateTarget)break;
+          seen.add(key);unique.push(key);groups[i].push(key);
+          if(unique.length>=candidateTarget||(narrative&&groups[i].length>=requestCount))break;
         }
       }catch(_){}
     }
     if(unique.length){
       const recent=creatorRecentWebAssetSet(7);
+      if(narrative){
+        const excluded=new Set((Array.isArray(excludePaths)?excludePaths:[]).map(x=>String(x||'').replace(/\\/g,'/')));
+        const selection=creatorSelectNarrativeWebAssets(groups,recent,excluded,wanted);
+        remember({
+          kind:'creator_auto_web_media',
+          queries:queries.slice(0,4),
+          orientation:'landscape',
+          count:selection.paths.length,
+          candidateCount:unique.length,
+          freshCount:selection.paths.filter(rel=>!recent.has(rel)).length,
+          freshnessDays:7,
+          unseenCount:selection.paths.filter(rel=>!excluded.has(rel)).length,
+          batchExcludedCount:excluded.size,
+          narrativeAssetOrder:'query-progressive',
+          assetQueryOrder:selection.assetQueryOrder,
+          coveredQueryCount:new Set(selection.assetQueryOrder.map(x=>x.queryIndex)).size,
+          localQueryOnly:true,
+          sceneAware:queries.length>1
+        });
+        return selection.paths;
+      }
       const freshOrdered=creatorPreferFreshAssetPaths(unique,recent,wanted);
       const motionOrdered=creatorPreferRealMotionHookAssets(freshOrdered,orientation);
       const batchExcluded=new Set((Array.isArray(excludePaths)?excludePaths:[]).map(x=>String(x||'').replace(/\\/g,'/')));
