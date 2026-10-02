@@ -30,7 +30,7 @@ function master(input,name){
 }
 
 try{
-  const rawQuiet=tone('raw-quiet',0.0002);
+  const rawQuiet=tone('raw-quiet',0.02);
   const mastered=master(rawQuiet,'mastered-quiet');
 
   const rawProbe=creator.probeRenderedAudioLoudness(rawQuiet,status.ffmpeg);
