@@ -4173,8 +4173,7 @@ function prepareCreatorAssetOperations(args={}){
     if(!fs.existsSync(full)||!fs.statSync(full).isFile())throw new Error('Creator asset kaynak dosyası bulunamadı: '+source);
     const expectedSha256=files.hashFile(full);
     if(!expectedSha256)throw new Error('Creator asset hash alınamadı: '+source);
-    const fileName=getCreatorEngine().assetSafeName(source);
-    const destination='creator-assets/'+expectedSha256.slice(0,12)+'-'+fileName;
+    const destination='creator-assets/'+getCreatorEngine().assetDestinationName(source,expectedSha256);
     const state=files.inspectOperation(WORKSPACE,{source,destination});
     if(!state.sourceExists||state.sourceHash!==expectedSha256)throw new Error('Creator asset kaynak hash doğrulanamadı: '+source);
     if(state.destinationExists&&state.destinationHash!==expectedSha256)throw new Error('Creator asset hedefinde farklı içerik var: '+destination);
