@@ -22,6 +22,8 @@ assert.strictEqual(e.recoveryDecision(root,copy).decision,'completed');
 
 assert.throws(()=>e.normalizeOperations(root,[{operation:'copy',source:'in/a.txt',destination:'out/a.txt'}]),/DEST_EXISTS/);
 assert.throws(()=>e.normalizeOperations(root,[{operation:'copy',source:'in/a.txt',destination:'\.jarvis-memory/a.txt'}]),/INTERNAL_PATH/);
+assert.throws(()=>e.normalizeOperations(root,[{operation:'copy',source:'in/a.txt',destination:'/outside.txt'}]),/BAD_PATH/);
+assert.throws(()=>e.normalizeOperations(root,[{operation:'copy',source:'in/a.txt',destination:'C:\\outside.txt'}]),/BAD_PATH/);
 assert.throws(()=>e.normalizeOperations(root,[{operation:'copy',source:'in/a.txt',destination:'out/secret.json'}]),/SENSITIVE_PATH/);
 
 const move=e.normalizeOperations(root,[{operation:'move',source:'in/b.txt',destination:'out/b.txt'}])[0];
