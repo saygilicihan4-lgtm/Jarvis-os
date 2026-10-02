@@ -4674,13 +4674,6 @@ async function verifyUncertainCampaignStep(mission){
     const index=Math.max(0,Number(step.meta&&step.meta.operationIndex)||0);
     const op=operations[index];
     if(!op)return mission;
-    if(op.reused){
-      return engine.resolveUncertainStep(WORKSPACE,mission.id,{
-        completed:true,
-        artifact:{source:op.source,destination:op.destination,sha256:op.expectedSha256,bytes:Number(op.bytes||0),reused:true,recovered:true},
-        note:'Creator asset already existed with the same hash'
-      });
-    }
     const check=getWorkspaceFileEngine().recoveryDecision(WORKSPACE,op);
     if(check.decision==='completed'){
       return engine.resolveUncertainStep(WORKSPACE,mission.id,{
@@ -4854,6 +4847,11 @@ async function runDurableMission(id){
         const op=operations[index];
         if(!op){
           mission=engine.failStep(WORKSPACE,id,{code:'CREATOR_ASSET_OP_MISSING',message:'Creator asset operation girdisi bulunamadı.',retryable:false});
+          return mission;
+        }
+        const state=getWorkspaceFileEngine().recoveryDecision(WORKSPACE,op);
+        if(op.reused&&state.decision!=='completed'){
+          mission=engine.failStep(WORKSPACE,id,{code:'CREATOR_ASSET_REUSE_CONFLICT',message:'Daha önce eşleşen Creator asset artık kaynak/hedef hashleriyle doğrulanmıyor.',retryable:false,uncertain:true});
           return mission;
         }
         const inspected=getCreatorEngine().inspectAsset(WORKSPACE,op.source);
