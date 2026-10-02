@@ -4,7 +4,7 @@ const assert=require('assert');
 const worker=fs.readFileSync('./worker.js','utf8');
 const engine=fs.readFileSync('./jarvis-workspace-file-engine.js','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.97.0'"),'Worker 2.97.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.98.0'"),'Worker 2.98.0 required');
 assert.ok(worker.includes("'workspace_file_mission_v1'"),'workspace file mission capability missing');
 assert.ok(worker.includes("'workspace_file_hash_guard_v1'"),'workspace file hash guard capability missing');
 assert.ok(worker.includes("'workspace_file_no_overwrite_v1'"),'workspace no-overwrite capability missing');
