@@ -1,0 +1,19 @@
+const fs=require('fs');
+const assert=require('assert');
+
+const worker=fs.readFileSync('./worker.js','utf8');
+const startup=fs.readFileSync('./jarvis-startup.ps1','utf8');
+
+assert.ok(worker.includes("const WORKER_VERSION='2.75.0'"),'worker 2.75.0 required');
+assert.ok(worker.includes('bootstrap_migration_v1'),'bootstrap capability missing');
+assert.ok(worker.includes('function bootstrapRuntimeUpgrade()'),'bootstrap migration function missing');
+assert.ok(worker.includes("syncRepoRuntimeFile('jarvis-self-update.ps1'"),'updater bootstrap missing');
+assert.ok(worker.includes("syncRepoRuntimeFile('jarvis-update-manifest.json'"),'manifest bootstrap missing');
+assert.ok(worker.includes("syncRepoRuntimeFile('jarvis-creator-engine.js'"),'creator engine bootstrap missing');
+assert.ok(worker.includes("try{creatorEngine=require('./jarvis-creator-engine')}catch(_){}"),'creator engine must be optional during migration');
+assert.ok(worker.includes("getCreatorEngine().renderShort({"),'creator engine must lazy-load after bootstrap');
+assert.ok(worker.includes("try{bootstrapRuntimeUpgrade()}catch(e)"),'runtime migration must run before helpers');
+assert.ok(startup.includes('jarvis-self-update.ps1'),'canonical startup updater missing');
+assert.ok(startup.includes('jarvis-self-update.next.ps1'),'pending updater handoff missing');
+
+console.log('BOOTSTRAP BRIDGE SELFTEST PASS');
