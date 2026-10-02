@@ -34,6 +34,7 @@ jobs:
           node --check mission-control-selftest.js
           node --check creator-mission-selftest.js
           node --check creator-asset-mission-selftest.js
+          node --check creator-storyboard-selftest.js
           node --check shopify-mission-selftest.js
           node --check approval-gate-selftest.js
           node --check developer-mission-selftest.js
@@ -85,6 +86,8 @@ jobs:
         run: node creator-mission-selftest.js
       - name: Creator asset mission selftest
         run: node creator-asset-mission-selftest.js
+      - name: Creator storyboard selftest
+        run: node creator-storyboard-selftest.js
       - name: Shopify mission selftest
         run: node shopify-mission-selftest.js
       - name: Approval gate selftest
