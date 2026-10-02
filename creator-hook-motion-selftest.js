@@ -12,7 +12,7 @@ assert.strictEqual(typeof creator.probeHookMotion,'function','probeHookMotion ex
 assert.strictEqual(typeof creator.findHookMotionWindow,'function','findHookMotionWindow export missing');
 
 assert.ok(source.includes("tblend=all_mode=difference,signalstats,metadata=mode=print:key=lavfi.signalstats.YAVG:file=-"),'decoded frame-difference motion evidence missing');
-assert.ok(source.includes("'fps='+rate+',scale=64:64:flags=area,format=gray'"),'bounded hook frame sampling missing');
+assert.ok(source.includes("'fps='+rate+',scale=64:64:flags=area,tblend=all_mode=difference"),'bounded hook frame sampling missing');
 assert.ok(source.includes("sampleCount>=3&&meanDifference>=0.12&&peakDifference>=0.25&&activeRatio>=0.35"),'hook motion threshold missing');
 assert.ok(source.includes("maxOffsetSeconds=3"),'bounded hook motion search horizon missing');
 assert.ok(source.includes("stepSeconds=0.5"),'hook motion search step missing');
