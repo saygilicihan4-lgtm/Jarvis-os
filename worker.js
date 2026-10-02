@@ -2465,6 +2465,36 @@ function nativeAgentTools(){
     {
       type:'function',
       function:{
+        name:'developer_project_mission',
+        description:'Kullanıcı açıkça bir uygulama, site veya yazılım projesi oluşturmanı istediğinde kalıcı ve yeniden başlatılabilir geliştirici görevi başlat. Yalnızca JARVIS workspace içinde güvenli metin kaynak dosyaları oluşturur; mevcut farklı dosyaların üstüne otomatik yazmaz ve deploy etmez.',
+        parameters:{
+          type:'object',
+          properties:{
+            projectName:{type:'string',description:'Workspace içindeki proje klasör adı.'},
+            summary:{type:'string',description:'Projenin kısa amacı.'},
+            features:{type:'array',items:{type:'string'},description:'files verilmezse başlangıç web uygulamasında gösterilecek özellikler.'},
+            files:{
+              type:'array',
+              maxItems:12,
+              items:{
+                type:'object',
+                properties:{
+                  path:{type:'string',description:'Proje köküne göre güvenli kaynak dosya yolu.'},
+                  content:{type:'string',description:'Dosyanın metin içeriği.'}
+                },
+                required:['path','content'],
+                additionalProperties:false
+              }
+            }
+          },
+          required:['projectName'],
+          additionalProperties:false
+        }
+      }
+    },
+    {
+      type:'function',
+      function:{
         name:'shopify_product_mission',
         description:'Kullanıcı mağazaya ürün ekleme veya ürün taslağı hazırlama işinin bağlantı kesilse bile kaldığı yerden devam etmesini istediğinde kalıcı Shopify ürün görevi başlat. Yalnızca DRAFT ürün oluşturur; ürünü yayınlamaz.',
         parameters:{
@@ -2717,6 +2747,18 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
     if(!latest)return{ok:true,message:'Devam ettirilecek yarım görev yok.'};
     const out=await runDurableMission(latest.id);
     return{ok:out.status==='completed',message:missionSummaryText(out)};
+  }else if(n==='developer_project_mission'){
+    const intent=String(userText||'').toLocaleLowerCase('tr-TR');
+    if(!/(?:uygulama|site|web|yazılım|yazilim|proje|app|kod)/i.test(intent)||!/(?:oluştur|olustur|geliştir|gelistir|hazırla|hazirla|yap|kur)/i.test(intent)){
+      return{ok:false,message:'Kalıcı geliştirici görevi yalnızca açık uygulama/proje isteğiyle başlatılır.'};
+    }
+    try{
+      const mission=createDeveloperProjectMission(a);
+      const out=await runDurableMission(mission.id);
+      return{ok:out.status==='completed',message:missionSummaryText(out)+(out.status==='failed'?' · mevcut dosya çakışması varsa otomatik üzerine yazılmadı':'')};
+    }catch(e){
+      return{ok:false,message:'Kalıcı geliştirici görevi başlatılamadı: '+String(e.message||e).slice(0,700)};
+    }
   }else if(n==='shopify_product_mission'){
     const intent=String(userText||'').toLocaleLowerCase('tr-TR');
     if(!/(?:shopify|mağaza|magaza|ürün|urun|varova)/i.test(intent)||!/(?:ekle|hazırla|hazirla|oluştur|olustur|taslak|yap)/i.test(intent)){
@@ -2848,6 +2890,7 @@ async function runNativeAgent(message,{maxRounds=4,signal=null}={}){
     'Kullanıcı tek seferlik değil, tamamlanana kadar sürecek bir Short/Reels üretimi isterse creator_short_mission kullan; bu görev disk üzerinde kalır, kesintiden sonra devam eder ve YouTube istenirse sadece Studio taslağına kadar gider.',
     'Mağaza işlerinde önce shopify_status ile bağlantıyı kontrol edebilirsin. shopify_create_draft yalnızca DRAFT ürün oluşturur; eksik fiyat, SKU veya görseli uydurma.',
     'Kullanıcı bir ürünü mağazaya ekleme işinin tamamlanana kadar sürmesini istiyorsa shopify_product_mission kullan; görev disk üzerinde kalır, bağlantı yoksa bekler ve aynı ürünü mission etiketiyle kopya oluşturmadan sürdürür.',
+    'Kullanıcı uygulama/site/yazılım geliştirmeyi istediğinde developer_project_mission kullan. Bu araç kaynak dosyaları yalnızca JARVIS workspace içine yazar, mevcut farklı dosyanın üzerine otomatik yazmaz ve deploy etmez; böylece geliştirme görevi kesintiden sonra güvenle devam eder.',
     'Ürünü halka açık mağazada yayınlama native ajan aracı değildir. Yayınlama ancak kullanıcının açık yayınlama komutuyla ayrı güvenli akıştan yapılır.',
     'YouTube için youtube_prepare_draft_upload yalnızca dosyayı Studio yükleme ekranına koyar ve metadata hazırlar; hiçbir zaman Publish/Yayınla düğmesine basmaz.',
     'Kullanıcı aynı istekte Short üretip YouTube taslağına yüklemenizi isterse önce creator_render_short sonucundaki gerçek output yolunu al, sonra youtube_prepare_draft_upload çağır. Dosya yolu uydurma.',
