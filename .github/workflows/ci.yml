@@ -39,6 +39,7 @@ jobs:
           node --check creator-quality-selftest.js
           node --check creator-longform-selftest.js
           node --check creator-duration-fit-selftest.js
+          node --check creator-longform-edit-selftest.js
           node --check shopify-mission-selftest.js
           node --check approval-gate-selftest.js
           node --check developer-mission-selftest.js
@@ -100,6 +101,8 @@ jobs:
         run: node creator-longform-selftest.js
       - name: Creator long-form duration fit selftest
         run: node creator-duration-fit-selftest.js
+      - name: Creator long-form edit rhythm selftest
+        run: node creator-longform-edit-selftest.js
       - name: Shopify mission selftest
         run: node shopify-mission-selftest.js
       - name: Approval gate selftest
