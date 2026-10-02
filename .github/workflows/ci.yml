@@ -52,6 +52,7 @@ jobs:
           node --check creator-web-media-selftest.js
           node --check creator-visual-relevance-selftest.js
           node --check creator-semantic-diversity-selftest.js
+          node --check creator-semantic-relevance-floor-selftest.js
           node --check creator-relevance-fallback-selftest.js
           node --check creator-short-motion-selftest.js
           node --check creator-image-motion-selftest.js
@@ -167,6 +168,8 @@ jobs:
         run: node creator-visual-relevance-selftest.js
       - name: Creator semantic diversity selftest
         run: node creator-semantic-diversity-selftest.js
+      - name: Creator semantic relevance floor selftest
+        run: node creator-semantic-relevance-floor-selftest.js
       - name: Creator relevance fallback selftest
         run: node creator-relevance-fallback-selftest.js
       - name: Creator Short motion selftest
