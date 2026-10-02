@@ -56,12 +56,13 @@ assert.ok(worker.includes("if(/^creator_batch_youtube_\\d+$/.test(step.name))"),
 assert.ok(worker.includes("missionId:receiptId"),'each batch DRAFT must use its own receipt id');
 assert.ok(worker.includes("published:false"),'batch YouTube artifact must remain non-public');
 
-const depStart=worker.indexOf("if(dep.startsWith('mission:'))");
+const depStart=worker.indexOf("if(/^mission:M-[A-Z0-9-]{12,80}$/.test(dep))");
 const depEnd=worker.indexOf("if(dep==='pc_runtime')",depStart);
 assert.ok(depStart>0&&depEnd>depStart,'child mission dependency readiness block missing');
 const depBlock=worker.slice(depStart,depEnd);
 assert.ok(depBlock.includes("['completed','failed','cancelled'].includes"),'parent must wake only when child reaches terminal state');
 assert.ok(!depBlock.includes("!['paused','cancelled','failed'].includes"),'queued/running child must not wake parent and starve scheduler');
+assert.ok(worker.includes("if(dep.startsWith('mission:'))return false"),'malformed mission dependency must stay blocked rather than reaching Mission Engine');
 
 assert.ok(worker.includes("creatorBatchMissionReady:CAPS.includes('creator_batch_mission_v1')"),'PC acceptance must require Creator Batch readiness');
 assert.ok(worker.includes("creatorStoryboardReady:CAPS.includes('creator_storyboard_v1')"),'PC acceptance must keep Creator Storyboard readiness');
