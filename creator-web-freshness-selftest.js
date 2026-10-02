@@ -45,7 +45,8 @@ assert.deepStrictEqual(
 
 assert.ok(worker.includes('const candidateTarget=Math.min(12,wanted+Math.min(4,queries.length))'),'auto web must fetch a bounded extra candidate pool');
 assert.ok(worker.includes('const freshOrdered=creatorPreferFreshAssetPaths(unique,recent,wanted)'),'auto web freshness ordering missing');
-assert.ok(worker.includes('const ordered=creatorPreferRealMotionHookAssets(freshOrdered,orientation)'),'v80 hook ordering must run after freshness');
+assert.ok(worker.includes('const motionOrdered=creatorPreferRealMotionHookAssets(freshOrdered,orientation)'),'v80 hook ordering must run after freshness');
+assert.ok(worker.includes('const ordered=creatorPreferUnseenAssetPaths(motionOrdered,batchExcluded,wanted)'),'v81 batch diversity must run after freshness + hook ordering');
 assert.ok(worker.includes('freshnessDays:7'),'freshness evidence missing');
 assert.ok(worker.includes('freshCount'),'freshness evidence must record fresh candidate count');
 assert.ok(worker.includes('creatorMarkWebAssetsUsed(out.assets.map'),'successful render usage recording missing');

@@ -63,7 +63,8 @@ assert.strictEqual(byPath.get('creator-assets/still-a.mp4'),'animated_still','an
 const autoStart=worker.indexOf('async function creatorAutoWebAssets');
 const autoEnd=worker.indexOf('function creatorYoutubeDescription',autoStart);
 const autoBlock=worker.slice(autoStart,autoEnd);
-assert.ok(autoBlock.includes('creatorPreferRealMotionHookAssets(freshOrdered,orientation)'),'real-motion hook order must run after freshness');
+assert.ok(autoBlock.includes('const motionOrdered=creatorPreferRealMotionHookAssets(freshOrdered,orientation)'),'real-motion hook order must run after freshness');
+assert.ok(autoBlock.includes('creatorPreferUnseenAssetPaths(motionOrdered,batchExcluded,wanted)'),'later diversity ordering must preserve real-motion hook stage');
 assert.ok(autoBlock.includes("hookMediaKind=String(row&&row.mediaKind||'unknown')"),'hook media kind evidence lookup missing');
 
 const shortMission=worker.slice(worker.indexOf('function createCreatorShortMission'),worker.indexOf('function createCreatorLongformMission'));
