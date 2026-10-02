@@ -22,6 +22,7 @@ jobs:
           node --check worker.js
           node --check jarvis-creator-engine.js
           node --check creator-engine-selftest.js
+          node --check bootstrap-bridge-selftest.js
           python -m py_compile jarvis-local-stt-v4.py
       - name: STT lexicon selftest
         run: python stt-lexicon-selftest.py
@@ -31,6 +32,8 @@ jobs:
         run: node ui-selftest.js
       - name: Creator engine selftest
         run: node creator-engine-selftest.js
+      - name: Bootstrap bridge selftest
+        run: node bootstrap-bridge-selftest.js
       - name: PowerShell installer syntax
         shell: pwsh
         run: |
