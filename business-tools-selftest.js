@@ -20,6 +20,8 @@ assert.ok(!worker.includes("name:'shopify_publish_product'"),'public Shopify pub
 
 assert.ok(server.includes("return'shopify_product_draft_v1'"),'server Shopify draft routing missing');
 assert.ok(server.includes("return'shopify_publish_v1'"),'server Shopify publish routing missing');
+assert.ok(server.includes('|yayınla|yayinla|publish)'), 'public publish approval guard missing');
+assert.ok(server.includes('oluştur|olustur|ekle|taslak|update'), 'Shopify draft write classification missing');
 assert.ok(server.includes("return'commerce_engine_v1'"),'server commerce status/setup routing missing');
 
 console.log('BUSINESS TOOLS SELFTEST PASS');
