@@ -4579,7 +4579,8 @@ function normalizeShopifyCatalogItems(args={}){
   });
 }
 function shopifyCatalogFingerprint(items){
-  return crypto.createHash('sha256').update(JSON.stringify((items||[]).map(x=>x.fingerprint))).digest('hex');
+  const fingerprints=(items||[]).map(x=>String(x&&x.fingerprint||'')).filter(Boolean).sort();
+  return crypto.createHash('sha256').update(JSON.stringify(fingerprints)).digest('hex');
 }
 function findShopifyCatalogBatchByFingerprint(fingerprint){
   const fp=String(fingerprint||'');
