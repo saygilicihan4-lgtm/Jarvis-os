@@ -49,6 +49,7 @@
       <div class="metric"><span>CLOUD NODE</span><b>RENDER / FRA</b></div>
       <div class="metric"><span>PC BRIDGE</span><b id="pcState">OFFLINE</b></div>
       <div class="metric"><span>REMOTE QUEUE</span><b id="remoteQueue">0 WAITING</b></div>
+      <div class="metric"><span>LOCAL MISSIONS</span><b id="localMissionState">PC OFFLINE</b></div>
       <div class="metric"><span>REMOTE MODE</span><b id="remoteMode">PC REQUIRED</b></div>
       <div class="metric"><span>ASSISTANT</span><b id="assistantState">CALENDAR READY</b></div>
       <button id="notifyBtn" type="button">ENABLE PHONE ALERTS</button>
@@ -175,6 +176,9 @@ let lastVisionSummary=null;
 let lastVisionAiSummary=null;
 let lastLocalText='';
 let activeLanguage='tr-TR';
+let localMissionRuntime=null;
+let localMissionRuntimeAt=0;
+let lastCloudTasks=[];
 const jarvisCalendar={
   reminders:JSON.parse(localStorage.getItem('jarvisCalendarReminders')||'[]'),
   save(){localStorage.setItem('jarvisCalendarReminders',JSON.stringify(this.reminders))},
@@ -1809,6 +1813,9 @@ async function refreshLocalWorkerHealth(){
     if(!r.ok)return null;
     loadLocalSpeechLexicon().catch(()=>{});
     const ver=String(j.version||'');
+    localMissionRuntime=j.missionRuntime&&j.missionRuntime.ok!==false?j.missionRuntime:null;
+    localMissionRuntimeAt=Date.now();
+    renderMissionQueue();
     if(window.workerSetup)workerSetup.textContent='LOCAL v'+ver+' · CLOUD '+workerSetup.textContent;
     if(j.localBrain){
       fetch('http://127.0.0.1:8765/brain-status',{cache:'no-store'})
@@ -1854,7 +1861,14 @@ async function refreshLocalWorkerHealth(){
       }
     }
     return ver;
-  }catch(_){clearTimeout(timer);return null}
+  }catch(_){
+    clearTimeout(timer);
+    if(localMissionRuntime&&Date.now()-localMissionRuntimeAt>12000){
+      localMissionRuntime=null;
+      renderMissionQueue();
+    }
+    return null
+  }
 }
 async function executeDirectLocalPcControl(command,{speakResult=true}={}){
   if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis()||!isDirectLocalPcCommand(command))return null;
@@ -2493,6 +2507,46 @@ function taskCard(x){
   if(!['completed','cancelled','failed'].includes(x.status))actions+='<button class="mini-btn" onclick="cancelTask('+x.id+')">CANCEL</button>';
   return '<div class="task"><div class="task-head"><b>'+esc(x.agent)+'</b><span class="status '+esc(x.status)+'">'+esc(x.status).toUpperCase()+'</span></div><p>'+esc(x.command)+'</p><small>ATTEMPT '+esc(x.attempts)+'/'+esc(x.maxRetries)+(x.message?' · '+esc(x.message):'')+'</small><div>'+actions+'</div></div>';
 }
+function localMissionCard(m){
+  const step=m&&m.step||{};
+  const err=step&&step.error||{};
+  const status=String(m&&m.status||'queued');
+  const stepStatus=String(step.status||status);
+  const label=String(m&&m.label||m&&m.type||'JARVIS mission');
+  const stepName=String(step.name||'waiting');
+  const attempts=Number(step.attempts||0);
+  const dependency=String(err.dependency||'');
+  const artifactCount=Array.isArray(m&&m.artifacts)?m.artifacts.length:0;
+  const detail=[
+    'LOCAL',
+    'STEP '+stepName,
+    'ATTEMPT '+attempts,
+    dependency?('WAIT '+dependency.toUpperCase()):'',
+    artifactCount?('OUTPUTS '+artifactCount):''
+  ].filter(Boolean).join(' · ');
+  return '<div class="task local-mission"><div class="task-head"><b>'+esc(label)+'</b><span class="status '+esc(stepStatus)+'">'+esc(status).toUpperCase()+'</span></div><p>'+esc(stepName.replace(/_/g,' '))+'</p><small>'+esc(detail)+'</small></div>';
+}
+function renderMissionQueue(){
+  const cloud=Array.isArray(lastCloudTasks)?lastCloudTasks:[];
+  const localQueue=localMissionRuntime&&Array.isArray(localMissionRuntime.queue)?localMissionRuntime.queue:[];
+  const localCards=localQueue.map(localMissionCard);
+  const cloudCards=cloud.slice().reverse().map(taskCard);
+  tasks.innerHTML=[...localCards,...cloudCards].join('')||'<div class="task"><small>No active missions.</small></div>';
+  const total=cloud.length+Number(localMissionRuntime&&localMissionRuntime.openCount||0);
+  taskCount.textContent=String(total).padStart(2,'0');
+  if(window.localMissionState){
+    if(!localMissionRuntime){
+      localMissionState.textContent='PC OFFLINE';
+      localMissionState.style.color='#ffca66';
+    }else{
+      const c=localMissionRuntime.counts||{};
+      const open=Number(localMissionRuntime.openCount||0);
+      const blocked=Number(c.waitingDependency||0)+Number(c.needsVerification||0);
+      localMissionState.textContent=open?(open+' OPEN'+(blocked?' · '+blocked+' WAIT':'')):'IDLE';
+      localMissionState.style.color=blocked?'#ffca66':'#65ffbf';
+    }
+  }
+}
 
 let phoneSpeechInitialized=false;
 let phoneLastTerminalTaskId=0;
@@ -2538,7 +2592,8 @@ async function load(){
   workerReadout.textContent=pc.online?'ON':'OFF';
   devAgent.textContent=!pc.online?'STANDBY':workerCurrent?('READY v'+pc.version):'UPDATE REQUIRED';
   devAgent.style.color=workerCurrent?'#65ffbf':pc.online?'#ffca66':'';
-  taskCount.textContent=String((d.tasks||[]).length).padStart(2,'0');
+  lastCloudTasks=Array.isArray(d.tasks)?d.tasks:[];
+  renderMissionQueue();
   const localMemory=pc.online&&Array.isArray(pc.capabilities)&&pc.capabilities.includes('local_memory');
   memoryState.textContent=localMemory?'LOCAL PERSISTENT':'VOLATILE';
   memoryState.style.color=localMemory?'#65ffbf':'#ffca66';
@@ -2550,7 +2605,7 @@ async function load(){
     if(detail)detail.textContent=localMemory?'PC disk persistence active':'Persistent memory not connected';
   }
 
-  tasks.innerHTML=(d.tasks||[]).slice().reverse().map(taskCard).join('')||'<div class="task"><small>No active missions.</small></div>';
+  renderMissionQueue();
   audit.innerHTML=(d.audit||[]).slice(-18).reverse().map(x=>'<div class="log"><small>'+esc(x.at)+' · '+esc(x.type)+'</small><br>'+esc(x.message)+'</div>').join('')||'<div class="log"><small>No system events.</small></div>';
   setAuthenticated(true);
   if(desktopWakeWordEnabled)scheduleDesktopWakeWord(900);
