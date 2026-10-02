@@ -51,6 +51,7 @@ jobs:
           node --check creator-kinetic-captions-selftest.js
           node --check creator-web-freshness-selftest.js
           node --check creator-real-motion-hook-selftest.js
+          node --check creator-micro-hook-selftest.js
           node --check shopify-mission-selftest.js
           node --check approval-gate-selftest.js
           node --check developer-mission-selftest.js
@@ -134,6 +135,8 @@ jobs:
         run: node creator-web-freshness-selftest.js
       - name: Creator real motion hook selftest
         run: node creator-real-motion-hook-selftest.js
+      - name: Creator micro hook selftest
+        run: node creator-micro-hook-selftest.js
       - name: Shopify mission selftest
         run: node shopify-mission-selftest.js
       - name: Approval gate selftest
