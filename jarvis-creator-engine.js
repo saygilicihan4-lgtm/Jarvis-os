@@ -407,6 +407,69 @@ function buildShortStoryboard(assets,durationSeconds,transitionSeconds=0.18,targ
     };
   });
 }
+function buildShortSfxEvents(storyboard,durationSeconds,maxEvents=5){
+  const duration=Math.max(1,Number(durationSeconds)||15);
+  const scenes=Array.isArray(storyboard)?storyboard:[];
+  const limit=Math.max(1,Math.min(6,Number(maxEvents)||5));
+  const events=[];
+  if(scenes.length){
+    events.push({kind:'impact',time:0.03,level:0.05});
+    for(const scene of scenes.slice(1)){
+      const time=Number(scene&&scene.start);
+      if(!Number.isFinite(time)||time<0.35||time>duration-0.18)continue;
+      events.push({kind:'whoosh',time:Number(time.toFixed(3)),level:0.018});
+      if(events.length>=limit)break;
+    }
+  }
+  return events.slice(0,limit);
+}
+function renderShortSfxBed(ffmpeg,jobDir,storyboard,durationSeconds){
+  if(!ffmpeg)return null;
+  const duration=Math.max(1,Number(durationSeconds)||15);
+  const events=buildShortSfxEvents(storyboard,duration,5);
+  if(!events.length)return null;
+  const outFile=path.join(jobDir,'short-sfx.wav');
+  const args=['-y','-hide_banner','-loglevel','error',
+    '-f','lavfi','-i','anullsrc=r=48000:cl=stereo:d='+duration.toFixed(3)
+  ];
+  const filters=['[0:a]volume=0[base]'];
+  const labels=['[base]'];
+  let inputIndex=1;
+  events.forEach((event,index)=>{
+    const ms=Math.max(0,Math.round(Number(event.time||0)*1000));
+    const label='fx'+index;
+    if(event.kind==='impact'){
+      args.push('-f','lavfi','-i','sine=frequency=118:sample_rate=48000:duration=0.20');
+      filters.push(
+        '['+inputIndex+':a]volume='+Number(event.level||0.05).toFixed(3)+
+        ',lowpass=f=900,afade=t=out:st=0.04:d=0.16,'+
+        'aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,'+
+        'adelay='+ms+'|'+ms+'['+label+']'
+      );
+    }else{
+      args.push('-f','lavfi','-i','anoisesrc=color=pink:sample_rate=48000:duration=0.24');
+      filters.push(
+        '['+inputIndex+':a]highpass=f=650,lowpass=f=4200,'+
+        'volume='+Number(event.level||0.018).toFixed(3)+
+        ',afade=t=in:st=0:d=0.03,afade=t=out:st=0.08:d=0.16,'+
+        'aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,'+
+        'adelay='+ms+'|'+ms+'['+label+']'
+      );
+    }
+    labels.push('['+label+']');
+    inputIndex++;
+  });
+  filters.push(labels.join('')+'amix=inputs='+labels.length+':duration=longest:normalize=0,alimiter=limit=0.45[sfx]');
+  args.push(
+    '-filter_complex',filters.join(';'),
+    '-map','[sfx]','-t',duration.toFixed(3),
+    '-c:a','pcm_s16le',outFile
+  );
+  execFile(ffmpeg,args,{timeout:60000,maxBuffer:1024*1024*8});
+  if(!fs.existsSync(outFile)||fs.statSync(outFile).size<1024)throw new Error('CREATOR_SHORT_SFX_OUTPUT_INVALID');
+  return{file:outFile,events,count:events.length,profile:'procedural-impact-whoosh',maxEvents:5};
+}
+
 function buildLongformStoryboard(assets,durationSeconds,transitionSeconds=0.35,targetSceneSeconds=25,maxScenes=28){
   const list=Array.isArray(assets)?assets.filter(Boolean):[];
   if(!list.length)return[];
@@ -846,11 +909,24 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
   fs.writeFileSync(srtFile,buildSrt(cleanScript,duration),'utf8');
   fs.writeFileSync(assFile,buildShortAss(cleanScript,duration),'utf8');
 
+  let sfx=null;
+  try{sfx=assets.length?renderShortSfxBed(status.ffmpeg,jobDir,storyboard,duration):null}
+  catch(e){sfx={file:null,events:[],count:0,profile:'voice-only-fallback',error:String(e.message||e).slice(0,240)}}
+  const soundDesign={
+    enabled:!!(sfx&&sfx.file),
+    count:Number(sfx&&sfx.count||0),
+    profile:String(sfx&&sfx.profile||'voice-only'),
+    error:sfx&&sfx.error||null
+  };
+
   let args=[];
   if(assets.length){
     args=['-y','-hide_banner','-loglevel','error'];
     for(const scene of storyboard)args.push('-stream_loop','-1','-i',scene.file);
+    const voiceInput=storyboard.length;
     args.push('-i',voicePath);
+    const sfxInput=soundDesign.enabled?voiceInput+1:null;
+    if(soundDesign.enabled)args.push('-i',sfx.file);
 
     const filters=[];
     storyboard.forEach((scene,i)=>{
@@ -886,16 +962,24 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
       videoLabel='vout';
     }
 
+    let audioMap=String(voiceInput)+':a:0';
+    if(soundDesign.enabled){
+      filters.push('['+voiceInput+':a]aresample=48000,apad=pad_dur=1,volume=1[voicea]');
+      filters.push('['+sfxInput+':a]aresample=48000,volume=1[sfxa]');
+      filters.push('[voicea][sfxa]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.95[aout]');
+      audioMap='[aout]';
+    }
+
     args.push(
       '-t',duration.toFixed(3),
       '-filter_complex',filters.join(';'),
       '-map','['+videoLabel+']',
-      '-map',String(storyboard.length)+':a:0',
+      '-map',audioMap,
       '-c:v','libx264','-preset','veryfast','-crf','20','-pix_fmt','yuv420p',
-      '-c:a','aac','-b:a','160k','-af','apad=pad_dur=1',
-      '-movflags','+faststart',
-      outFile
+      '-c:a','aac','-b:a','160k'
     );
+    if(!soundDesign.enabled)args.push('-af','apad=pad_dur=1');
+    args.push('-movflags','+faststart',outFile);
   }else{
     const graph='color=c=0x030712:s=1080x1920:r=30:d='+duration.toFixed(3)+',noise=alls=8:allf=t+u';
     args=[
@@ -966,10 +1050,11 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     visualEdit,
     thumbnail:thumbnail&&thumbnail.ok?thumbnail.path:null,
     thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),
+    soundDesign,
     output:path.relative(workspace,outFile),
     subtitle:path.relative(workspace,srtFile),
     burnedSubtitle:path.relative(workspace,assFile),
-    profile:{width:1080,height:1920,fps:30,codec:'H.264',audio:'AAC',durationTarget:'12-18s',multiScene:true,transition:'varied',hookTarget:'0.75-1.05s',sceneTarget:'2.5-4s',motion:'dynamic-pan-crop',captions:'kinetic-pop-fade'}
+    profile:{width:1080,height:1920,fps:30,codec:'H.264',audio:'AAC',durationTarget:'12-18s',multiScene:true,transition:'varied',hookTarget:'0.75-1.05s',sceneTarget:'2.5-4s',motion:'dynamic-pan-crop',captions:'kinetic-pop-fade',sfx:'procedural-impact-whoosh'}
   };
   fs.writeFileSync(metaFile,JSON.stringify(meta,null,2),'utf8');
 
@@ -991,6 +1076,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     visualEdit,
     thumbnail:thumbnail&&thumbnail.ok?thumbnail.path:null,
     thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),
+    soundDesign,
     profileVersion:CREATOR_PROFILE_VERSION
   };
 }
@@ -1205,6 +1291,8 @@ module.exports={
   selectAssets,
   buildStoryboard,
   buildShortStoryboard,
+  buildShortSfxEvents,
+  renderShortSfxBed,
   buildLongformStoryboard,
   supportsSubtitles,
   ffmpegFilterPath,
