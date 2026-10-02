@@ -1756,7 +1756,13 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
       outFile
     );
   }else{
-    const graph='color=c=0x030712:s=1920x1080:r=30:d='+duration.toFixed(3)+',noise=alls=7:allf=t+u';
+    const proceduralSceneSeconds=30;
+    const proceduralSceneCount=Math.max(18,Math.ceil(duration/proceduralSceneSeconds));
+    const graph='color=c=0x0b1324:s=1920x1080:r=30:d='+duration.toFixed(3)+
+      ',noise=alls=9:allf=t+u'+
+      ",hue=H='18*sin(2*PI*t/90)':s='0.72+0.12*sin(2*PI*t/30)'"+
+      ",eq=brightness='0.018*sin(2*PI*t/30)':contrast='1.04+0.03*sin(2*PI*t/60)'"+
+      ',vignette=PI/5';
     args=[
       '-y','-hide_banner','-loglevel','error',
       '-f','lavfi','-i',graph,
@@ -1859,6 +1865,7 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     audioMaster:creatorAudioMasterProfile(),
     narrationActivity,
     assetSelection,
+    proceduralVisual:proceduralAssets?{sceneSeconds:proceduralSceneSeconds,sceneCount:proceduralSceneCount,profile:'animated-hue-noise-vignette'}:null,
     profileVersion:CREATOR_PROFILE_VERSION
   };
 }
