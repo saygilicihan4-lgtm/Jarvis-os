@@ -76,12 +76,12 @@ assert.ok(out.visualEdit&&out.visualEdit.ok===true,'visual edit gate must pass')
 
 const probe=creator.probeRenderedShort(out.output,status.ffprobe);
 assert.strictEqual(probe.ok,true,'rendered MP4 must pass Creator quality gate');
-assert.strictEqual(probe.video.width,1080,'render width mismatch');
-assert.strictEqual(probe.video.height,1920,'render height mismatch');
-assert.ok(Math.abs(probe.video.fps-30)<=0.05,'render FPS mismatch');
-assert.strictEqual(probe.video.codec,'h264','render codec mismatch');
-assert.strictEqual(probe.audio,true,'render audio stream missing');
-assert.ok(probe.video.duration>=11.8&&probe.video.duration<=18.8,'render duration outside Shorts gate');
+assert.strictEqual(probe.measured.width,1080,'render width mismatch');
+assert.strictEqual(probe.measured.height,1920,'render height mismatch');
+assert.ok(Math.abs(probe.measured.fps-30)<=0.05,'render FPS mismatch');
+assert.strictEqual(String(probe.measured.videoCodec).toLowerCase(),'h264','render codec mismatch');
+assert.strictEqual(probe.checks.audio,true,'render audio stream missing');
+assert.ok(probe.measured.duration>=11.8&&probe.measured.duration<=18.8,'render duration outside Shorts gate');
 
 const meta=JSON.parse(fs.readFileSync(out.metadata,'utf8'));
 assert.strictEqual(meta.missionId,'creator-render-smoke-v82','mission binding missing');
