@@ -6242,7 +6242,7 @@ async function verifyUncertainCampaignStep(mission){
       try{
         const meta=JSON.parse(fs.readFileSync(metaFile,'utf8'));
         if(String(meta&&meta.missionId||'')===String(mission.id)&&String(meta&&meta.mode||'')==='longform'){
-          const quality=creator.probeRenderedLongform(expected,status.ffprobe);
+          const quality=creator.applyRenderedAudioQuality(creator.probeRenderedLongform(expected,status.ffprobe),expected,status.ffmpeg,{mode:'longform'});
           if(quality.ok){
             try{creatorMarkWebAssetsUsed(meta&&meta.sourceAssets,{missionId:mission.id,type:String(mission.type||'creator_longform_recovery')})}catch(_){}
             return engine.resolveUncertainStep(WORKSPACE,mission.id,{
@@ -6272,7 +6272,7 @@ async function verifyUncertainCampaignStep(mission){
       try{
         const meta=JSON.parse(fs.readFileSync(metaFile,'utf8'));
         if(String(meta&&meta.missionId||'')===String(mission.id)){
-          const quality=creator.probeRenderedShort(expected,status.ffprobe);
+          const quality=creator.applyRenderedAudioQuality(creator.probeRenderedShort(expected,status.ffprobe),expected,status.ffmpeg,{mode:'short'});
           if(quality.ok){
             try{creatorMarkWebAssetsUsed(meta&&meta.sourceAssets,{missionId:mission.id,type:String(mission.type||'creator_short_recovery')})}catch(_){}
             return engine.resolveUncertainStep(WORKSPACE,mission.id,{
