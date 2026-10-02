@@ -4,7 +4,7 @@ const assert=require('assert');
 const worker=fs.readFileSync('./worker.js','utf8');
 const server=fs.readFileSync('./server.js','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.88.0'"),'Worker 2.88.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.89.0'"),'Worker 2.89.0 required');
 assert.ok(worker.includes("name:'pc_self_repair'"),'native self-repair tool missing');
 assert.ok(worker.includes('async function repairLocalRuntime()'),'self-repair function missing');
 assert.ok(worker.includes("['JARVIS-PC-ACCEPTANCE.ps1','JARVIS PC ACCEPTANCE V1']"),'hardened acceptance script repair sync missing');

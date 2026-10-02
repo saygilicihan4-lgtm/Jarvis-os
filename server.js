@@ -497,6 +497,22 @@ function sanitizeMissionTelemetry(raw){
     }:null
   };
 }
+function sanitizeWorkerUpdate(raw){
+  if(!raw||typeof raw!=='object')return null;
+  const changed=Array.isArray(raw.changed)?raw.changed.map(x=>String(x||'').replace(/[^A-Za-z0-9_.\/-]/g,'').slice(0,120)).filter(Boolean).slice(0,40):[];
+  const status=['not_configured','not_checked','current','updated','check_failed'].includes(String(raw.status||''))?String(raw.status):'unknown';
+  return{
+    configured:raw.configured===true,
+    status,
+    success:typeof raw.success==='boolean'?raw.success:null,
+    checkedAt:raw.checkedAt?String(raw.checkedAt).slice(0,64):null,
+    ageMinutes:Number.isFinite(Number(raw.ageMinutes))?Math.max(0,Math.min(525600,Number(raw.ageMinutes))):null,
+    changedCount:Math.max(0,Math.min(40,Number(raw.changedCount)||changed.length)),
+    changed,
+    updaterVersion:raw.updaterVersion?String(raw.updaterVersion).replace(/[^A-Za-z0-9_.-]/g,'').slice(0,32):null,
+    restartPolicy:String(raw.restartPolicy||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,40)
+  };
+}
 function publicState(){
   const signedPc=Object.values(state.workers.devices).filter(w=>w.approved&&workerOnline(w)).sort((a,b)=>new Date(b.lastSeen)-new Date(a.lastSeen))[0];
   const pc=signedPc||state.workers.pc;
@@ -521,6 +537,7 @@ function publicState(){
         capabilities:pc.capabilities||[],
         memory:pc.memory||null,
         missions:pc.missions||null,
+        update:pc.update||null,
         online:workerOnline(pc)
       },
       devices:publicDevices()
@@ -1172,7 +1189,8 @@ const server=http.createServer((req,res)=>{
           bytes:Number(d.memory.bytes)||0,
           lastAt:d.memory.lastAt?String(d.memory.lastAt):null
         }:null,
-        missions:sanitizeMissionTelemetry(d.missions)
+        missions:sanitizeMissionTelemetry(d.missions),
+        update:sanitizeWorkerUpdate(d.update)
       };
       const deviceId=d.deviceId?String(d.deviceId).replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80):null;
       if(deviceId){

@@ -31,6 +31,7 @@ jobs:
           node --check mission-scheduler-selftest.js
           node --check mission-console-selftest.js
           node --check creator-mission-selftest.js
+          node --check update-trust-selftest.js
           node --check mission-alerts-selftest.js
           node --check pc-acceptance-selftest.js
           node --check pc-self-repair-selftest.js
@@ -67,6 +68,8 @@ jobs:
         run: node mission-console-selftest.js
       - name: Creator mission selftest
         run: node creator-mission-selftest.js
+      - name: Update trust selftest
+        run: node update-trust-selftest.js
       - name: Mission alerts selftest
         run: node mission-alerts-selftest.js
       - name: PC acceptance snapshot selftest
