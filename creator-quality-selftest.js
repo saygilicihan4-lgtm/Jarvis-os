@@ -10,7 +10,7 @@ assert.ok(worker.includes("'creator_quality_recovery_v1'"),'Creator quality reco
 assert.ok(worker.includes("jarvis-creator-engine.js',\"ENGINE_VERSION='1.4'"),'Creator Engine 1.4 runtime signature missing');
 assert.ok(worker.includes("quality:out.quality"),'render artifact must retain measured quality');
 assert.ok(worker.includes("creator.probeRenderedShort(expected,status.ffprobe)"),'uncertain render recovery must rerun quality gate');
-assert.ok(worker.includes("artifact:{output:expected,metadata:metaFile,quality,recovered:true}"),'recovered render must retain quality evidence');
+assert.ok(worker.includes("artifact:{output:expected,metadata:metaFile,quality,thumbnail:meta&&meta.thumbnail||null,recovered:true}"),'recovered render must retain quality + thumbnail evidence');
 assert.ok(worker.includes("creatorQualityGateReady:CAPS.includes('creator_quality_gate_v1')"),'PC acceptance must require Creator quality gate');
 
 assert.ok(creator.includes("const ENGINE_VERSION='1.4'"),'Creator Engine 1.4 required');
@@ -23,7 +23,7 @@ assert.ok(creator.includes("Math.abs(fps-30)<=0.05"),'30 FPS requirement missing
 assert.ok(creator.includes("duration>=11.8&&duration<=18.8"),'12-18s tolerance requirement missing');
 assert.ok(creator.includes("const quality=probeRenderedShort(outFile,status.ffprobe)"),'post-render quality gate invocation missing');
 assert.ok(creator.includes("e.code=String(quality.code||'CREATOR_QUALITY_FAILED')"),'quality failure must fail closed');
-assert.ok(creator.includes("quality,\n    visualEdit,\n    output:path.relative(workspace,outFile)"),'quality + visual edit evidence missing from Creator job metadata');
+assert.ok(creator.includes("quality,\n    visualEdit,\n    thumbnail:thumbnail&&thumbnail.ok?thumbnail.path:null,\n    thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),\n    output:path.relative(workspace,outFile)"),'quality + visual edit + thumbnail evidence missing from Creator job metadata');
 assert.ok(creator.includes("probeRenderedShort,")&&creator.includes("probeRenderedLongform,")&&creator.includes("listAssets,"),'quality probe exports missing');
 
 assert.ok(worker.includes('\"Devam et\" tek başına yayınlama onayı değildir'),'Shopify publish gate must remain');
