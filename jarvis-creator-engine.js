@@ -640,6 +640,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
   const jobDir=ensureDir(path.join(dirs.jobs,base));
   const outFile=path.join(dirs.output,base+'.mp4');
   const srtFile=path.join(jobDir,base+'.srt');
+  const assFile=path.join(jobDir,base+'.ass');
   const metaFile=path.join(jobDir,'job.json');
 
   const measured=audioDurationSeconds(voicePath,status.ffprobe);
@@ -673,6 +674,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
   const captionsBurned=supportsSubtitles(status.ffmpeg);
 
   fs.writeFileSync(srtFile,buildSrt(cleanScript,duration),'utf8');
+  fs.writeFileSync(assFile,buildShortAss(cleanScript,duration),'utf8');
 
   let args=[];
   if(assets.length){
@@ -706,10 +708,9 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     }
 
     if(captionsBurned){
-      const subtitlePath=ffmpegFilterPath(srtFile);
+      const subtitlePath=ffmpegFilterPath(assFile);
       filters.push(
-        '['+videoLabel+']subtitles=filename=\''+subtitlePath+'\':'+
-        "force_style='FontName=Arial,FontSize=22,PrimaryColour=&H00FFFFFF,OutlineColour=&H90000000,BorderStyle=1,Outline=3,Shadow=0,Alignment=2,MarginV=105'"+
+        '['+videoLabel+']subtitles=filename=\''+subtitlePath+'\''+
         '[vout]'
       );
       videoLabel='vout';
@@ -735,7 +736,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     ];
     if(captionsBurned){
       args.push(
-        '-vf',"subtitles=filename='"+ffmpegFilterPath(srtFile)+"':force_style='FontName=Arial,FontSize=22,PrimaryColour=&H00FFFFFF,OutlineColour=&H90000000,BorderStyle=1,Outline=3,Shadow=0,Alignment=2,MarginV=105'"
+        '-vf',"subtitles=filename='"+ffmpegFilterPath(assFile)+"'"
       );
     }
     args.push(
@@ -778,11 +779,13 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     sourceAssets:assets.map(x=>path.relative(workspace,x)),
     storyboard:storyboard.map(x=>({...x,file:path.relative(workspace,x.file)})),
     captionsBurned,
+    captionAnimation:captionsBurned?'pop-fade':'none',
     quality,
     visualEdit,
     output:path.relative(workspace,outFile),
     subtitle:path.relative(workspace,srtFile),
-    profile:{width:1080,height:1920,fps:30,codec:'H.264',audio:'AAC',durationTarget:'12-18s',multiScene:true,transition:'varied',sceneTarget:'2.5-4s',motion:'dynamic-pan-crop'}
+    burnedSubtitle:path.relative(workspace,assFile),
+    profile:{width:1080,height:1920,fps:30,codec:'H.264',audio:'AAC',durationTarget:'12-18s',multiScene:true,transition:'varied',sceneTarget:'2.5-4s',motion:'dynamic-pan-crop',captions:'kinetic-pop-fade'}
   };
   fs.writeFileSync(metaFile,JSON.stringify(meta,null,2),'utf8');
 
@@ -791,12 +794,14 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     message:'Shorts videosu hazır: '+outFile+' · 1080x1920 · 30 FPS · H.264 · '+(assets.length?(storyboard.length+' sahne / '+assets.length+' klip · hareketli kurgu'):'procedural hareketli arka plan')+(captionsBurned?' · altyazı videoya işlendi':' · altyazı ayrı SRT'),
     output:outFile,
     subtitle:srtFile,
+    burnedSubtitle:assFile,
     metadata:metaFile,
     asset:assets[0]||null,
     assets,
     storyboard,
     sceneCount:storyboard.length,
     captionsBurned,
+    captionAnimation:captionsBurned?'pop-fade':'none',
     duration,
     quality,
     visualEdit,
