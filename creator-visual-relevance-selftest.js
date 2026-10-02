@@ -7,7 +7,8 @@ const engine=fs.readFileSync('./jarvis-creator-engine.js','utf8');
 for(const cap of [
   'creator_asset_semantic_catalog_v1',
   'creator_visual_relevance_v1',
-  'creator_local_vision_broll_v1'
+  'creator_local_vision_broll_v1',
+  'creator_semantic_diversity_v1'
 ]){
   assert.ok(worker.includes("'"+cap+"'"),cap+' missing');
 }
@@ -35,6 +36,12 @@ assert.ok(worker.includes('creatorCatalogLexicalScore(entry,queryTokens)'),'dete
 assert.ok(worker.includes("if(!sha256||sha256!==String(entry&&entry.sha256||''))continue"),'stale catalog hash entries must be rejected');
 assert.ok(worker.includes("Sen JARVIS Creator B-roll seçicisisin."),'local semantic reranker prompt missing');
 assert.ok(worker.includes("Yalnız verilen kimlikleri kullan"),'semantic reranker id allowlist missing');
+assert.ok(worker.includes("Anlatının başı, ortası ve sonunu kapsayan"),'semantic reranker narrative coverage prompt missing');
+assert.ok(worker.includes("getCreatorSemanticQuality().diversifySemanticRows(ordered"),'semantic diversity filter missing');
+assert.ok(worker.includes("maxSimilarity:0.72"),'semantic near-duplicate threshold missing');
+assert.ok(worker.includes("minScore:1"),'semantic minimum lexical relevance floor missing');
+assert.ok(worker.includes("kind:'creator_semantic_diversity'"),'semantic diversity evidence missing');
+assert.ok(worker.includes("SEMANTIC_QUALITY_VERSION='1.0'"),'semantic quality runtime signature missing');
 assert.ok(worker.includes('function mergeCreatorAssetBaselines(primary,fallback,maxItems=12)'),'safe deterministic fallback merge missing');
 
 const dailyStart=worker.indexOf('async function serviceCreatorDailyPlan');
@@ -52,6 +59,7 @@ assert.ok(!daily.includes('publish:true'),'daily visual relevance must never req
 assert.ok(!daily.includes('youtube_publish'),'daily relevance block must never create PUBLIC step');
 
 assert.ok(worker.includes("creatorVisualRelevanceReady:CAPS.includes('creator_asset_semantic_catalog_v1')"),'PC acceptance readiness missing');
+assert.ok(worker.includes("CAPS.includes('creator_semantic_diversity_v1')"),'semantic diversity acceptance readiness missing');
 assert.ok(worker.includes("'creator_longform_edit_rhythm_v1'"),'Longform Edit v70 capability must remain');
 assert.ok(worker.includes("'creator_longform_duration_fit_v1'"),'Duration Fit v69 capability must remain');
 assert.ok(worker.includes("'creator_daily_longform_v1'"),'Daily Longform v68 capability must remain');
