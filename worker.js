@@ -2465,6 +2465,18 @@ function nativeAgentTools(){
     {
       type:'function',
       function:{
+        name:'approve_mission_action',
+        description:'Yalnızca kullanıcı bu turda açıkça onayla/yayınla dediğinde, onay bekleyen tek bir kalıcı görevin geri döndürülemez sonraki adımını onayla ve çalıştır. Genel "devam et" ifadesi onay sayılmaz.',
+        parameters:{
+          type:'object',
+          properties:{missionId:{type:'string',description:'Varsa tam mission kimliği; boşsa en yeni onay bekleyen görev kullanılır.'}},
+          additionalProperties:false
+        }
+      }
+    },
+    {
+      type:'function',
+      function:{
         name:'developer_project_mission',
         description:'Kullanıcı açıkça bir uygulama, site veya yazılım projesi oluşturmanı istediğinde kalıcı ve yeniden başlatılabilir geliştirici görevi başlat. Yalnızca JARVIS workspace içinde güvenli metin kaynak dosyaları oluşturur; mevcut farklı dosyaların üstüne otomatik yazmaz ve deploy etmez.',
         parameters:{
@@ -2496,7 +2508,7 @@ function nativeAgentTools(){
       type:'function',
       function:{
         name:'shopify_product_mission',
-        description:'Kullanıcı mağazaya ürün ekleme veya ürün taslağı hazırlama işinin bağlantı kesilse bile kaldığı yerden devam etmesini istediğinde kalıcı Shopify ürün görevi başlat. Yalnızca DRAFT ürün oluşturur; ürünü yayınlamaz.',
+        description:'Kullanıcı mağazaya ürün ekleme veya ürün taslağı hazırlama işinin bağlantı kesilse bile kaldığı yerden devam etmesini istediğinde kalıcı Shopify ürün görevi başlat. Varsayılan yalnızca DRAFT oluşturur. publish=true istenirse görev yayınlama adımında DURUR ve ayrıca açık kullanıcı onayı bekler.',
         parameters:{
           type:'object',
           properties:{
@@ -2508,7 +2520,8 @@ function nativeAgentTools(){
             vendor:{type:'string'},
             productType:{type:'string'},
             tags:{type:'array',items:{type:'string'}},
-            images:{type:'array',items:{type:'string'},description:'HTTPS ürün görsel URL listesi.'}
+            images:{type:'array',items:{type:'string'},description:'HTTPS ürün görsel URL listesi.'},
+            publish:{type:'boolean',description:'true ise taslaktan sonra yayınlama için approval gate oluşturur; bu çağrıda ürün yayınlanmaz.'}
           },
           required:['title'],
           additionalProperties:false
@@ -2747,6 +2760,18 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
     if(!latest)return{ok:true,message:'Devam ettirilecek yarım görev yok.'};
     const out=await runDurableMission(latest.id);
     return{ok:out.status==='completed',message:missionSummaryText(out)};
+  }else if(n==='approve_mission_action'){
+    const intent=String(userText||'').toLocaleLowerCase('tr-TR');
+    if(!/(?:onayla|onay ver|yayınla|yayinla|publish|mağazada yayınla|magazada yayinla)/i.test(intent)){
+      return{ok:false,message:'Geri döndürülemez görev adımı için bu turda açık onay/yayınla ifadesi gerekli.'};
+    }
+    try{
+      const approved=approveMissionGate({missionId:String(a.missionId||'').trim()});
+      const out=await runDurableMission(approved.id);
+      return{ok:out.status==='completed',message:'AÇIK ONAY UYGULANDI · '+missionSummaryText(out)};
+    }catch(e){
+      return{ok:false,message:'Görev onayı uygulanamadı: '+String(e.message||e).slice(0,600)};
+    }
   }else if(n==='developer_project_mission'){
     const intent=String(userText||'').toLocaleLowerCase('tr-TR');
     if(!/(?:uygulama|site|web|yazılım|yazilim|proje|app|kod)/i.test(intent)||!/(?:oluştur|olustur|geliştir|gelistir|hazırla|hazirla|yap|kur)/i.test(intent)){
@@ -2767,9 +2792,11 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
     try{
       const mission=createShopifyProductMission(a);
       const out=await runDurableMission(mission.id);
+      const current=getMissionEngine().currentStep(out);
+      const approvalWait=out.status==='waiting_dependency'&&current&&current.error&&current.error.dependency==='approval';
       return{
         ok:out.status==='completed',
-        message:missionSummaryText(out)+(out.status==='waiting_dependency'?' · Shopify bağlantısı hazır olduğunda aynı görev kaldığı yerden devam eder':'')
+        message:missionSummaryText(out)+(approvalWait?' · YAYINLAMA İÇİN AÇIK ONAY BEKLİYOR':out.status==='waiting_dependency'?' · Shopify bağlantısı hazır olduğunda aynı görev kaldığı yerden devam eder':'')
       };
     }catch(e){
       return{ok:false,message:'Kalıcı Shopify ürün görevi başlatılamadı: '+String(e.message||e).slice(0,600)};
@@ -2891,7 +2918,7 @@ async function runNativeAgent(message,{maxRounds=4,signal=null}={}){
     'Mağaza işlerinde önce shopify_status ile bağlantıyı kontrol edebilirsin. shopify_create_draft yalnızca DRAFT ürün oluşturur; eksik fiyat, SKU veya görseli uydurma.',
     'Kullanıcı bir ürünü mağazaya ekleme işinin tamamlanana kadar sürmesini istiyorsa shopify_product_mission kullan; görev disk üzerinde kalır, bağlantı yoksa bekler ve aynı ürünü mission etiketiyle kopya oluşturmadan sürdürür.',
     'Kullanıcı uygulama/site/yazılım geliştirmeyi istediğinde developer_project_mission kullan. Bu araç kaynak dosyaları yalnızca JARVIS workspace içine yazar, mevcut farklı dosyanın üzerine otomatik yazmaz ve deploy etmez; böylece geliştirme görevi kesintiden sonra güvenle devam eder.',
-    'Ürünü halka açık mağazada yayınlama native ajan aracı değildir. Yayınlama ancak kullanıcının açık yayınlama komutuyla ayrı güvenli akıştan yapılır.',
+    'Shopify ürününü halka açık mağazada yayınlama iki aşamalıdır: shopify_product_mission publish=true yalnızca yayınlama isteğini sıraya koyar ve approval gate üzerinde durur. Kullanıcı daha sonra aynı turda açıkça "onayla" veya "yayınla" demeden approve_mission_action çağırma. "Devam et" tek başına yayınlama onayı değildir.',
     'YouTube için youtube_prepare_draft_upload yalnızca dosyayı Studio yükleme ekranına koyar ve metadata hazırlar; hiçbir zaman Publish/Yayınla düğmesine basmaz.',
     'Kullanıcı aynı istekte Short üretip YouTube taslağına yüklemenizi isterse önce creator_render_short sonucundaki gerçek output yolunu al, sonra youtube_prepare_draft_upload çağır. Dosya yolu uydurma.',
     'Bir istek VAROVA ürünü + reklam videosu + YouTube taslağı gibi birden fazla dış adım içeriyorsa ayrı ayrı araç çağırmak yerine varova_campaign_mission kullan; böylece görev disk üzerinde kalıcı olur ve kesintiden sonra devam eder.',
