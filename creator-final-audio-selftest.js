@@ -45,11 +45,13 @@ try{
   assert.strictEqual(masteredProbe.method,'ffmpeg-loudnorm-analysis');
 
   const source=fs.readFileSync('./jarvis-creator-engine.js','utf8');
-  assert.strictEqual((source.match(/const outputLoudness=probeRenderedAudioLoudness\(outFile,status\.ffmpeg\);/g)||[]).length,2,'Short and long-form must both verify final loudness');
-  assert.strictEqual((source.match(/quality\.checks\.audioLoudness=outputLoudness\.ok;/g)||[]).length,2,'quality payload must record loudness gate');
-  assert.strictEqual((source.match(/quality\.measured\.audioIntegratedLufs=outputLoudness\.integratedLufs;/g)||[]).length,2,'quality payload must retain measured LUFS');
-  assert.strictEqual((source.match(/quality\.measured\.audioTruePeakDb=outputLoudness\.truePeakDb;/g)||[]).length,2,'quality payload must retain true peak');
+  assert.strictEqual((source.match(/applyRenderedAudioQuality\(/g)||[]).length>=3,true,'final audio guard helper and both render call sites must exist');
+  assert.ok(source.includes('const outputLoudness=probeRenderedAudioLoudness(file,ffmpeg);'),'central final audio guard must verify loudness');
+  assert.ok(source.includes('result.checks.audioLoudness=outputLoudness.ok;'),'quality payload must record loudness gate');
+  assert.ok(source.includes('result.measured.audioIntegratedLufs=outputLoudness.integratedLufs;'),'quality payload must retain measured LUFS');
+  assert.ok(source.includes('result.measured.audioTruePeakDb=outputLoudness.truePeakDb;'),'quality payload must retain true peak');
   assert.strictEqual(typeof creator.probeRenderedAudioLoudness,'function','final loudness probe export missing');
+  assert.strictEqual(typeof creator.applyRenderedAudioQuality,'function','central final audio guard export missing');
 
   console.log('CREATOR FINAL AUDIO GUARD V90 SELFTEST PASS',JSON.stringify({raw:rawProbe,mastered:masteredProbe}));
 }finally{
