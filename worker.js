@@ -5221,7 +5221,8 @@ function missionHealthSnapshot(){
     const rows=engine.listMissions(WORKSPACE,{limit:50});
     const latest=rows[0]||null;
     const open=engine.schedulerOrder(rows);
-    const counts={queued:0,waitingDependency:0,needsVerification:0,running:0};
+    const paused=rows.filter(x=>String(x.status||'')==='paused');
+    const counts={queued:0,waitingDependency:0,needsVerification:0,running:0,paused:paused.length};
     for(const row of open){
       if(row.status==='queued')counts.queued++;
       else if(row.status==='waiting_dependency')counts.waitingDependency++;
@@ -5232,16 +5233,19 @@ function missionHealthSnapshot(){
       ok:true,
       autoResume:true,
       scheduler:'oldest-ready-first',
-      openCount:open.length,
+      openCount:open.length+paused.length,
       counts,
-      queue:open.slice(0,10).map(x=>engine.summarizeMission(x)),
+      queue:[...open,...paused]
+        .sort((a,b)=>String(b.updatedAt||b.createdAt).localeCompare(String(a.updatedAt||a.createdAt)))
+        .slice(0,10)
+        .map(x=>engine.summarizeMission(x)),
       latest:latest?engine.summarizeMission(latest):null,
       serviceBusy:durableMissionServiceBusy,
       lastRunAt:durableMissionLastRunAt||null,
       lastResult:durableMissionLastResult
     };
   }catch(e){
-    return{ok:false,autoResume:true,scheduler:'oldest-ready-first',openCount:0,counts:{queued:0,waitingDependency:0,needsVerification:0,running:0},queue:[],latest:null,error:String(e.message||e).slice(0,240)};
+    return{ok:false,autoResume:true,scheduler:'oldest-ready-first',openCount:0,counts:{queued:0,waitingDependency:0,needsVerification:0,running:0,paused:0},queue:[],latest:null,error:String(e.message||e).slice(0,240)};
   }
 }
 function cloudMissionTelemetry(){
@@ -5268,8 +5272,9 @@ function cloudMissionTelemetry(){
       queued:Number(h.counts.queued||0),
       waitingDependency:Number(h.counts.waitingDependency||0),
       needsVerification:Number(h.counts.needsVerification||0),
-      running:Number(h.counts.running||0)
-    }:{queued:0,waitingDependency:0,needsVerification:0,running:0},
+      running:Number(h.counts.running||0),
+      paused:Number(h.counts.paused||0)
+    }:{queued:0,waitingDependency:0,needsVerification:0,running:0,paused:0},
     queue:cleanQueue,
     lastRunAt:Number(h.lastRunAt||0)||null,
     lastResult:h.lastResult&&typeof h.lastResult==='object'?{
@@ -5365,7 +5370,7 @@ async function buildPcAcceptanceSnapshot(){
   try{commerce=await getCommerceEngine().status(WORKSPACE)}catch(e){commerce={ok:false,connected:false,error:String(e.message||e).slice(0,240)}}
   try{youtube=await getYoutubeStudio().status(getBrowserOperator(),WORKSPACE)}catch(e){youtube={ok:false,running:false,loggedIn:false,error:String(e.message||e).slice(0,240)}}
   const missions=missionHealthSnapshot();
-  const checks={workerVersion:WORKER_VERSION==='2.97.0',pcMissionReady:CAPS.includes('pc_safe_mission_v1')&&CAPS.includes('pc_safe_action_catalog_v1'),workspaceFileMissionReady:CAPS.includes('workspace_file_mission_v1')&&CAPS.includes('workspace_file_hash_guard_v1')&&CAPS.includes('workspace_file_no_overwrite_v1'),missionRuntime:!!(missions&&missions.ok&&missions.autoResume),creatorEngineLoaded:!!(creator&&!creator.error),browserOperatorLoaded:!!(browser&&!browser.error),commerceEngineLoaded:!!(commerce&&!commerce.error),youtubeStudioLoaded:!!(youtube&&!youtube.error),silentStartup:process.platform==='win32'?startup.silentOk:true,autoUpdateReady:!!(startup.selfUpdate&&startup.selfUpdate.configured)};
+  const checks={workerVersion:WORKER_VERSION==='2.98.0',pcMissionReady:CAPS.includes('pc_safe_mission_v1')&&CAPS.includes('pc_safe_action_catalog_v1'),workspaceFileMissionReady:CAPS.includes('workspace_file_mission_v1')&&CAPS.includes('workspace_file_hash_guard_v1')&&CAPS.includes('workspace_file_no_overwrite_v1'),missionControlReady:CAPS.includes('mission_control_v1')&&CAPS.includes('mission_pause_v1')&&CAPS.includes('mission_cancel_v1'),missionRuntime:!!(missions&&missions.ok&&missions.autoResume),creatorEngineLoaded:!!(creator&&!creator.error),browserOperatorLoaded:!!(browser&&!browser.error),commerceEngineLoaded:!!(commerce&&!commerce.error),youtubeStudioLoaded:!!(youtube&&!youtube.error),silentStartup:process.platform==='win32'?startup.silentOk:true,autoUpdateReady:!!(startup.selfUpdate&&startup.selfUpdate.configured)};
   const corePass=Object.values(checks).every(Boolean);
   const accountSetup={shopifyConnected:!!(commerce&&commerce.ok&&commerce.connected),youtubeLoggedIn:!!(youtube&&youtube.ok&&youtube.loggedIn)};
   const snapshot={ok:true,generatedAt,worker:{version:WORKER_VERSION,name:NAME,platform:process.platform,arch:process.arch},checks,corePass,startup,update:startup.selfUpdate,creator:{ready:!!(creator&&creator.ok),assets:Number(creator&&creator.assets||0),outputDir:creator&&creator.outputDir||null,installable:!!(creator&&creator.installable)},browser:{running:!!(browser&&browser.running),browser:browser&&browser.browser||null,tabs:Array.isArray(browser&&browser.tabs)?browser.tabs.length:0,profile:browser&&browser.profile||null},commerce:{connected:accountSetup.shopifyConnected,shop:commerce&&commerce.shop||null,apiVersion:commerce&&commerce.apiVersion||null,message:String(commerce&&commerce.message||'').slice(0,300)},youtube:{running:!!(youtube&&youtube.running),loggedIn:accountSetup.youtubeLoggedIn,title:youtube&&youtube.title||null,url:youtube&&youtube.url||null,message:String(youtube&&youtube.message||'').slice(0,300)},missions,accountSetup};
