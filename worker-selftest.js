@@ -182,7 +182,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.86.0','worker version');
+    assert(hj.version==='2.87.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localStt&&hj.localStt.adaptiveDecode===true,'adaptive STT decode health');
     assert(hj.localStt&&hj.localStt.dynamicEndpointing===true,'dynamic STT endpointing health');
@@ -297,7 +297,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const acceptanceState=await get('http://127.0.0.1:'+BRIDGE_PORT+'/acceptance-snapshot');
     assert(acceptanceState.status===200,'acceptance snapshot endpoint');
     const asj=JSON.parse(acceptanceState.body);
-    assert(asj.ok===true&&asj.worker&&asj.worker.version==='2.86.0','acceptance snapshot worker metadata');
+    assert(asj.ok===true&&asj.worker&&asj.worker.version==='2.87.0','acceptance snapshot worker metadata');
     assert(asj.checks&&asj.checks.missionRuntime===true,'acceptance snapshot mission check');
     assert(JSON.stringify(asj).indexOf('test-token')===-1,'acceptance snapshot leaked worker token');
 
