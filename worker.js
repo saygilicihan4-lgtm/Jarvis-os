@@ -6,6 +6,8 @@ const childProcess=require('child_process');
 const http=require('http');
 let creatorEngine=null;
 try{creatorEngine=require('./jarvis-creator-engine')}catch(_){}
+let creatorWebMedia=null;
+try{creatorWebMedia=require('./jarvis-creator-web-media')}catch(_){}
 let browserOperator=null;
 try{browserOperator=require('./jarvis-browser-operator')}catch(_){}
 let commerceEngine=null;
@@ -43,7 +45,7 @@ const UPDATE_STATE_FILE=path.join(MEMORY_DIR,'update-state.json');
 const WORKER_VERSION='2.102.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
 CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1','adaptive_model_router_v1','deep_model_fallback_v1','dynamic_chunk_prosody_v1','natural_pause_timing_v1','adaptive_turn_pacing_v1','latency_learning_v1','full_duplex_interrupt_v1','cancellable_agent_v1','adaptive_voice_profile_v1','spoken_voice_preference_v1','speaker_echo_rejection_v1','social_dialogue_v1','response_variation_v1','contextual_followup_v1','dialogue_feedback_learning_v1','social_preference_adaptation_v1','dynamic_wake_ack_v1','wake_ack_turn_timing_v1','auto_quality_escalation_v1','weak_response_escalation_v1','repair_quality_escalation_v1','social_momentum_v1','elliptical_turn_resolution_v1','conversation_cadence_v1','brevity_mirroring_v1','adaptive_response_length_v1','interruption_continuity_v1','spoken_resume_v1','partial_stream_resume_v1');
-CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1','mission_auto_resume_v1','mission_health_v1','pc_acceptance_snapshot_v1','silent_startup_diagnostics_v1','pc_acceptance_hardened_v1','bootstrap_migration_v6','mission_fair_scheduler_v1','pc_self_repair_v1','creator_multiscene_v2','creator_burned_captions_v1','cloud_mission_telemetry_v1','creator_short_mission_v1','shopify_product_mission_v1','developer_project_mission_v1','approval_gate_v1','shopify_publish_approval_v1','browser_form_mission_v1','browser_form_prepare_v1','browser_click_approval_v1','youtube_publish_approval_v1','youtube_publish_receipt_v1','developer_patch_mission_v1','developer_patch_rollback_v1','pc_safe_mission_v1','pc_safe_action_catalog_v1','pc_mission_resume_v1','workspace_file_mission_v1','workspace_file_hash_guard_v1','workspace_file_no_overwrite_v1','mission_control_v1','mission_pause_v1','mission_cancel_v1','creator_asset_mission_v1','creator_asset_probe_v1','creator_asset_hash_dedupe_v1','creator_storyboard_v1','creator_explicit_assets_v1','creator_render_mission_bind_v1','creator_batch_mission_v1','creator_batch_child_dedupe_v1','creator_batch_youtube_draft_v1','mission_cooperative_yield_v1','creator_batch_storyboard_lock_v1','creator_batch_render_binding_v1','creator_quality_gate_v1','creator_quality_recovery_v1','creator_longform_mission_v1','creator_longform_quality_v1','creator_longform_recovery_v1','creator_multilingual_voice_v1','creator_daily_longform_v1','creator_daily_idempotency_v1','creator_longform_duration_fit_v1','creator_longform_edit_rhythm_v1');
+CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1','mission_auto_resume_v1','mission_health_v1','pc_acceptance_snapshot_v1','silent_startup_diagnostics_v1','pc_acceptance_hardened_v1','bootstrap_migration_v6','mission_fair_scheduler_v1','pc_self_repair_v1','creator_multiscene_v2','creator_burned_captions_v1','cloud_mission_telemetry_v1','creator_short_mission_v1','shopify_product_mission_v1','developer_project_mission_v1','approval_gate_v1','shopify_publish_approval_v1','browser_form_mission_v1','browser_form_prepare_v1','browser_click_approval_v1','youtube_publish_approval_v1','youtube_publish_receipt_v1','developer_patch_mission_v1','developer_patch_rollback_v1','pc_safe_mission_v1','pc_safe_action_catalog_v1','pc_mission_resume_v1','workspace_file_mission_v1','workspace_file_hash_guard_v1','workspace_file_no_overwrite_v1','mission_control_v1','mission_pause_v1','mission_cancel_v1','creator_asset_mission_v1','creator_asset_probe_v1','creator_asset_hash_dedupe_v1','creator_storyboard_v1','creator_explicit_assets_v1','creator_render_mission_bind_v1','creator_batch_mission_v1','creator_batch_child_dedupe_v1','creator_batch_youtube_draft_v1','mission_cooperative_yield_v1','creator_batch_storyboard_lock_v1','creator_batch_render_binding_v1','creator_quality_gate_v1','creator_quality_recovery_v1','creator_longform_mission_v1','creator_longform_quality_v1','creator_longform_recovery_v1','creator_multilingual_voice_v1','creator_daily_longform_v1','creator_daily_idempotency_v1','creator_longform_duration_fit_v1','creator_longform_edit_rhythm_v1','creator_web_media_v1','creator_web_license_manifest_v1','creator_web_zero_key_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -2788,6 +2790,24 @@ function nativeAgentTools(){
     {
       type:'function',
       function:{
+        name:'creator_web_media',
+        description:'İnternetten ücretsiz ve yeniden kullanıma izinli video klipleri Creator havuzuna al. Varsayılan auto modunda ücretsiz API anahtarı varsa Pexels/Pixabay kullanılabilir; anahtar yoksa Wikimedia Commons zero-key aranır. Wikimedia tarafında yalnız Public Domain/CC0 kabul edilir. Kaynak, lisans ve SHA-256 manifesti kaydedilir. YouTube/TikTok/Instagram gibi sosyal ağlardan rastgele video sökme yapmaz ve hiçbir şeyi yayınlamaz.',
+        parameters:{
+          type:'object',
+          properties:{
+            query:{type:'string',description:'Aranacak görsel/video konusu; ör. yapay zeka robot laboratuvar.'},
+            provider:{type:'string',enum:['auto','wikimedia','pexels','pixabay'],description:'Varsayılan auto.'},
+            orientation:{type:'string',enum:['portrait','landscape','any'],description:'Shorts için portrait, uzun video için landscape.'},
+            count:{type:'integer',minimum:1,maximum:12}
+          },
+          required:['query'],
+          additionalProperties:false
+        }
+      }
+    },
+    {
+      type:'function',
+      function:{
         name:'creator_asset_mission',
         description:'Workspace içindeki mevcut video kliplerini Creator asset havuzuna kalıcı ve restart-safe görev olarak ekle. Kaynak dosya silinmez. FFprobe ile gerçek video doğrulaması yapılır; hash-prefix hedef adı duplicate riskini azaltır; aynı hash zaten asset havuzundaysa reuse edilir.',
         parameters:{
@@ -2852,6 +2872,8 @@ function nativeAgentTools(){
             youtubeTitle:{type:'string'},
             youtubeDescription:{type:'string'},
             creatorAssets:{type:'array',maxItems:5,items:{type:'string'},description:'İsteğe bağlı creator-assets/... yolları; verilen sıra storyboard sahne sırası olur.'},
+            webMediaQuery:{type:'string',description:'İsteğe bağlı. İnternetten ücretsiz/lisanslı stock klip isteniyorsa konu sorgusu. creatorAssets boşsa önce Creator Web Media ile portrait klip alınır.'},
+            webMediaProvider:{type:'string',enum:['auto','wikimedia','pexels','pixabay'],description:'Web medya sağlayıcısı; varsayılan auto.'},
             includeYouTube:{type:'boolean',description:'true ise render sonrası YouTube Studio taslağı hazırlanır.'},
             publish:{type:'boolean',description:'true ise YouTube taslağından sonra PUBLIC yayın için approval gate oluşturur; bu çağrıda yayınlanmaz.'}
           },
@@ -2874,6 +2896,8 @@ function nativeAgentTools(){
             youtubeDescription:{type:'string'},
             creatorVoice:{type:'string',description:'Edge TTS Neural voice adı; ör. tr-TR-EmelNeural veya en-US-AriaNeural.'},
             creatorAssets:{type:'array',maxItems:20,items:{type:'string'},description:'İsteğe bağlı creator-assets/... klipleri; sıra storyboard sırasıdır.'},
+            webMediaQuery:{type:'string',description:'İsteğe bağlı. İnternetten ücretsiz/lisanslı stock klip isteniyorsa konu sorgusu. creatorAssets boşsa önce Creator Web Media ile landscape klip alınır.'},
+            webMediaProvider:{type:'string',enum:['auto','wikimedia','pexels','pixabay'],description:'Web medya sağlayıcısı; varsayılan auto.'},
             includeYouTube:{type:'boolean',description:'true ise render sonrası YouTube Studio DRAFT hazırlanır.'},
             publish:{type:'boolean',description:'true yalnızca PUBLIC approval adımını sıraya koyar; bu çağrıda yayınlamaz.'}
           },
@@ -3254,6 +3278,25 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
     }catch(e){
       return{ok:false,message:'Kalıcı Shopify ürün görevi başlatılamadı: '+String(e.message||e).slice(0,600)};
     }
+  }else if(n==='creator_web_media'){
+    const intent=String(userText||'').toLocaleLowerCase('tr-TR');
+    if(!/(?:internet|web|stok|stock|telifsiz|ücretsiz|ucretsiz|commons|pexels|pixabay|video|klip)/i.test(intent)){
+      return{ok:false,message:'Creator Web Media yalnızca açık internet/stok medya isteğiyle çalışır.'};
+    }
+    try{
+      const ready=getCreatorEngine().prepare(WORKSPACE,{allowInstall:true});
+      if(!ready.ok||!ready.ffprobe)return{ok:false,message:'Web medya ingest için FFmpeg/FFprobe hazır değil.'};
+      const out=await getCreatorWebMedia().searchAndIngest(WORKSPACE,{
+        query:String(a.query||'').trim(),
+        provider:String(a.provider||'auto'),
+        orientation:String(a.orientation||'any'),
+        count:Math.max(1,Math.min(12,Number(a.count)||3)),
+        inspect:(rel)=>getCreatorEngine().inspectAsset(WORKSPACE,rel)
+      });
+      return{ok:true,message:'CREATOR WEB MEDIA HAZIR · '+out.assets.length+' lisanslı klip · manifest '+out.manifest+' · '+out.assets.join(', ')+' · yayınlanmadı'};
+    }catch(e){
+      return{ok:false,message:'Creator Web Media alınamadı: '+String(e.message||e).slice(0,650)};
+    }
   }else if(n==='creator_asset_mission'){
     const intent=String(userText||'').toLocaleLowerCase('tr-TR');
     if(!/(?:creator|asset|video|klip|shorts?|reels?)/i.test(intent)||!/(?:ekle|aktar|içe\s*aktar|ice\s*aktar|hazırla|hazirla|kopyala|ingest)/i.test(intent)){
@@ -3293,8 +3336,20 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
       return{ok:false,message:'YouTube PUBLIC adımını sıraya koymak için bu turda açık yayınlama isteği gerekli.'};
     }
     try{
+      if((!Array.isArray(a.creatorAssets)||!a.creatorAssets.length)&&String(a.webMediaQuery||'').trim()){
+        const ready=getCreatorEngine().prepare(WORKSPACE,{allowInstall:true});
+        if(!ready.ok||!ready.ffprobe)return{ok:false,message:'Long-form web medya için FFmpeg/FFprobe hazır değil.'};
+        const media=await getCreatorWebMedia().searchAndIngest(WORKSPACE,{
+          query:String(a.webMediaQuery).trim(),
+          provider:String(a.webMediaProvider||'auto'),
+          orientation:'landscape',
+          count:12,
+          inspect:(rel)=>getCreatorEngine().inspectAsset(WORKSPACE,rel)
+        });
+        a.creatorAssets=media.assets;
+      }
       const mission=createCreatorLongformMission(a);
-      return{ok:true,message:missionSummaryText(mission)+' · long-form görev scheduler sırasına alındı'+(a.includeYouTube===true?' · YouTube yalnız DRAFT hazırlanacak':'')+(a.publish===true?' · PUBLIC için ayrıca approval gate beklenecek':' · PUBLIC yayın yok')};
+      return{ok:true,message:missionSummaryText(mission)+' · long-form görev scheduler sırasına alındı'+(Array.isArray(a.creatorAssets)&&a.creatorAssets.length?' · '+a.creatorAssets.length+' Creator klip kilitlendi':'')+(a.includeYouTube===true?' · YouTube yalnız DRAFT hazırlanacak':'')+(a.publish===true?' · PUBLIC için ayrıca approval gate beklenecek':' · PUBLIC yayın yok')};
     }catch(e){
       return{ok:false,message:'Kalıcı long-form görevi başlatılamadı: '+String(e.message||e).slice(0,700)};
     }
@@ -3318,6 +3373,18 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
       return{ok:false,message:'YouTube PUBLIC adımını sıraya koymak için bu turda açık yayınlama isteği gerekli.'};
     }
     try{
+      if((!Array.isArray(a.creatorAssets)||!a.creatorAssets.length)&&String(a.webMediaQuery||'').trim()){
+        const ready=getCreatorEngine().prepare(WORKSPACE,{allowInstall:true});
+        if(!ready.ok||!ready.ffprobe)return{ok:false,message:'Short web medya için FFmpeg/FFprobe hazır değil.'};
+        const media=await getCreatorWebMedia().searchAndIngest(WORKSPACE,{
+          query:String(a.webMediaQuery).trim(),
+          provider:String(a.webMediaProvider||'auto'),
+          orientation:'portrait',
+          count:5,
+          inspect:(rel)=>getCreatorEngine().inspectAsset(WORKSPACE,rel)
+        });
+        a.creatorAssets=media.assets;
+      }
       const mission=createCreatorShortMission(a);
       const out=await runDurableMission(mission.id);
       const current=getMissionEngine().currentStep(out);
@@ -4306,6 +4373,18 @@ function getCreatorEngine(){
     return creatorEngine;
   }catch(e){
     throw new Error('Creator engine load failed: '+e.message);
+  }
+}
+function getCreatorWebMedia(){
+  if(creatorWebMedia)return creatorWebMedia;
+  const file=syncRepoRuntimeFile('jarvis-creator-web-media.js',"CREATOR_WEB_MEDIA_VERSION='1.0'");
+  if(!file)throw new Error('Creator Web Media module could not be prepared');
+  try{
+    delete require.cache[require.resolve(file)];
+    creatorWebMedia=require(file);
+    return creatorWebMedia;
+  }catch(e){
+    throw new Error('Creator Web Media load failed: '+e.message);
   }
 }
 function getBrowserOperator(){
