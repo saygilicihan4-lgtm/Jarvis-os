@@ -4,7 +4,7 @@ const assert=require('assert');
 const worker=fs.readFileSync('./worker.js','utf8');
 const html=fs.readFileSync('./public/index.html','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.94.0'"),'Worker 2.94.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.95.0'"),'Worker 2.95.0 required');
 assert.ok(worker.includes("'developer_project_mission_v1'"),'developer project mission capability missing');
 assert.ok(worker.includes('function createDeveloperProjectMission(args={})'),'developer mission factory missing');
 assert.ok(worker.includes("type:'developer_project'"),'developer_project mission type missing');
@@ -22,6 +22,6 @@ assert.ok(worker.includes("deploy etmez"),'developer deploy guard missing');
 
 assert.ok(html.includes('id="devAgentDetail"'),'Developer readiness detail missing');
 assert.ok(html.includes("pcCaps.includes('developer_project_mission_v1')"),'HUD does not verify developer mission capability');
-assert.ok(html.includes('Durable workspace app builder'),'Developer readiness summary missing');
+assert.ok(html.includes('Durable app builder · SHA-guarded patch · verified rollback'),'Developer readiness summary missing');
 
 console.log('DEVELOPER MISSION SELFTEST PASS');
