@@ -182,7 +182,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.76.0','worker version');
+    assert(hj.version==='2.77.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localStt&&hj.localStt.adaptiveDecode===true,'adaptive STT decode health');
     assert(hj.localStt&&hj.localStt.dynamicEndpointing===true,'dynamic STT endpointing health');
@@ -215,6 +215,10 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.capabilities.includes('interruption_continuity_v1'),'interruption continuity capability');
     assert(hj.capabilities.includes('spoken_resume_v1'),'spoken resume capability');
     assert(hj.capabilities.includes('partial_stream_resume_v1'),'partial stream resume capability');
+    assert(hj.capabilities.includes('browser_operator_v1'),'browser operator capability');
+    assert(hj.capabilities.includes('commerce_engine_v1'),'commerce engine capability');
+    assert(hj.capabilities.includes('shopify_product_draft_v1'),'Shopify draft capability');
+    assert(hj.capabilities.includes('shopify_publish_v1'),'Shopify publish capability');
     assert(hj.capabilities.includes('conversation_cadence_v1'),'conversation cadence capability');
     assert(hj.capabilities.includes('brevity_mirroring_v1'),'brevity mirroring capability');
     assert(hj.capabilities.includes('adaptive_response_length_v1'),'adaptive response length capability');
