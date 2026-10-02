@@ -11,6 +11,8 @@ assert.ok(worker.includes("jarvis-creator-engine.js',\"ENGINE_VERSION='1.4'"),'C
 assert.ok(worker.includes("quality:out.quality"),'render artifact must retain measured quality');
 assert.ok(worker.includes("creator.applyRenderedAudioQuality(creator.probeRenderedShort(expected,status.ffprobe),expected,status.ffmpeg,{mode:'short'})"),'Short recovery must rerun technical + final audio gates');
 assert.ok(worker.includes("creator.applyRenderedAudioQuality(creator.probeRenderedLongform(expected,status.ffprobe),expected,status.ffmpeg,{mode:'longform'})"),'long-form recovery must rerun technical + final audio gates');
+assert.ok(worker.includes("creator.applyRenderedVisualQuality(quality,expected,status.ffmpeg,{mode:'short'})"),'Short recovery must enforce final visual quality');
+assert.ok(worker.includes("creator.applyRenderedVisualQuality(quality,expected,status.ffmpeg,{mode:'longform'})"),'long-form recovery must enforce final visual quality');
 assert.ok(worker.includes("artifact:{output:expected,metadata:metaFile,quality,thumbnail:meta&&meta.thumbnail||null,recovered:true}"),'recovered render must retain quality + thumbnail evidence');
 assert.ok(worker.includes("creatorQualityGateReady:CAPS.includes('creator_quality_gate_v1')"),'PC acceptance must require Creator quality gate');
 
@@ -27,6 +29,7 @@ assert.ok(creator.includes("e.code=String(quality.code||'CREATOR_QUALITY_FAILED'
 assert.ok(creator.includes("quality,\n    visualEdit,\n    thumbnail:thumbnail&&thumbnail.ok?thumbnail.path:null,\n    thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),\n    soundDesign,\n    audioMaster:creatorAudioMasterProfile(),\n    narrationActivity,\n    output:path.relative(workspace,outFile)"),'quality + visual edit + thumbnail + sound design + audio master + narration activity evidence missing from Creator job metadata');
 assert.ok(creator.includes("probeNarrationActivity,"),'narration activity probe export missing');
 assert.ok(creator.includes("probeRenderedAudioLoudness,")&&creator.includes("applyRenderedAudioQuality,"),'final audio quality exports missing');
+assert.ok(creator.includes("probeRenderedMotionCoverage,")&&creator.includes("applyRenderedVisualQuality,"),'final visual quality exports missing');
 assert.ok(creator.includes("creatorAudioMasterFilter,")&&creator.includes("creatorAudioMasterProfile,"),'audio master exports missing');
 assert.ok(creator.includes("probeRenderedShort,")&&creator.includes("probeRenderedLongform,")&&creator.includes("listAssets,"),'quality probe exports missing');
 
