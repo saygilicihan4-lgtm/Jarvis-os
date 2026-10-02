@@ -561,6 +561,67 @@ function buildSrt(text,durationSeconds=15){
   });
   return lines.join('\n');
 }
+function assTime(seconds){
+  const cs=Math.max(0,Math.round(Number(seconds||0)*100));
+  const h=Math.floor(cs/360000);
+  const m=Math.floor((cs%360000)/6000);
+  const sec=Math.floor((cs%6000)/100);
+  const centi=cs%100;
+  return String(h)+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0')+'.'+String(centi).padStart(2,'0');
+}
+function assEscape(text){
+  return String(text||'')
+    .replace(/\\/g,'\\\\')
+    .replace(/\{/g,'\\{')
+    .replace(/\}/g,'\\}')
+    .replace(/[\r\n]+/g,'\\N')
+    .trim();
+}
+function splitShortCaptionSegments(text){
+  const clean=String(text||'').replace(/\s+/g,' ').trim();
+  if(!clean)return[];
+  const sentences=clean.split(/(?<=[.!?…])\s+/).filter(Boolean);
+  const out=[];
+  for(const sentence of sentences){
+    const words=sentence.split(/\s+/).filter(Boolean);
+    for(let i=0;i<words.length;i+=5)out.push(words.slice(i,i+5).join(' '));
+  }
+  return out.length?out:[clean];
+}
+function buildShortAss(text,durationSeconds=15){
+  const parts=splitShortCaptionSegments(text);
+  const duration=Math.max(1,Number(durationSeconds)||15);
+  if(!parts.length)return'';
+  const weights=parts.map(x=>Math.max(1,x.split(/\s+/).length));
+  const total=weights.reduce((a,b)=>a+b,0);
+  let cursor=0;
+  const lines=[
+    '[Script Info]',
+    'ScriptType: v4.00+',
+    'PlayResX: 1080',
+    'PlayResY: 1920',
+    'WrapStyle: 2',
+    'ScaledBorderAndShadow: yes',
+    '',
+    '[V4+ Styles]',
+    'Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding',
+    'Style: Default,Arial,62,&H00FFFFFF,&H0000FFFF,&H78000000,&H50000000,-1,0,0,0,100,100,0,0,1,4,0,2,70,70,135,1',
+    '',
+    '[Events]',
+    'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text'
+  ];
+  parts.forEach((part,i)=>{
+    const slice=duration*(weights[i]/total);
+    const start=cursor;
+    const end=i===parts.length-1?duration:Math.min(duration,cursor+slice);
+    cursor=end;
+    const text=assEscape(part);
+    const tag='{\\an2\\pos(540,1640)\\bord4\\shad0\\fad(55,85)\\fscx118\\fscy118\\t(0,170,\\fscx100\\fscy100)}';
+    lines.push('Dialogue: 0,'+assTime(start)+','+assTime(end)+',Default,,0,0,0,,'+tag+text);
+  });
+  return lines.join('\n');
+}
+
 function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId='',assetHashes=[]}){
   if(!workspace)throw new Error('workspace required');
   if(!voicePath||!fs.existsSync(voicePath))throw new Error('creator voice file missing');
@@ -579,6 +640,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
   const jobDir=ensureDir(path.join(dirs.jobs,base));
   const outFile=path.join(dirs.output,base+'.mp4');
   const srtFile=path.join(jobDir,base+'.srt');
+  const assFile=path.join(jobDir,base+'.ass');
   const metaFile=path.join(jobDir,'job.json');
 
   const measured=audioDurationSeconds(voicePath,status.ffprobe);
@@ -612,6 +674,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
   const captionsBurned=supportsSubtitles(status.ffmpeg);
 
   fs.writeFileSync(srtFile,buildSrt(cleanScript,duration),'utf8');
+  fs.writeFileSync(assFile,buildShortAss(cleanScript,duration),'utf8');
 
   let args=[];
   if(assets.length){
@@ -645,10 +708,9 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     }
 
     if(captionsBurned){
-      const subtitlePath=ffmpegFilterPath(srtFile);
+      const subtitlePath=ffmpegFilterPath(assFile);
       filters.push(
-        '['+videoLabel+']subtitles=filename=\''+subtitlePath+'\':'+
-        "force_style='FontName=Arial,FontSize=22,PrimaryColour=&H00FFFFFF,OutlineColour=&H90000000,BorderStyle=1,Outline=3,Shadow=0,Alignment=2,MarginV=105'"+
+        '['+videoLabel+']subtitles=filename=\''+subtitlePath+'\''+
         '[vout]'
       );
       videoLabel='vout';
@@ -674,7 +736,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     ];
     if(captionsBurned){
       args.push(
-        '-vf',"subtitles=filename='"+ffmpegFilterPath(srtFile)+"':force_style='FontName=Arial,FontSize=22,PrimaryColour=&H00FFFFFF,OutlineColour=&H90000000,BorderStyle=1,Outline=3,Shadow=0,Alignment=2,MarginV=105'"
+        '-vf',"subtitles=filename='"+ffmpegFilterPath(assFile)+"'"
       );
     }
     args.push(
@@ -717,11 +779,13 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     sourceAssets:assets.map(x=>path.relative(workspace,x)),
     storyboard:storyboard.map(x=>({...x,file:path.relative(workspace,x.file)})),
     captionsBurned,
+    captionAnimation:captionsBurned?'pop-fade':'none',
     quality,
     visualEdit,
     output:path.relative(workspace,outFile),
     subtitle:path.relative(workspace,srtFile),
-    profile:{width:1080,height:1920,fps:30,codec:'H.264',audio:'AAC',durationTarget:'12-18s',multiScene:true,transition:'varied',sceneTarget:'2.5-4s',motion:'dynamic-pan-crop'}
+    burnedSubtitle:path.relative(workspace,assFile),
+    profile:{width:1080,height:1920,fps:30,codec:'H.264',audio:'AAC',durationTarget:'12-18s',multiScene:true,transition:'varied',sceneTarget:'2.5-4s',motion:'dynamic-pan-crop',captions:'kinetic-pop-fade'}
   };
   fs.writeFileSync(metaFile,JSON.stringify(meta,null,2),'utf8');
 
@@ -730,12 +794,14 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     message:'Shorts videosu hazır: '+outFile+' · 1080x1920 · 30 FPS · H.264 · '+(assets.length?(storyboard.length+' sahne / '+assets.length+' klip · hareketli kurgu'):'procedural hareketli arka plan')+(captionsBurned?' · altyazı videoya işlendi':' · altyazı ayrı SRT'),
     output:outFile,
     subtitle:srtFile,
+    burnedSubtitle:assFile,
     metadata:metaFile,
     asset:assets[0]||null,
     assets,
     storyboard,
     sceneCount:storyboard.length,
     captionsBurned,
+    captionAnimation:captionsBurned?'pop-fade':'none',
     duration,
     quality,
     visualEdit,
@@ -933,6 +999,7 @@ module.exports={
   ffmpegStatus,
   prepare,
   buildSrt,
+  buildShortAss,
   selectAssets,
   buildStoryboard,
   buildShortStoryboard,
