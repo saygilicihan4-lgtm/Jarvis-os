@@ -46,6 +46,12 @@
       "min_bytes": 1800
     },
     {
+      "path": "JARVIS-PC-ACCEPTANCE.ps1",
+      "signature": "JARVIS PC ACCEPTANCE V1",
+      "kind": "powershell",
+      "min_bytes": 1800
+    },
+    {
       "path": "jarvis-startup.ps1",
       "signature": "JARVIS_CINEMATIC_STARTUP_V1",
       "kind": "powershell",
