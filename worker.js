@@ -4008,12 +4008,14 @@ function approveMissionGate({missionId=''}={}){
     mission=engine.loadMission(WORKSPACE,id);
     if(!mission)throw new Error('Onaylanacak görev bulunamadı: '+id);
   }else{
-    mission=engine.listMissions(WORKSPACE,{limit:50}).find(row=>{
+    const pending=engine.listMissions(WORKSPACE,{limit:50}).filter(row=>{
       if(row.status!=='waiting_dependency')return false;
       const step=engine.currentStep(row);
       return !!(step&&step.error&&step.error.dependency==='approval');
-    })||null;
-    if(!mission)throw new Error('Açık onay bekleyen görev yok.');
+    });
+    if(!pending.length)throw new Error('Açık onay bekleyen görev yok.');
+    if(pending.length>1)throw new Error('Birden fazla görev onay bekliyor; missionId ile hangisinin onaylandığını belirt.');
+    mission=pending[0];
   }
   const step=engine.currentStep(mission);
   if(!step||mission.status!=='waiting_dependency'||!step.error||step.error.dependency!=='approval'){
