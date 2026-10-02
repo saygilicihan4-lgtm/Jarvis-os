@@ -181,6 +181,37 @@ function buildStoryboard(assets,durationSeconds,transitionSeconds=0.18){
     };
   });
 }
+function buildLongformStoryboard(assets,durationSeconds,transitionSeconds=0.35,targetSceneSeconds=25,maxScenes=28){
+  const list=Array.isArray(assets)?assets.filter(Boolean):[];
+  if(!list.length)return[];
+  const duration=Math.max(1,Number(durationSeconds)||600);
+  const transition=list.length>0?Math.max(0,Math.min(0.5,Number(transitionSeconds)||0)):0;
+  const target=Math.max(18,Math.min(30,Number(targetSceneSeconds)||25));
+  const cap=Math.max(list.length,Math.min(36,Number(maxScenes)||28));
+  const desired=Math.max(list.length,Math.ceil(duration/target));
+  const count=Math.min(cap,desired);
+  const sceneDuration=(duration+(transition*(count-1)))/count;
+  const transitions=['fade','smoothleft','wipeleft','slideright','smoothright'];
+
+  return Array.from({length:count},(_,index)=>{
+    const assetIndex=index%list.length;
+    const cycle=Math.floor(index/list.length);
+    const start=index*(sceneDuration-transition);
+    const end=Math.min(duration,start+sceneDuration);
+    return{
+      index,
+      file:list[assetIndex],
+      assetIndex,
+      cycle,
+      sourceOffset:Number((((cycle*7)+(assetIndex*3))%45).toFixed(3)),
+      motionPhase:Number(((index%8)*0.7).toFixed(3)),
+      start:Number(start.toFixed(3)),
+      end:Number(end.toFixed(3)),
+      duration:Number((end-start).toFixed(3)),
+      transition:index===0?null:transitions[(index-1)%transitions.length]
+    };
+  });
+}
 function supportsSubtitles(ffmpeg){
   if(!ffmpeg)return false;
   try{
@@ -427,7 +458,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
   let args=[];
   if(assets.length){
     args=['-y','-hide_banner','-loglevel','error'];
-    for(const asset of assets)args.push('-stream_loop','-1','-i',asset);
+    for(const scene of storyboard)args.push('-stream_loop','-1','-i',scene.file);
     args.push('-i',voicePath);
 
     const filters=[];
@@ -467,7 +498,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
       '-t',duration.toFixed(3),
       '-filter_complex',filters.join(';'),
       '-map','['+videoLabel+']',
-      '-map',String(assets.length)+':a:0',
+      '-map',String(storyboard.length)+':a:0',
       '-c:v','libx264','-preset','veryfast','-crf','20','-pix_fmt','yuv420p',
       '-c:a','aac','-b:a','160k','-af','apad=pad_dur=1',
       '-movflags','+faststart',
@@ -527,6 +558,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     storyboard:storyboard.map(x=>({...x,file:path.relative(workspace,x.file)})),
     captionsBurned,
     quality,
+    visualEdit,
     output:path.relative(workspace,outFile),
     subtitle:path.relative(workspace,srtFile),
     profile:{width:1080,height:1920,fps:30,codec:'H.264',audio:'AAC',durationTarget:'12-18s',multiScene:true,transition:'fade'}
@@ -542,10 +574,11 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     asset:assets[0]||null,
     assets,
     storyboard,
-    sceneCount:assets.length,
+    sceneCount:storyboard.length,
     captionsBurned,
     duration,
     quality,
+    visualEdit,
     profileVersion:CREATOR_PROFILE_VERSION
   };
 }
@@ -580,8 +613,24 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
 
   const explicitAssets=Array.isArray(assetFiles)&&assetFiles.length>0;
   const assets=explicitAssets?resolveAssetSelection(workspace,assetFiles,20):selectAssets(workspace,base,12);
-  const transition=assets.length>1?0.35:0;
-  const storyboard=buildStoryboard(assets,duration,transition);
+  const transition=assets.length>0?0.35:0;
+  const storyboard=buildLongformStoryboard(assets,duration,transition,25,28);
+  const maxSceneDuration=storyboard.length?Math.max(...storyboard.map(x=>Number(x.duration||0))):0;
+  const visualEdit={
+    ok:!assets.length||(storyboard.length>=Math.ceil(duration/30)&&maxSceneDuration<=30.5),
+    sceneCount:storyboard.length,
+    distinctAssets:assets.length,
+    averageSceneSeconds:storyboard.length?Number((duration/storyboard.length).toFixed(3)):0,
+    maxSceneSeconds:Number(maxSceneDuration.toFixed(3)),
+    transitions:[...new Set(storyboard.map(x=>x.transition).filter(Boolean))],
+    motion:assets.length?'subtle-pan-crop':'procedural'
+  };
+  if(assets.length&&!visualEdit.ok){
+    const e=new Error('Creator long-form edit rhythm quality gate failed.');
+    e.code='CREATOR_LONGFORM_EDIT_RHYTHM_FAILED';
+    e.visualEdit=visualEdit;
+    throw e;
+  }
   const captionsBurned=supportsSubtitles(status.ffmpeg);
   fs.writeFileSync(srtFile,buildSrt(cleanScript,duration),'utf8');
 
@@ -593,13 +642,14 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
 
     const filters=[];
     storyboard.forEach((scene,i)=>{
+      const phase=Number(scene.motionPhase||0).toFixed(3);
       filters.push(
         '['+i+':v]'+
-        'scale=1920:1080:force_original_aspect_ratio=increase,'+
-        'crop=1920:1080,'+
-        'fps=30,setsar=1,'+
-        'trim=duration='+scene.duration.toFixed(3)+','+
+        'trim=start='+Number(scene.sourceOffset||0).toFixed(3)+':duration='+scene.duration.toFixed(3)+','+
         'setpts=PTS-STARTPTS,'+
+        'scale=2048:1152:force_original_aspect_ratio=increase,'+
+        "crop=1920:1080:x='(in_w-out_w)/2+40*sin(t/3+"+phase+")':y='(in_h-out_h)/2+22*cos(t/4+"+phase+")',"+
+        'fps=30,setsar=1,'+
         'format=yuv420p[v'+i+']'
       );
     });
@@ -608,8 +658,9 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     if(storyboard.length>1){
       for(let i=1;i<storyboard.length;i++){
         const out='lx'+i;
-        const offset=i*(storyboard[0].duration-transition);
-        filters.push('['+videoLabel+'][v'+i+']xfade=transition=fade:duration='+transition.toFixed(3)+':offset='+offset.toFixed(3)+'['+out+']');
+        const offset=Number(storyboard[i].start||0).toFixed(3);
+        const transitionName=String(storyboard[i].transition||'fade');
+        filters.push('['+videoLabel+'][v'+i+']xfade=transition='+transitionName+':duration='+transition.toFixed(3)+':offset='+offset+'['+out+']');
         videoLabel=out;
       }
     }
@@ -691,13 +742,13 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     quality,
     output:path.relative(workspace,outFile),
     subtitle:path.relative(workspace,srtFile),
-    profile:{width:1920,height:1080,fps:30,codec:'H.264',audio:'AAC',durationTarget:'9-11m',multiScene:true,transition:'fade'}
+    profile:{width:1920,height:1080,fps:30,codec:'H.264',audio:'AAC',durationTarget:'9-11m',multiScene:true,transition:'varied',sceneTarget:'20-30s',motion:'subtle-pan-crop'}
   };
   fs.writeFileSync(metaFile,JSON.stringify(meta,null,2),'utf8');
 
   return{
     ok:true,
-    message:'Long-form video hazır: '+outFile+' · 1920x1080 · 30 FPS · H.264 · '+Number(duration/60).toFixed(1)+' dk · '+(assets.length?assets.length+' sahne':'procedural hareketli arka plan')+(captionsBurned?' · altyazı videoya işlendi':' · altyazı ayrı SRT'),
+    message:'Long-form video hazır: '+outFile+' · 1920x1080 · 30 FPS · H.264 · '+Number(duration/60).toFixed(1)+' dk · '+(assets.length?(storyboard.length+' sahne / '+assets.length+' klip'):'procedural hareketli arka plan')+(captionsBurned?' · altyazı videoya işlendi':' · altyazı ayrı SRT'),
     output:outFile,
     subtitle:srtFile,
     metadata:metaFile,
@@ -721,6 +772,7 @@ module.exports={
   buildSrt,
   selectAssets,
   buildStoryboard,
+  buildLongformStoryboard,
   supportsSubtitles,
   ffmpegFilterPath,
   renderShort,
