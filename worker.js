@@ -4085,15 +4085,26 @@ async function verifyUncertainCampaignStep(mission){
 
   if(step.name==='youtube_draft'){
     const receipt=getYoutubeStudio().readReceipt(WORKSPACE,mission.id);
-    if(receipt&&receipt.state==='draft_prepared'){
+    if(receipt&&['draft_prepared','published'].includes(receipt.state)){
       return engine.resolveUncertainStep(WORKSPACE,mission.id,{
         completed:true,
-        artifact:{receipt:getYoutubeStudio().missionReceiptFile(WORKSPACE,mission.id),file:receipt.file,recovered:true},
+        artifact:{receipt:getYoutubeStudio().missionReceiptFile(WORKSPACE,mission.id),file:receipt.file,recovered:true,published:receipt.published===true},
         note:'YouTube mission receipt verified'
       });
     }
     if(!receipt){
       return engine.resolveUncertainStep(WORKSPACE,mission.id,{completed:false,note:'No upload receipt; safe retry'});
+    }
+    return mission;
+  }
+  if(step.name==='youtube_publish'){
+    const receipt=getYoutubeStudio().readReceipt(WORKSPACE,mission.id);
+    if(receipt&&receipt.state==='published'&&receipt.published===true){
+      return engine.resolveUncertainStep(WORKSPACE,mission.id,{
+        completed:true,
+        artifact:{receipt:getYoutubeStudio().missionReceiptFile(WORKSPACE,mission.id),file:receipt.file,published:true,recovered:true},
+        note:'YouTube public publish verified from receipt'
+      });
     }
     return mission;
   }
@@ -4219,6 +4230,46 @@ async function runDurableMission(id){
           title:out.title,
           reused:!!out.reused,
           published:false
+        }});
+        continue;
+      }
+
+      if(step.name==='youtube_publish'){
+        if(!(step.meta&&step.meta.approvedAt)){
+          mission=engine.failStep(WORKSPACE,id,{
+            code:'EXPLICIT_APPROVAL_REQUIRED',
+            message:'YouTube videosunu PUBLIC yayınlamak için açık kullanıcı onayı gerekli.',
+            retryable:true,
+            dependency:'approval'
+          });
+          return mission;
+        }
+        const out=await getYoutubeStudio().publishPreparedDraft(getBrowserOperator(),WORKSPACE,{
+          missionId:id,
+          approved:true
+        });
+        if(!out.ok){
+          if(out.code==='YOUTUBE_PUBLISH_UNCERTAIN'){
+            mission=engine.failStep(WORKSPACE,id,{code:out.code,message:out.message,uncertain:true});
+            return mission;
+          }
+          if(out.code==='YOUTUBE_AUTH_REQUIRED'){
+            mission=engine.failStep(WORKSPACE,id,{code:out.code,message:out.message,retryable:true,dependency:'youtube_auth'});
+            return mission;
+          }
+          if(out.retryable===true){
+            mission=engine.failStep(WORKSPACE,id,{code:out.code||'YOUTUBE_PUBLISH_BLOCKED',message:out.message||'YouTube yayınlama hazırlanamadı.',retryable:true,dependency:'youtube_studio'});
+            return mission;
+          }
+          mission=engine.failStep(WORKSPACE,id,{code:out.code||'YOUTUBE_PUBLISH_FAILED',message:out.message||'YouTube yayınlama başarısız.',retryable:false});
+          return mission;
+        }
+        mission=engine.completeStep(WORKSPACE,id,{artifact:{
+          receipt:out.receipt,
+          file:out.file,
+          title:out.title,
+          published:true,
+          approvedAt:String(step.meta.approvedAt)
         }});
         continue;
       }
