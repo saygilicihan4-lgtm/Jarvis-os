@@ -4,7 +4,7 @@ const fs=require('fs');
 const path=require('path');
 const engine=require('./jarvis-creator-engine');
 
-assert.strictEqual(engine.ENGINE_VERSION,'1.2');
+assert.strictEqual(engine.ENGINE_VERSION,'1.3');
 assert.strictEqual(engine.CREATOR_PROFILE_VERSION,'2.0');
 assert.strictEqual(engine.safeName('Benim Shorts / Test'),'Benim-Shorts-Test');
 assert.strictEqual(engine.assetSafeName('incoming/My Clip.MP4'),'My-Clip.mp4');
@@ -57,5 +57,14 @@ assert.ok(source.includes('duration>600'),'Creator asset duration limit missing'
 assert.ok(source.includes('function resolveAssetSelection(workspace,assetFiles,maxScenes=5)'),'explicit Creator asset resolver missing');
 assert.ok(source.includes("assetSelection:explicitAssets?'explicit':'automatic'"),'render metadata must record asset selection mode');
 assert.ok(source.includes("missionId:String(missionId||'')"),'render metadata must bind durable mission id');
+assert.ok(source.includes('function probeRenderedShort(file,ffprobe)'),'Creator render quality probe missing');
+assert.ok(source.includes("codec:String(video&&video.codec_name||'').toLowerCase()==='h264'"),'H.264 quality check missing');
+assert.ok(source.includes("width:Number(video&&video.width)===1080"),'1080 width quality check missing');
+assert.ok(source.includes("height:Number(video&&video.height)===1920"),'1920 height quality check missing');
+assert.ok(source.includes("Math.abs(fps-30)<=0.05"),'30 FPS quality check missing');
+assert.ok(source.includes("duration>=11.8&&duration<=18.8"),'Shorts duration quality check missing');
+assert.ok(source.includes("audio:!!audio"),'audio stream quality check missing');
+assert.ok(source.includes("quality=probeRenderedShort(outFile,status.ffprobe)"),'post-render quality gate missing');
+assert.ok(source.includes("quality,\n    output:path.relative(workspace,outFile)"),'quality metadata missing');
 
 console.log('CREATOR ENGINE SELFTEST PASS');

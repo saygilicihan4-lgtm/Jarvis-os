@@ -4,7 +4,7 @@ const assert=require('assert');
 const worker=fs.readFileSync('./worker.js','utf8');
 const creator=fs.readFileSync('./jarvis-creator-engine.js','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.100.0'"),'Worker 2.100.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.101.0'"),'Worker 2.101.0 required');
 assert.ok(worker.includes("'creator_storyboard_v1'"),'Creator storyboard capability missing');
 assert.ok(worker.includes("'creator_explicit_assets_v1'"),'explicit Creator asset capability missing');
 assert.ok(worker.includes("'creator_render_mission_bind_v1'"),'mission-bound Creator render capability missing');
@@ -29,9 +29,9 @@ assert.ok(recovery.includes("String(meta&&meta.missionId||'')===String(mission.i
 assert.ok(!recovery.includes("artifact:{output:expected,recovered:true}"),'output existence alone must not resolve uncertain render');
 
 assert.ok(worker.includes("creatorStoryboardReady:CAPS.includes('creator_storyboard_v1')"),'Creator storyboard acceptance readiness missing');
-assert.ok(worker.includes("jarvis-creator-engine.js',\"ENGINE_VERSION='1.2'"),'Creator Engine 1.2 runtime signature missing');
+assert.ok(worker.includes("jarvis-creator-engine.js',\"ENGINE_VERSION='1.3'"),'Creator Engine 1.2 runtime signature missing');
 
-assert.ok(creator.includes("const ENGINE_VERSION='1.2'"),'Creator Engine 1.2 required');
+assert.ok(creator.includes("const ENGINE_VERSION='1.3'"),'Creator Engine 1.2 required');
 assert.ok(creator.includes('function resolveAssetSelection(workspace,assetFiles,maxScenes=5)'),'explicit asset resolver missing');
 assert.ok(creator.includes("parts.length!==2||parts[0]!=='creator-assets'"),'explicit asset scope guard missing');
 assert.ok(creator.includes("const assets=explicitAssets?resolveAssetSelection(workspace,assetFiles,5):selectAssets(workspace,base,5)"),'explicit ordered selection must override automatic selection');
