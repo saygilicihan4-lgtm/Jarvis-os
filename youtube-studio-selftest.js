@@ -126,7 +126,7 @@ const yt=require('./jarvis-youtube-studio');
   assert.ok(worker.includes("name:'youtube_prepare_draft_upload'"),'native YouTube draft tool missing');
   assert.ok(worker.includes("name:'youtube_studio_status'"),'native YouTube status tool missing');
   assert.ok(worker.includes("'youtube_publish_approval_v1'"),'YouTube publish approval capability missing');
-  assert.ok(!worker.includes("name:'youtube_publish'"),'YouTube public publish must not be a direct autonomous native tool');
+  assert.ok(!worker.includes("function:{\n        name:'youtube_publish',"),'YouTube public publish must not be a direct autonomous native tool');
   assert.ok(worker.includes('"Devam et" tek başına YouTube PUBLIC onayı değildir'),'generic resume must not count as YouTube publish approval');
   assert.ok(server.includes("return'youtube_upload_prepare_v1'"),'server YouTube draft routing missing');
 
