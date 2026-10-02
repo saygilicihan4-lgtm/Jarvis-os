@@ -30,7 +30,7 @@ assert.ok(youtube.includes("state:'publish_started'"),'YouTube publish preflight
 assert.ok(youtube.includes('YOUTUBE_PUBLISH_UNCERTAIN'),'YouTube uncertain publish guard missing');
 assert.ok(worker.includes("'youtube_publish_approval_v1'"),'YouTube publish approval capability missing');
 assert.ok(worker.includes("steps.push({name:'youtube_publish',meta:{requiresApproval:true}})"),'YouTube publish step must be approval-gated');
-assert.ok(!worker.includes("name:'youtube_publish'"),'direct autonomous YouTube publish tool must not exist');
+assert.ok(!worker.includes("function:{\n        name:'youtube_publish',"),'direct autonomous YouTube publish tool must not exist');
 assert.ok(worker.includes('"Devam et" tek başına YouTube PUBLIC onayı değildir'),'generic resume must not count as YouTube approval');
 
 console.log('APPROVAL GATE SELFTEST PASS');
