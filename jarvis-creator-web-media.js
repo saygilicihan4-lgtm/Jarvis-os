@@ -441,6 +441,7 @@ function sourceRecordsForAssets(workspace,assetPaths){
       const p=String(item&&item.path||'').replace(/\\/g,'/');
       if(!wanted.has(p)||seen.has(p))continue;
       const source=item&&item.source||{};
+      const derived=item&&item.derived||null;
       out.push({
         path:p,
         provider:cleanText(source.provider,60),
@@ -449,7 +450,8 @@ function sourceRecordsForAssets(workspace,assetPaths){
         sourcePage:String(source.sourcePage||'').trim().slice(0,900),
         license:cleanText(source.license,140),
         licenseUrl:String(source.licenseUrl||'').trim().slice(0,900),
-        attributionRequired:!!source.attributionRequired
+        attributionRequired:!!source.attributionRequired,
+        mediaKind:derived&&String(derived.kind||'').trim()==='animated_still'?'animated_still':'video'
       });
       seen.add(p);
     }
