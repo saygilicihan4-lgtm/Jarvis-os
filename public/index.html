@@ -2575,9 +2575,10 @@ function renderMissionQueue(){
       const c=localMissionRuntime.counts||{};
       const open=Number(localMissionRuntime.openCount||0);
       const blocked=Number(c.waitingDependency||0)+Number(c.needsVerification||0);
+      const paused=Number(c.paused||0);
       const relay=localMissionRuntimeSource==='cloud'?' · CLOUD':'';
-      localMissionState.textContent=(open?(open+' OPEN'+(blocked?' · '+blocked+' WAIT':'')):'IDLE')+relay;
-      localMissionState.style.color=blocked?'#ffca66':'#65ffbf';
+      localMissionState.textContent=(open?(open+' OPEN'+(blocked?' · '+blocked+' WAIT':'')+(paused?' · '+paused+' PAUSED':'')):'IDLE')+relay;
+      localMissionState.style.color=(blocked||paused)?'#ffca66':'#65ffbf';
     }
   }
 }
