@@ -4683,10 +4683,20 @@ function creatorSceneWebQueries(title,script,{maxQueries=3,maxTerms=7}={}){
   const candidates=[];
   if(global)candidates.push(global);
   if(sentences.length){
-    const picks=[0,Math.floor((sentences.length-1)/2),sentences.length-1];
-    if(sentences.length>=8)picks.splice(2,0,Math.floor((sentences.length-1)*0.72));
+    const sceneSlots=Math.max(1,Math.min(3,Math.max(1,Number(maxQueries)||3)-1));
+    const picks=[];
+    for(let slot=1;slot<=sceneSlots;slot++){
+      const ratio=slot/(sceneSlots+1);
+      const index=Math.max(0,Math.min(sentences.length-1,Math.round((sentences.length-1)*ratio)));
+      if(!picks.includes(index))picks.push(index);
+    }
+    if(picks.length<sceneSlots&&sentences.length>1){
+      for(let index=0;index<sentences.length&&picks.length<sceneSlots;index++){
+        if(!picks.includes(index))picks.push(index);
+      }
+    }
     for(const index of picks){
-      const segment=sentences[Math.max(0,Math.min(sentences.length-1,index))];
+      const segment=sentences[index];
       const q=creatorAutoWebQuery(title,segment,maxTerms);
       if(q)candidates.push(q);
     }
