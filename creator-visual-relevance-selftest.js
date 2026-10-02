@@ -13,7 +13,8 @@ for(const cap of [
   'creator_semantic_relevance_floor_v1',
   'creator_semantic_narrative_digest_v1',
   'creator_procedural_fallback_v1',
-  'creator_scene_semantic_order_v1'
+  'creator_scene_semantic_order_v1',
+  'creator_longform_repeat_pressure_v1'
 ]){
   assert.ok(worker.includes("'"+cap+"'"),cap+' missing');
 }

@@ -1668,10 +1668,20 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
   const transition=assets.length>0?0.35:0;
   const storyboard=buildLongformStoryboard(assets,duration,transition,25,28);
   const maxSceneDuration=storyboard.length?Math.max(...storyboard.map(x=>Number(x.duration||0))):0;
+  const assetUseCounts={};
+  for(const scene of storyboard){
+    const key=String(scene&&scene.file||'');
+    if(key)assetUseCounts[key]=(assetUseCounts[key]||0)+1;
+  }
+  const maxUsesPerAsset=Math.max(0,...Object.values(assetUseCounts));
+  const repeatPressure=storyboard.length?Number((maxUsesPerAsset/storyboard.length).toFixed(3)):0;
   const visualEdit={
-    ok:!assets.length||(storyboard.length>=Math.ceil(duration/30)&&maxSceneDuration<=30.5),
+    ok:!assets.length||(storyboard.length>=Math.ceil(duration/30)&&maxSceneDuration<=30.5&&maxUsesPerAsset<=4),
     sceneCount:storyboard.length,
     distinctAssets:assets.length,
+    maxUsesPerAsset,
+    repeatPressure,
+    assetUseCounts,
     averageSceneSeconds:storyboard.length?Number((duration/storyboard.length).toFixed(3)):0,
     maxSceneSeconds:Number(maxSceneDuration.toFixed(3)),
     transitions:[...new Set(storyboard.map(x=>x.transition).filter(Boolean))],
@@ -1679,7 +1689,7 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     narrativeAssetOrder:assets.length>=6?'progressive':'cyclic'
   };
   if(assets.length&&!visualEdit.ok){
-    const e=new Error('Creator long-form edit rhythm quality gate failed.');
+    const e=new Error('Creator long-form edit rhythm/repeat pressure quality gate failed.');
     e.code='CREATOR_LONGFORM_EDIT_RHYTHM_FAILED';
     e.visualEdit=visualEdit;
     throw e;

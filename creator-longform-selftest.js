@@ -103,7 +103,7 @@ assert.strictEqual((worker.match(/async function serviceCreatorDailyPlan/g)||[])
 assert.ok(/function creatorDailyDefaultPlan\(\)[\s\S]{0,500}enabled:true/.test(worker),'requested daily long-form plan must default enabled');
 assert.ok(worker.includes('function creatorDailyAutoAssetBaselines(dateKey,maxItems=12)'),'daily auto asset baseline helper missing');
 assert.ok(worker.includes('chooseCreatorDailyBaselines(web,semantic,12)'),'daily automatic storyboard must use relevance-qualified baselines only');
-assert.ok(worker.includes("const creatorAssetMode=baselineOverride&&!creatorAssets.length?'procedural':'auto'"),'empty daily baseline override must become procedural mode');
+assert.ok(worker.includes("const creatorAssetMode=baselineOverride&&creatorAssets.length<6?'procedural':'auto'"),'v100 sparse daily baseline override must become procedural mode');
 assert.ok(worker.includes('verifyCreatorLongformBaselines(plan.creatorAssets)'),'configured daily storyboard baselines must be reverified before reuse');
 assert.ok(worker.includes("setInterval(()=>serviceCreatorDailyPlan().catch(()=>{}),60000)"),'daily plan restart service interval missing');
 assert.ok(worker.includes("name:'creator_daily_longform_plan'"),'native daily plan tool missing');

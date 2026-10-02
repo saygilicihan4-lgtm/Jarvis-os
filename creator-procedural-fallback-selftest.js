@@ -30,8 +30,9 @@ assert.deepStrictEqual(choose([],[],12),[],'empty relevance set must stay empty 
 
 assert.ok(worker.includes("'creator_semantic_narrative_digest_v1'"),'semantic narrative digest capability regressed');
 assert.ok(worker.includes("'creator_procedural_fallback_v1'"),'procedural fallback capability missing');
-assert.ok(worker.includes("const creatorAssetMode=baselineOverride&&!creatorAssets.length?'procedural':'auto'"),
-  'empty daily baseline override must bind procedural mode into durable mission input');
+assert.ok(worker.includes("'creator_longform_repeat_pressure_v1'"),'v100 repeat pressure capability missing');
+assert.ok(worker.includes("const creatorAssetMode=baselineOverride&&creatorAssets.length<6?'procedural':'auto'"),
+  'sparse daily baseline override must bind procedural mode into durable mission input');
 assert.ok(worker.includes("assetMode:String(input.creatorAssetMode||'auto')"),
   'durable long-form runner must pass mission-bound asset mode to renderer');
 assert.ok(worker.includes("assetSelection:String(out.assetSelection||'automatic')"),

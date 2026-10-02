@@ -7,6 +7,7 @@ const worker=fs.readFileSync('./worker.js','utf8');
 const source=fs.readFileSync('./jarvis-creator-engine.js','utf8');
 
 assert.ok(worker.includes("'creator_longform_edit_rhythm_v1'"),'long-form edit rhythm capability missing');
+assert.ok(worker.includes("'creator_longform_repeat_pressure_v1'"),'v100 repeat pressure capability missing');
 assert.strictEqual(typeof creator.buildLongformStoryboard,'function','long-form storyboard export missing');
 
 const assets=[
@@ -33,6 +34,10 @@ assert.ok(source.includes("motion:'subtle-pan-crop'"),'long-form motion profile 
 assert.ok(source.includes("transition:'varied'"),'long-form varied transition profile missing');
 assert.ok(source.includes("CREATOR_LONGFORM_EDIT_RHYTHM_FAILED"),'long-form edit rhythm fail-closed guard missing');
 assert.ok(source.includes("sceneCount:storyboard.length"),'long-form scene evidence missing');
+assert.ok(source.includes('maxUsesPerAsset'),'v100 max asset reuse evidence missing');
+assert.ok(source.includes('repeatPressure'),'v100 repeat pressure evidence missing');
+assert.ok(source.includes('maxUsesPerAsset<=4'),'v100 repeat pressure fail-closed gate missing');
+assert.ok(worker.includes("baselineOverride&&creatorAssets.length<6?'procedural':'auto'"),'daily sparse relevant B-roll must use procedural fallback');
 
 const renderStart=source.indexOf('function renderShort(');
 const renderEnd=source.indexOf('function renderLongform(',renderStart);
