@@ -29,4 +29,5 @@ assert.ok(!block.includes('DEVICE_TOKEN'),'acceptance snapshot must not expose d
 assert.ok(!block.includes('deviceId'),'acceptance snapshot must not expose stable device id');
 assert.ok(worker.includes("(taskRegistered&&hiddenTaskAction)||fallbackRegistered"),'scheduled task must prove hidden launcher action');
 
+assert.ok(worker.includes("workspaceFileMissionReady:CAPS.includes('workspace_file_mission_v1')"),'workspace file mission readiness missing from acceptance');
 console.log('PC ACCEPTANCE SNAPSHOT SELFTEST PASS');
