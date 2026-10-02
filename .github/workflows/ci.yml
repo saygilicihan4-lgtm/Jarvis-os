@@ -30,6 +30,7 @@ jobs:
           node --check mission-autoresume-selftest.js
           node --check mission-scheduler-selftest.js
           node --check mission-console-selftest.js
+          node --check creator-mission-selftest.js
           node --check pc-acceptance-selftest.js
           node --check pc-self-repair-selftest.js
           node --check youtube-studio-selftest.js
@@ -63,6 +64,8 @@ jobs:
         run: node mission-scheduler-selftest.js
       - name: Mission console selftest
         run: node mission-console-selftest.js
+      - name: Creator mission selftest
+        run: node creator-mission-selftest.js
       - name: PC acceptance snapshot selftest
         run: node pc-acceptance-selftest.js
       - name: PC self-repair selftest
