@@ -4,7 +4,8 @@ const os=require('os');
 const crypto=require('crypto');
 const childProcess=require('child_process');
 const http=require('http');
-const creatorEngine=require('./jarvis-creator-engine');
+let creatorEngine=null;
+try{creatorEngine=require('./jarvis-creator-engine')}catch(_){}
 
 const BASE=(process.env.JARVIS_URL||'https://jarvis-os-1iuv.onrender.com').replace(/\/$/,'');
 const TOKEN=process.env.JARVIS_TOKEN||'';
@@ -28,10 +29,10 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.74.0';
+const WORKER_VERSION='2.75.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
 CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1','adaptive_model_router_v1','deep_model_fallback_v1','dynamic_chunk_prosody_v1','natural_pause_timing_v1','adaptive_turn_pacing_v1','latency_learning_v1','full_duplex_interrupt_v1','cancellable_agent_v1','adaptive_voice_profile_v1','spoken_voice_preference_v1','speaker_echo_rejection_v1','social_dialogue_v1','response_variation_v1','contextual_followup_v1','dialogue_feedback_learning_v1','social_preference_adaptation_v1','dynamic_wake_ack_v1','wake_ack_turn_timing_v1','auto_quality_escalation_v1','weak_response_escalation_v1','repair_quality_escalation_v1','social_momentum_v1','elliptical_turn_resolution_v1','conversation_cadence_v1','brevity_mirroring_v1','adaptive_response_length_v1','interruption_continuity_v1','spoken_resume_v1','partial_stream_resume_v1');
-CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1');
+CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -3295,6 +3296,88 @@ function ensureWindowsHelper(filename){
   }catch(e){console.error('[JARVIS] HELPER SYNC FAILED: '+filename+' · '+e.message)}
   return null;
 }
+function syncRepoRuntimeFile(filename,signature){
+  if(process.platform!=='win32')return null;
+  const target=path.join(__dirname,filename);
+  const tmp=target+'.new';
+  const url='https://raw.githubusercontent.com/saygilicihan4-lgtm/Jarvis-os/main/'+encodeURIComponent(filename)+'?cb='+Date.now();
+  try{
+    const safeUrl=url.replace(/'/g,"''"),safeTmp=tmp.replace(/'/g,"''");
+    const ps="$ProgressPreference='SilentlyContinue'; Invoke-WebRequest -UseBasicParsing -Headers @{'Cache-Control'='no-cache';'Pragma'='no-cache'} -Uri '"+safeUrl+"' -OutFile '"+safeTmp+"' -TimeoutSec 25";
+    childProcess.execFileSync('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-Command',ps],{encoding:'utf8',windowsHide:true,timeout:32000,maxBuffer:512*1024});
+    if(!fs.existsSync(tmp))throw new Error('download missing');
+    const txt=fs.readFileSync(tmp,'utf8');
+    if(signature&&!txt.includes(signature))throw new Error('signature validation failed');
+    if(filename.toLowerCase().endsWith('.js')){
+      childProcess.execFileSync(process.execPath,['--check',tmp],{encoding:'utf8',windowsHide:true,timeout:10000,maxBuffer:256*1024});
+    }
+    const oldHash=fs.existsSync(target)?crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex'):null;
+    const newHash=crypto.createHash('sha256').update(fs.readFileSync(tmp)).digest('hex');
+    if(oldHash!==newHash){
+      fs.copyFileSync(tmp,target);
+      console.log('[JARVIS] RUNTIME SYNCED: '+filename);
+    }
+    try{fs.unlinkSync(tmp)}catch(_){}
+    return target;
+  }catch(e){
+    try{if(fs.existsSync(tmp))fs.unlinkSync(tmp)}catch(_){}
+    console.error('[JARVIS] RUNTIME SYNC FAILED: '+filename+' · '+e.message);
+    return fs.existsSync(target)?target:null;
+  }
+}
+function getCreatorEngine(){
+  if(creatorEngine)return creatorEngine;
+  const file=syncRepoRuntimeFile('jarvis-creator-engine.js',"ENGINE_VERSION='1.0'");
+  if(!file)throw new Error('Creator engine module could not be prepared');
+  try{
+    delete require.cache[require.resolve(file)];
+    creatorEngine=require(file);
+    return creatorEngine;
+  }catch(e){
+    throw new Error('Creator engine load failed: '+e.message);
+  }
+}
+function bootstrapRuntimeUpgrade(){
+  if(process.platform!=='win32'||TEST_MODE)return{ok:false,skipped:true};
+  const marker=path.join(MEMORY_DIR,'bootstrap-v39.json');
+  try{
+    if(fs.existsSync(marker)){
+      const x=JSON.parse(fs.readFileSync(marker,'utf8'));
+      if(x&&x.version===39&&x.ok)return{ok:true,already:true};
+    }
+  }catch(_){}
+
+  const files=[
+    ['jarvis-self-update.ps1',"UPDATER_VERSION='5.0'"],
+    ['jarvis-update-manifest.json','"schema": 1'],
+    ['jarvis-startup.ps1','JARVIS_CINEMATIC_STARTUP_V1'],
+    ['JARVIS-STARTUP-HIDDEN.vbs','jarvis-startup.ps1'],
+    ['install-jarvis-startup.ps1','JARVIS Silent Startup'],
+    ['jarvis-creator-engine.js',"ENGINE_VERSION='1.0'"]
+  ];
+  const synced=[];
+  for(const [name,signature] of files){
+    const p=syncRepoRuntimeFile(name,signature);
+    if(!p)throw new Error('bootstrap file missing: '+name);
+    synced.push(name);
+  }
+
+  const installer=path.join(__dirname,'install-jarvis-startup.ps1');
+  try{
+    childProcess.execFileSync('powershell.exe',[
+      '-NoProfile','-ExecutionPolicy','Bypass','-File',installer
+    ],{encoding:'utf8',windowsHide:true,timeout:45000,maxBuffer:1024*1024});
+  }catch(e){
+    throw new Error('canonical startup install failed: '+e.message);
+  }
+
+  fs.mkdirSync(MEMORY_DIR,{recursive:true});
+  fs.writeFileSync(marker,JSON.stringify({
+    version:39,ok:true,at:new Date().toISOString(),worker:WORKER_VERSION,synced
+  },null,2),'utf8');
+  console.log('[JARVIS] BOOTSTRAP MIGRATION V39: READY');
+  return{ok:true,synced};
+}
 function cleanupOrphanedJarvisHelpers(){
   if(process.platform!=='win32')return;
   // Keep this PowerShell as one syntactically complete pipeline. The previous
@@ -4016,7 +4099,7 @@ async function execute(task){
   }
 
   if(/^(?:creator motor durumu|creator engine status|video motor durumu)$/i.test(c)){
-    const s=creatorEngine.ffmpegStatus(WORKSPACE);
+    const s=getCreatorEngine().ffmpegStatus(WORKSPACE);
     return{
       ok:true,
       message:'Creator motoru · FFmpeg '+(s.ok?'READY':'MISSING')+' · '+s.assets+' yerel klip · '+s.assetDir+(s.ok?'':' · gerekirse otomatik ücretsiz kurulum kullanılabilir')
@@ -4024,7 +4107,7 @@ async function execute(task){
   }
 
   if(/^(?:creator motorunu hazırla|creator motorunu hazirla|creator engine hazırla|creator engine hazirla)$/i.test(c)){
-    const s=creatorEngine.prepare(WORKSPACE,{allowInstall:true});
+    const s=getCreatorEngine().prepare(WORKSPACE,{allowInstall:true});
     return{
       ok:!!s.ok,
       retryable:false,
@@ -4038,10 +4121,10 @@ async function execute(task){
   if(creatorVideo){
     const requestedName=(creatorVideo[1]||('short-'+Date.now())).trim();
     const narration=String(creatorVideo[2]||'').trim();
-    const ready=creatorEngine.prepare(WORKSPACE,{allowInstall:true});
+    const ready=getCreatorEngine().prepare(WORKSPACE,{allowInstall:true});
     if(!ready.ok)return{ok:false,retryable:false,message:'Creator motoru hazır değil · FFmpeg kurulamadı'};
     const voice=await renderCreatorVoiceFile(narration,requestedName+'-voice');
-    const out=creatorEngine.renderShort({
+    const out=getCreatorEngine().renderShort({
       workspace:WORKSPACE,
       name:requestedName,
       script:narration,
@@ -4329,6 +4412,7 @@ async function poll(){
 }
 console.log('JARVIS PC Worker '+WORKER_VERSION+' başladı');
 if(!TEST_MODE){
+  try{bootstrapRuntimeUpgrade()}catch(e){console.error('[JARVIS] BOOTSTRAP MIGRATION:',e.message)}
   cleanupOrphanedJarvisHelpers();
   startWindowsWakeHelper();
   startWindowsClapHelper();
