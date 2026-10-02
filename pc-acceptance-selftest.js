@@ -30,4 +30,5 @@ assert.ok(!block.includes('deviceId'),'acceptance snapshot must not expose stabl
 assert.ok(worker.includes("(taskRegistered&&hiddenTaskAction)||fallbackRegistered"),'scheduled task must prove hidden launcher action');
 
 assert.ok(worker.includes("workspaceFileMissionReady:CAPS.includes('workspace_file_mission_v1')"),'workspace file mission readiness missing from acceptance');
+assert.ok(worker.includes("missionControlReady:CAPS.includes('mission_control_v1')"),'mission control readiness missing from acceptance');
 console.log('PC ACCEPTANCE SNAPSHOT SELFTEST PASS');
