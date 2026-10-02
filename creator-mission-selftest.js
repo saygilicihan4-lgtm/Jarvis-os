@@ -4,7 +4,7 @@ const assert=require('assert');
 const worker=fs.readFileSync('./worker.js','utf8');
 const html=fs.readFileSync('./public/index.html','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.99.1'"),'Worker 2.99.1 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.100.0'"),'Worker 2.100.0 required');
 assert.ok(worker.includes("'creator_short_mission_v1'"),'creator durable mission capability missing');
 assert.ok(worker.includes('function createCreatorShortMission(args={})'),'creator mission factory missing');
 assert.ok(worker.includes("type:'creator_short'"),'creator_short mission type missing');
