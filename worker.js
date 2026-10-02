@@ -5787,13 +5787,13 @@ async function missionDependencyReady(mission){
   const dep=String(step&&step.error&&step.error.dependency||'');
   if(!dep)return true;
 
-  if(dep.startsWith('mission:')){
-    const childId=dep.slice('mission:'.length).trim();
-    if(!childId)return true;
+  if(/^mission:M-[A-Z0-9-]{12,80}$/.test(dep)){
+    const childId=dep.slice('mission:'.length);
     const child=getMissionEngine().loadMission(WORKSPACE,childId);
     if(!child)return true;
     return ['completed','failed','cancelled'].includes(String(child.status||''));
   }
+  if(dep.startsWith('mission:'))return false;
   if(dep==='pc_runtime'){
     return process.platform==='win32';
   }
