@@ -9,7 +9,8 @@ for(const cap of [
   'creator_visual_relevance_v1',
   'creator_local_vision_broll_v1',
   'creator_semantic_diversity_v1',
-  'creator_relevance_preserving_fallback_v1'
+  'creator_relevance_preserving_fallback_v1',
+  'creator_semantic_relevance_floor_v1'
 ]){
   assert.ok(worker.includes("'"+cap+"'"),cap+' missing');
 }
@@ -42,7 +43,7 @@ assert.ok(worker.includes("getCreatorSemanticQuality().diversifySemanticRows(ord
 assert.ok(worker.includes("maxSimilarity:0.72"),'semantic near-duplicate threshold missing');
 assert.ok(worker.includes("minScore:1"),'semantic minimum lexical relevance floor missing');
 assert.ok(worker.includes("kind:'creator_semantic_diversity'"),'semantic diversity evidence missing');
-assert.ok(worker.includes("SEMANTIC_QUALITY_VERSION='1.0'"),'semantic quality runtime signature missing');
+assert.ok(worker.includes("SEMANTIC_QUALITY_VERSION='1.1'"),'semantic quality runtime signature missing');
 assert.ok(worker.includes('function mergeCreatorAssetBaselines(primary,fallback,maxItems=12)'),'safe deterministic fallback merge missing');
 
 const dailyStart=worker.indexOf('async function serviceCreatorDailyPlan');
@@ -62,6 +63,7 @@ assert.ok(!daily.includes('youtube_publish'),'daily relevance block must never c
 assert.ok(worker.includes("creatorVisualRelevanceReady:CAPS.includes('creator_asset_semantic_catalog_v1')"),'PC acceptance readiness missing');
 assert.ok(worker.includes("CAPS.includes('creator_semantic_diversity_v1')"),'semantic diversity acceptance readiness missing');
 assert.ok(worker.includes("CAPS.includes('creator_relevance_preserving_fallback_v1')"),'relevance-preserving fallback acceptance readiness missing');
+assert.ok(worker.includes("CAPS.includes('creator_semantic_relevance_floor_v1')"),'semantic relevance floor acceptance readiness missing');
 assert.ok(worker.includes("'creator_longform_edit_rhythm_v1'"),'Longform Edit v70 capability must remain');
 assert.ok(worker.includes("'creator_longform_duration_fit_v1'"),'Duration Fit v69 capability must remain');
 assert.ok(worker.includes("'creator_daily_longform_v1'"),'Daily Longform v68 capability must remain');
