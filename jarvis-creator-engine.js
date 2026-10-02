@@ -103,10 +103,10 @@ function inspectAsset(workspace,relativePath){
 }
 function assetDestinationName(relativePath,sha256){
   const ext=path.extname(String(relativePath||'')).toLowerCase();
-  const stem=safeName(path.basename(String(relativePath||''),ext));
-  const hash=String(sha256||'').replace(/[^a-f0-9]/gi,'').toLowerCase().slice(0,10);
-  if(!hash)throw new Error('CREATOR_ASSET_HASH_REQUIRED');
-  return stem+'-'+hash+ext;
+  if(!CREATOR_ASSET_EXTENSIONS.has(ext))throw new Error('CREATOR_ASSET_UNSUPPORTED_EXTENSION');
+  const hash=String(sha256||'').replace(/[^a-f0-9]/gi,'').toLowerCase().slice(0,16);
+  if(hash.length<16)throw new Error('CREATOR_ASSET_HASH_REQUIRED');
+  return 'asset-'+hash+ext;
 }
 function listAssets(workspace){
   const dirs=creatorDirs(workspace);
