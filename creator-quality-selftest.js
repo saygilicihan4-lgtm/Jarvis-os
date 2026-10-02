@@ -23,12 +23,13 @@ assert.ok(creator.includes("Math.abs(fps-30)<=0.05"),'30 FPS requirement missing
 assert.ok(creator.includes("duration>=11.8&&duration<=18.8"),'12-18s tolerance requirement missing');
 assert.ok(creator.includes("const quality=probeRenderedShort(outFile,status.ffprobe)"),'post-render quality gate invocation missing');
 assert.ok(creator.includes("e.code=String(quality.code||'CREATOR_QUALITY_FAILED')"),'quality failure must fail closed');
-assert.ok(creator.includes("quality,\n    output:path.relative(workspace,outFile)"),'quality evidence missing from Creator job metadata');
+assert.ok(creator.includes("quality,\n    visualEdit,\n    output:path.relative(workspace,outFile)"),'quality + visual edit evidence missing from Creator job metadata');
 assert.ok(creator.includes("probeRenderedShort,\n  probeRenderedLongform,\n  listAssets"),'quality probe export missing');
 
 assert.ok(worker.includes('\"Devam et\" tek başına yayınlama onayı değildir'),'Shopify publish gate must remain');
 assert.ok(worker.includes('\"Devam et\" tek başına YouTube PUBLIC onayı değildir'),'YouTube publish gate must remain');
 assert.ok(worker.includes("'creator_batch_storyboard_lock_v1'"),'Creator Batch v66 storyboard lock must remain');
+assert.ok(worker.includes("'creator_short_motion_rhythm_v1'"),'Creator Short motion rhythm capability missing');
 assert.ok(worker.includes("'mission_control_v1'"),'Mission Control must remain');
 assert.ok(worker.includes("'workspace_file_mission_v1'"),'Workspace Files must remain');
 
