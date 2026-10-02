@@ -90,6 +90,9 @@ const thumbProbe=JSON.parse(run(ffprobe,[
 ]));
 assert.strictEqual(Number(thumbProbe.streams&&thumbProbe.streams[0]&&thumbProbe.streams[0].width),1280,'thumbnail width mismatch');
 assert.strictEqual(Number(thumbProbe.streams&&thumbProbe.streams[0]&&thumbProbe.streams[0].height),720,'thumbnail height mismatch');
+assert.ok(out.soundDesign&&out.soundDesign.enabled===true,'procedural Short SFX must be enabled in real render');
+assert.ok(out.soundDesign.count>=2&&out.soundDesign.count<=5,'Short SFX event count must stay bounded');
+assert.strictEqual(out.soundDesign.profile,'procedural-impact-whoosh','Short SFX profile mismatch');
 assert.ok(out.sceneCount>=4,'Short smoke render must use paced multi-scene editing');
 assert.ok(out.visualEdit&&out.visualEdit.ok===true,'visual edit gate must pass');
 assert.ok(out.visualEdit.hookSeconds>=0.75&&out.visualEdit.hookSeconds<=1.05,'real render micro-hook timing evidence missing');
@@ -111,6 +114,8 @@ assert.strictEqual(meta.missionId,'creator-render-smoke-v83','mission binding mi
 assert.strictEqual(meta.captionAnimation,'pop-fade','metadata kinetic caption evidence missing');
 assert.strictEqual(meta.thumbnail,out.thumbnail,'metadata thumbnail binding missing');
 assert.strictEqual(typeof meta.thumbnailTitleBurned,'boolean','metadata thumbnail title evidence missing');
+assert.ok(meta.soundDesign&&meta.soundDesign.enabled===true,'metadata Short SFX evidence missing');
+assert.strictEqual(meta.profile.sfx,'procedural-impact-whoosh','profile Short SFX evidence missing');
 assert.strictEqual(meta.profile.captions,'kinetic-pop-fade','profile kinetic caption evidence missing');
 assert.strictEqual(meta.profile.motion,'dynamic-pan-crop','motion profile missing');
 assert.ok(Array.isArray(meta.storyboard)&&meta.storyboard.length>=4,'storyboard metadata missing');
