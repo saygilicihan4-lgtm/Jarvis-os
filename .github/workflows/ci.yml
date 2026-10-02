@@ -9,13 +9,20 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
       - run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Ensure FFmpeg for real Creator smoke
+        run: |
+          if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+          ffmpeg -hide_banner -filters 2>/dev/null | grep -q subtitles
       - name: Syntax check
         run: |
           node --check server.js
@@ -53,6 +60,7 @@ jobs:
           node --check creator-real-motion-hook-selftest.js
           node --check creator-batch-diversity-selftest.js
           node --check creator-micro-hook-selftest.js
+          node --check creator-render-smoke-selftest.js
           node --check shopify-mission-selftest.js
           node --check approval-gate-selftest.js
           node --check developer-mission-selftest.js
@@ -80,6 +88,8 @@ jobs:
         run: node ui-selftest.js
       - name: Creator engine selftest
         run: node creator-engine-selftest.js
+      - name: Creator real render smoke
+        run: node creator-render-smoke-selftest.js
       - name: Browser operator selftest
         run: node browser-operator-selftest.js
       - name: Browser mission selftest
