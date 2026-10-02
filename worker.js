@@ -4084,6 +4084,70 @@ async function runDurableMission(id){
         continue;
       }
 
+      if(step.name==='dev_prepare'){
+        const input=mission.input||{};
+        const projectName=developerProjectSlug(input.projectName||mission.label);
+        const root=safeFile(projectName);
+        fs.mkdirSync(root,{recursive:true});
+        mission=engine.completeStep(WORKSPACE,id,{artifact:{project:projectName,path:root}});
+        continue;
+      }
+
+      if(/^dev_file_\d+$/.test(step.name)){
+        const input=mission.input||{};
+        const files=Array.isArray(input.files)?input.files:[];
+        const index=Math.max(0,Number(step.meta&&step.meta.fileIndex)||0);
+        const file=files[index];
+        if(!file){
+          mission=engine.failStep(WORKSPACE,id,{code:'DEV_FILE_MISSING',message:'Proje dosya girdisi bulunamadı.',retryable:false});
+          return mission;
+        }
+        const loc=developerMissionTarget(input,file);
+        fs.mkdirSync(path.dirname(loc.target),{recursive:true});
+        const expected=String(file.sha256||crypto.createHash('sha256').update(String(file.content||''),'utf8').digest('hex'));
+        if(fs.existsSync(loc.target)){
+          if(!fs.statSync(loc.target).isFile()){
+            mission=engine.failStep(WORKSPACE,id,{code:'PROJECT_PATH_CONFLICT',message:'Proje yolu dosya değil: '+file.path,retryable:false});
+            return mission;
+          }
+          const existing=fileHash(loc.target);
+          if(existing!==expected){
+            mission=engine.failStep(WORKSPACE,id,{code:'PROJECT_FILE_CONFLICT',message:'Mevcut proje dosyası farklı; otomatik üzerine yazma durduruldu: '+file.path,retryable:false});
+            return mission;
+          }
+          mission=engine.completeStep(WORKSPACE,id,{artifact:{file:loc.relative,sha256:expected,reused:true}});
+          continue;
+        }
+        const tmp=loc.target+'.jarvis-'+process.pid+'-'+Date.now()+'.tmp';
+        fs.writeFileSync(tmp,String(file.content||''),'utf8');
+        fs.renameSync(tmp,loc.target);
+        const actual=fileHash(loc.target);
+        if(actual!==expected){
+          try{fs.unlinkSync(loc.target)}catch(_){}
+          mission=engine.failStep(WORKSPACE,id,{code:'DEV_FILE_VERIFY_FAILED',message:'Yazılan proje dosyası doğrulanamadı: '+file.path,retryable:false});
+          return mission;
+        }
+        mission=engine.completeStep(WORKSPACE,id,{artifact:{file:loc.relative,sha256:actual,reused:false}});
+        continue;
+      }
+
+      if(step.name==='dev_verify'){
+        const input=mission.input||{};
+        const files=Array.isArray(input.files)?input.files:[];
+        const verified=[];
+        for(const file of files){
+          const loc=developerMissionTarget(input,file);
+          const expected=String(file.sha256||'');
+          if(!fs.existsSync(loc.target)||!fs.statSync(loc.target).isFile()||fileHash(loc.target)!==expected){
+            mission=engine.failStep(WORKSPACE,id,{code:'DEV_PROJECT_VERIFY_FAILED',message:'Proje doğrulaması başarısız: '+String(file.path||''),retryable:false});
+            return mission;
+          }
+          verified.push(loc.relative);
+        }
+        mission=engine.completeStep(WORKSPACE,id,{artifact:{project:developerProjectSlug(input.projectName),files:verified,verified:true}});
+        continue;
+      }
+
       mission=engine.failStep(WORKSPACE,id,{code:'UNKNOWN_MISSION_STEP',message:'Bilinmeyen görev adımı: '+step.name,retryable:false});
       return mission;
     }catch(e){
