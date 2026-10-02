@@ -5659,12 +5659,7 @@ async function missionDependencyReady(mission){
   if(!dep)return true;
 
   if(/^mission:M-[A-Z0-9-]+$/.test(dep)){
-    const child=getMissionEngine().loadMission(WORKSPACE,dep.slice('mission:'.length));
-    return !!(child&&!['paused','cancelled','failed'].includes(String(child.status||'')));
-  }
-  if(dep.startsWith('mission:')){
-    const childId=dep.slice('mission:'.length).trim();
-    if(!childId)return true;
+    const childId=dep.slice('mission:'.length);
     const child=getMissionEngine().loadMission(WORKSPACE,childId);
     if(!child)return true;
     return ['completed','failed','cancelled'].includes(String(child.status||''));
