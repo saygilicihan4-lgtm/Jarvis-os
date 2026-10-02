@@ -43,7 +43,7 @@ const UPDATE_STATE_FILE=path.join(MEMORY_DIR,'update-state.json');
 const WORKER_VERSION='2.100.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
 CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1','adaptive_model_router_v1','deep_model_fallback_v1','dynamic_chunk_prosody_v1','natural_pause_timing_v1','adaptive_turn_pacing_v1','latency_learning_v1','full_duplex_interrupt_v1','cancellable_agent_v1','adaptive_voice_profile_v1','spoken_voice_preference_v1','speaker_echo_rejection_v1','social_dialogue_v1','response_variation_v1','contextual_followup_v1','dialogue_feedback_learning_v1','social_preference_adaptation_v1','dynamic_wake_ack_v1','wake_ack_turn_timing_v1','auto_quality_escalation_v1','weak_response_escalation_v1','repair_quality_escalation_v1','social_momentum_v1','elliptical_turn_resolution_v1','conversation_cadence_v1','brevity_mirroring_v1','adaptive_response_length_v1','interruption_continuity_v1','spoken_resume_v1','partial_stream_resume_v1');
-CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1','mission_auto_resume_v1','mission_health_v1','pc_acceptance_snapshot_v1','silent_startup_diagnostics_v1','pc_acceptance_hardened_v1','bootstrap_migration_v6','mission_fair_scheduler_v1','pc_self_repair_v1','creator_multiscene_v2','creator_burned_captions_v1','cloud_mission_telemetry_v1','creator_short_mission_v1','shopify_product_mission_v1','developer_project_mission_v1','approval_gate_v1','shopify_publish_approval_v1','browser_form_mission_v1','browser_form_prepare_v1','browser_click_approval_v1','youtube_publish_approval_v1','youtube_publish_receipt_v1','developer_patch_mission_v1','developer_patch_rollback_v1','pc_safe_mission_v1','pc_safe_action_catalog_v1','pc_mission_resume_v1','workspace_file_mission_v1','workspace_file_hash_guard_v1','workspace_file_no_overwrite_v1','mission_control_v1','mission_pause_v1','mission_cancel_v1','creator_asset_mission_v1','creator_asset_probe_v1','creator_asset_hash_dedupe_v1','creator_batch_mission_v1','creator_batch_child_dedupe_v1','creator_batch_youtube_draft_v1');
+CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1','mission_auto_resume_v1','mission_health_v1','pc_acceptance_snapshot_v1','silent_startup_diagnostics_v1','pc_acceptance_hardened_v1','bootstrap_migration_v6','mission_fair_scheduler_v1','pc_self_repair_v1','creator_multiscene_v2','creator_burned_captions_v1','cloud_mission_telemetry_v1','creator_short_mission_v1','shopify_product_mission_v1','developer_project_mission_v1','approval_gate_v1','shopify_publish_approval_v1','browser_form_mission_v1','browser_form_prepare_v1','browser_click_approval_v1','youtube_publish_approval_v1','youtube_publish_receipt_v1','developer_patch_mission_v1','developer_patch_rollback_v1','pc_safe_mission_v1','pc_safe_action_catalog_v1','pc_mission_resume_v1','workspace_file_mission_v1','workspace_file_hash_guard_v1','workspace_file_no_overwrite_v1','mission_control_v1','mission_pause_v1','mission_cancel_v1','creator_asset_mission_v1','creator_asset_probe_v1','creator_asset_hash_dedupe_v1','creator_batch_mission_v1','creator_batch_child_dedupe_v1','creator_batch_youtube_draft_v1','mission_cooperative_yield_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -2689,7 +2689,7 @@ function nativeAgentTools(){
       type:'function',
       function:{
         name:'creator_batch_mission',
-        description:'2-10 Shorts/Reels işini tek kalıcı batch görevinde sırayla üret. Her öğe ayrı restart-safe child Creator mission olarak yürür; tamamlanan child tekrar oluşturulmaz. includeYouTube=true ise her video için ayrı YouTube Studio DRAFT hazırlanabilir. Batch hiçbir videoyu PUBLIC yayınlamaz.',
+        description:'2-10 Shorts/Reels işini tek kalıcı batch görevinde üret. Her render ayrı restart-safe child Creator mission olarak scheduler üzerinden yürür; tamamlanan child tekrar oluşturulmaz. Önce bütün MP4 renderları tamamlanır, includeYouTube=true ise sonra her video için ayrı YouTube Studio DRAFT hazırlanır. Batch hiçbir videoyu PUBLIC yayınlamaz.',
         parameters:{
           type:'object',
           properties:{
@@ -4271,11 +4271,17 @@ function normalizeCreatorBatchItems(args={}){
     };
   });
 }
+function creatorBatchReceiptId(missionId,index){
+  return String(missionId||'')+'-B'+String(Number(index)+1).padStart(2,'0');
+}
 function createCreatorBatchMission(args={}){
   const items=normalizeCreatorBatchItems(args);
   const includeYouTube=args.includeYouTube===true;
   const label=String(args.label||('Creator batch '+items.length+' Shorts')).replace(/[\r\n]+/g,' ').trim().slice(0,160)||'Creator batch';
-  const steps=items.map((_,i)=>({name:'creator_batch_'+String(i+1).padStart(2,'0'),meta:{itemIndex:i}}));
+  const steps=items.map((_,i)=>({name:'creator_batch_render_'+String(i+1).padStart(2,'0'),meta:{itemIndex:i}}));
+  if(includeYouTube){
+    for(let i=0;i<items.length;i++)steps.push({name:'creator_batch_youtube_'+String(i+1).padStart(2,'0'),meta:{itemIndex:i}});
+  }
   return getMissionEngine().createMission(WORKSPACE,{
     type:'creator_batch',
     label,
@@ -4303,7 +4309,7 @@ function ensureCreatorBatchChild(parentMission,index){
     script:item.script,
     youtubeTitle:item.youtubeTitle,
     youtubeDescription:item.youtubeDescription,
-    includeYouTube:input.includeYouTube===true,
+    includeYouTube:false,
     publish:false,
     _batchParent:parentMission.id,
     _batchIndex:index
@@ -4779,21 +4785,37 @@ async function verifyUncertainCampaignStep(mission){
   if(!step||step.status!=='uncertain')return mission;
   const input=mission.input||{};
 
-  if(/^creator_batch_\d+$/.test(step.name)){
+  if(/^creator_batch_render_\d+$/.test(step.name)){
     const index=Math.max(0,Number(step.meta&&step.meta.itemIndex)||0);
     const child=findCreatorBatchChild(mission.id,index);
     if(!child){
-      return engine.resolveUncertainStep(WORKSPACE,mission.id,{completed:false,note:'No batch child mission exists; safe to create child'});
+      return engine.resolveUncertainStep(WORKSPACE,mission.id,{completed:false,note:'No batch render child mission exists; safe to create child'});
     }
     if(child.status==='completed'){
       return engine.resolveUncertainStep(WORKSPACE,mission.id,{
         completed:true,
         artifact:{childMissionId:child.id,status:'completed',itemIndex:index,recovered:true,artifacts:child.artifacts||{}},
-        note:'Batch child mission verified completed'
+        note:'Batch render child mission verified completed'
       });
     }
     if(['failed','cancelled'].includes(String(child.status||'')))return mission;
-    return engine.resolveUncertainStep(WORKSPACE,mission.id,{completed:false,note:'Existing batch child mission is safe to resume'});
+    return engine.resolveUncertainStep(WORKSPACE,mission.id,{completed:false,note:'Existing batch render child is preserved for scheduler resume'});
+  }
+  if(/^creator_batch_youtube_\d+$/.test(step.name)){
+    const index=Math.max(0,Number(step.meta&&step.meta.itemIndex)||0);
+    const receiptId=creatorBatchReceiptId(mission.id,index);
+    const receipt=getYoutubeStudio().readReceipt(WORKSPACE,receiptId);
+    if(receipt&&receipt.state==='draft_prepared'){
+      return engine.resolveUncertainStep(WORKSPACE,mission.id,{
+        completed:true,
+        artifact:{itemIndex:index,receipt:getYoutubeStudio().missionReceiptFile(WORKSPACE,receiptId),file:receipt.file,recovered:true,published:false},
+        note:'Batch YouTube DRAFT receipt verified'
+      });
+    }
+    if(!receipt){
+      return engine.resolveUncertainStep(WORKSPACE,mission.id,{completed:false,note:'No batch YouTube receipt; safe retry'});
+    }
+    return mission;
   }
 
   if(/^creator_asset_\d+$/.test(step.name)){
@@ -4967,10 +4989,9 @@ async function runDurableMission(id){
     if(!step)throw new Error('Mission current step missing');
 
     try{
-      if(/^creator_batch_\d+$/.test(step.name)){
+      if(/^creator_batch_render_\d+$/.test(step.name)){
         const index=Math.max(0,Number(step.meta&&step.meta.itemIndex)||0);
-        let child=ensureCreatorBatchChild(mission,index);
-        child=await runDurableMission(child.id);
+        const child=ensureCreatorBatchChild(mission,index);
         if(child.status==='completed'){
           mission=engine.completeStep(WORKSPACE,id,{artifact:{
             childMissionId:child.id,
@@ -4978,51 +4999,68 @@ async function runDurableMission(id){
             status:'completed',
             artifacts:child.artifacts||{}
           }});
-          continue;
-        }
-        if(child.status==='needs_verification'){
-          mission=engine.failStep(WORKSPACE,id,{
-            code:'BATCH_CHILD_NEEDS_VERIFICATION',
-            message:'Creator batch child sonucu belirsiz; otomatik tekrar engellendi: '+child.id,
-            retryable:false,
-            uncertain:true
-          });
-          return mission;
-        }
-        if(child.status==='waiting_dependency'){
-          const childStep=engine.currentStep(child);
-          const dep=String(childStep&&childStep.error&&childStep.error.dependency||'');
-          mission=engine.failStep(WORKSPACE,id,{
-            code:'BATCH_CHILD_WAITING',
-            message:'Creator batch child dış bağımlılık bekliyor: '+child.id,
-            retryable:true,
-            dependency:dep||('mission:'+child.id)
-          });
-          return mission;
-        }
-        if(child.status==='paused'){
-          mission=engine.failStep(WORKSPACE,id,{
-            code:'BATCH_CHILD_PAUSED',
-            message:'Creator batch child duraklatıldı: '+child.id,
-            retryable:true,
-            dependency:'mission:'+child.id
-          });
           return mission;
         }
         if(['failed','cancelled'].includes(String(child.status||''))){
           mission=engine.failStep(WORKSPACE,id,{
             code:'BATCH_CHILD_'+String(child.status||'failed').toUpperCase(),
-            message:'Creator batch child tamamlanamadı: '+child.id,
+            message:'Creator batch render child tamamlanamadı: '+child.id,
             retryable:false
           });
           return mission;
         }
         mission=engine.failStep(WORKSPACE,id,{
-          code:'BATCH_CHILD_INCOMPLETE',
-          message:'Creator batch child beklenmeyen durumda: '+child.id+' / '+String(child.status||'unknown'),
+          code:'BATCH_CHILD_WAITING',
+          message:'Creator batch render child scheduler tarafından tamamlanmayı bekliyor: '+child.id,
           retryable:true,
           dependency:'mission:'+child.id
         });
+        return mission;
+      }
+
+      if(/^creator_batch_youtube_\d+$/.test(step.name)){
+        const input=mission.input||{};
+        const items=Array.isArray(input.items)?input.items:[];
+        const index=Math.max(0,Number(step.meta&&step.meta.itemIndex)||0);
+        const item=items[index];
+        const child=findCreatorBatchChild(id,index);
+        if(!item||!child||child.status!=='completed'){
+          mission=engine.failStep(WORKSPACE,id,{code:'BATCH_RENDER_NOT_READY',message:'Batch YouTube DRAFT için tamamlanmış render child bulunamadı.',retryable:false});
+          return mission;
+        }
+        const rendered=child.artifacts&&child.artifacts.render_short;
+        const file=rendered&&rendered.output;
+        if(!file||!fs.existsSync(file)||!fs.statSync(file).isFile()||fs.statSync(file).size<10000){
+          mission=engine.failStep(WORKSPACE,id,{code:'VIDEO_ARTIFACT_MISSING',message:'Batch YouTube DRAFT için render çıktısı doğrulanamadı.',retryable:false});
+          return mission;
+        }
+        const receiptId=creatorBatchReceiptId(id,index);
+        const out=await getYoutubeStudio().prepareDraft(getBrowserOperator(),WORKSPACE,{
+          file,
+          title:String(item.youtubeTitle||item.campaignName||'').trim(),
+          description:String(item.youtubeDescription||'').trim(),
+          missionId:receiptId
+        });
+        if(!out.ok){
+          if(out.code==='YOUTUBE_AUTH_REQUIRED'){
+            mission=engine.failStep(WORKSPACE,id,{code:out.code,message:out.message,retryable:true,dependency:'youtube_auth'});
+            return mission;
+          }
+          if(out.code==='YOUTUBE_UPLOAD_UNCERTAIN'){
+            mission=engine.failStep(WORKSPACE,id,{code:out.code,message:out.message,uncertain:true});
+            return mission;
+          }
+          mission=engine.failStep(WORKSPACE,id,{code:out.code||'YOUTUBE_DRAFT_FAILED',message:out.message||'Batch YouTube taslağı hazırlanamadı.',retryable:out.retryable===true,dependency:'youtube_studio'});
+          return mission;
+        }
+        mission=engine.completeStep(WORKSPACE,id,{artifact:{
+          itemIndex:index,
+          receipt:out.receipt,
+          file:out.file,
+          title:out.title,
+          reused:!!out.reused,
+          published:false
+        }});
         return mission;
       }
 
@@ -5624,6 +5662,13 @@ async function missionDependencyReady(mission){
     const child=getMissionEngine().loadMission(WORKSPACE,dep.slice('mission:'.length));
     return !!(child&&!['paused','cancelled','failed'].includes(String(child.status||'')));
   }
+  if(dep.startsWith('mission:')){
+    const childId=dep.slice('mission:'.length).trim();
+    if(!childId)return true;
+    const child=getMissionEngine().loadMission(WORKSPACE,childId);
+    if(!child)return true;
+    return ['completed','failed','cancelled'].includes(String(child.status||''));
+  }
   if(dep==='pc_runtime'){
     return process.platform==='win32';
   }
@@ -5709,7 +5754,7 @@ async function buildPcAcceptanceSnapshot(){
   try{commerce=await getCommerceEngine().status(WORKSPACE)}catch(e){commerce={ok:false,connected:false,error:String(e.message||e).slice(0,240)}}
   try{youtube=await getYoutubeStudio().status(getBrowserOperator(),WORKSPACE)}catch(e){youtube={ok:false,running:false,loggedIn:false,error:String(e.message||e).slice(0,240)}}
   const missions=missionHealthSnapshot();
-  const checks={workerVersion:WORKER_VERSION==='2.100.0',creatorBatchMissionReady:CAPS.includes('creator_batch_mission_v1')&&CAPS.includes('creator_batch_child_dedupe_v1')&&CAPS.includes('creator_batch_youtube_draft_v1'),creatorAssetMissionReady:CAPS.includes('creator_asset_mission_v1')&&CAPS.includes('creator_asset_probe_v1')&&CAPS.includes('creator_asset_hash_dedupe_v1'),pcMissionReady:CAPS.includes('pc_safe_mission_v1')&&CAPS.includes('pc_safe_action_catalog_v1'),workspaceFileMissionReady:CAPS.includes('workspace_file_mission_v1')&&CAPS.includes('workspace_file_hash_guard_v1')&&CAPS.includes('workspace_file_no_overwrite_v1'),missionControlReady:CAPS.includes('mission_control_v1')&&CAPS.includes('mission_pause_v1')&&CAPS.includes('mission_cancel_v1'),missionRuntime:!!(missions&&missions.ok&&missions.autoResume),creatorEngineLoaded:!!(creator&&!creator.error),browserOperatorLoaded:!!(browser&&!browser.error),commerceEngineLoaded:!!(commerce&&!commerce.error),youtubeStudioLoaded:!!(youtube&&!youtube.error),silentStartup:process.platform==='win32'?startup.silentOk:true,autoUpdateReady:!!(startup.selfUpdate&&startup.selfUpdate.configured)};
+  const checks={workerVersion:WORKER_VERSION==='2.100.0',creatorBatchMissionReady:CAPS.includes('creator_batch_mission_v1')&&CAPS.includes('creator_batch_child_dedupe_v1')&&CAPS.includes('creator_batch_youtube_draft_v1')&&CAPS.includes('mission_cooperative_yield_v1'),creatorAssetMissionReady:CAPS.includes('creator_asset_mission_v1')&&CAPS.includes('creator_asset_probe_v1')&&CAPS.includes('creator_asset_hash_dedupe_v1'),pcMissionReady:CAPS.includes('pc_safe_mission_v1')&&CAPS.includes('pc_safe_action_catalog_v1'),workspaceFileMissionReady:CAPS.includes('workspace_file_mission_v1')&&CAPS.includes('workspace_file_hash_guard_v1')&&CAPS.includes('workspace_file_no_overwrite_v1'),missionControlReady:CAPS.includes('mission_control_v1')&&CAPS.includes('mission_pause_v1')&&CAPS.includes('mission_cancel_v1'),missionRuntime:!!(missions&&missions.ok&&missions.autoResume),creatorEngineLoaded:!!(creator&&!creator.error),browserOperatorLoaded:!!(browser&&!browser.error),commerceEngineLoaded:!!(commerce&&!commerce.error),youtubeStudioLoaded:!!(youtube&&!youtube.error),silentStartup:process.platform==='win32'?startup.silentOk:true,autoUpdateReady:!!(startup.selfUpdate&&startup.selfUpdate.configured)};
   const corePass=Object.values(checks).every(Boolean);
   const accountSetup={shopifyConnected:!!(commerce&&commerce.ok&&commerce.connected),youtubeLoggedIn:!!(youtube&&youtube.ok&&youtube.loggedIn)};
   const snapshot={ok:true,generatedAt,worker:{version:WORKER_VERSION,name:NAME,platform:process.platform,arch:process.arch},checks,corePass,startup,update:startup.selfUpdate,creator:{ready:!!(creator&&creator.ok),assets:Number(creator&&creator.assets||0),outputDir:creator&&creator.outputDir||null,installable:!!(creator&&creator.installable)},browser:{running:!!(browser&&browser.running),browser:browser&&browser.browser||null,tabs:Array.isArray(browser&&browser.tabs)?browser.tabs.length:0,profile:browser&&browser.profile||null},commerce:{connected:accountSetup.shopifyConnected,shop:commerce&&commerce.shop||null,apiVersion:commerce&&commerce.apiVersion||null,message:String(commerce&&commerce.message||'').slice(0,300)},youtube:{running:!!(youtube&&youtube.running),loggedIn:accountSetup.youtubeLoggedIn,title:youtube&&youtube.title||null,url:youtube&&youtube.url||null,message:String(youtube&&youtube.message||'').slice(0,300)},missions,accountSetup};
