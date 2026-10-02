@@ -147,12 +147,42 @@ async function navigate(workspace,url,{port=DEFAULT_PORT}={}){
 async function clickByText(workspace,text,{port=DEFAULT_PORT}={}){
   const needle=String(text||'').trim();if(!needle)throw new Error('text required');
   const encoded=JSON.stringify(needle);
-  const expr="(()=>{const n="+encoded+".toLocaleLowerCase('tr-TR');const els=[...document.querySelectorAll('button,a,[role=\\"button\\"],input[type=\\"submit\\"]')];const label=x=>String(x.innerText||x.value||x.getAttribute('aria-label')||'').trim().toLocaleLowerCase('tr-TR');const e=els.find(x=>label(x)===n)||els.find(x=>label(x).includes(n));if(!e)return{ok:false};e.scrollIntoView({block:'center'});e.click();return{ok:true,tag:e.tagName,text:String(e.innerText||e.value||'').slice(0,160)}})()";
+  const selector=JSON.stringify('button,a,[role="button"],input[type="submit"]');
+  const expr=[
+    "(()=>{",
+    "const n="+encoded+".toLocaleLowerCase('tr-TR');",
+    "const els=[...document.querySelectorAll("+selector+")];",
+    "const label=x=>String(x.innerText||x.value||x.getAttribute('aria-label')||'').trim().toLocaleLowerCase('tr-TR');",
+    "const e=els.find(x=>label(x)===n)||els.find(x=>label(x).includes(n));",
+    "if(!e)return{ok:false};",
+    "e.scrollIntoView({block:'center'});e.click();",
+    "return{ok:true,tag:e.tagName,text:String(e.innerText||e.value||'').slice(0,160)}",
+    "})()"
+  ].join('');
   return evaluate(workspace,expr,{port});
 }
 async function setField(workspace,label,value,{port=DEFAULT_PORT}={}){
   const key=String(label||'').trim(),val=String(value??'');if(!key)throw new Error('label required');
-  const expr="(()=>{const key="+JSON.stringify(key)+".toLocaleLowerCase('tr-TR');const val="+JSON.stringify(val)+";const all=[...document.querySelectorAll('input:not([type=\\"hidden\\"]),textarea,select,[contenteditable=\\"true\\"]')];function labelText(el){const a=el.getAttribute('aria-label')||'';const p=el.getAttribute('placeholder')||'';const n=el.getAttribute('name')||'';const id=el.id||'';let l='';if(id){const x=document.querySelector('label[for=\\"'+CSS.escape(id)+'\\"]');if(x)l=x.innerText||''}return[a,p,n,l].join(' ').toLocaleLowerCase('tr-TR')}const el=all.find(x=>labelText(x).includes(key));if(!el)return{ok:false};el.scrollIntoView({block:'center'});el.focus();if(el.tagName==='SELECT'){const opt=[...el.options].find(o=>String(o.textContent||o.value).toLocaleLowerCase('tr-TR').includes(val.toLocaleLowerCase('tr-TR')));if(!opt)return{ok:false,reason:'option-not-found'};el.value=opt.value}else if(el.isContentEditable){el.textContent=val}else{const d=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el),'value');if(d&&d.set)d.set.call(el,val);else el.value=val}el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));return{ok:true,tag:el.tagName,name:el.name||'',id:el.id||''}})()";
+  const controlSelector=JSON.stringify('input:not([type="hidden"]),textarea,select,[contenteditable="true"]');
+  const expr=[
+    "(()=>{",
+    "const key="+JSON.stringify(key)+".toLocaleLowerCase('tr-TR');",
+    "const val="+JSON.stringify(val)+";",
+    "const all=[...document.querySelectorAll("+controlSelector+")];",
+    "function labelText(el){",
+    "const a=el.getAttribute('aria-label')||'';const p=el.getAttribute('placeholder')||'';const n=el.getAttribute('name')||'';const id=el.id||'';let l='';",
+    "if(id){const x=document.querySelector('label[for=\\\"'+CSS.escape(id)+'\\\"]');if(x)l=x.innerText||''}",
+    "return[a,p,n,l].join(' ').toLocaleLowerCase('tr-TR')",
+    "}",
+    "const el=all.find(x=>labelText(x).includes(key));if(!el)return{ok:false};",
+    "el.scrollIntoView({block:'center'});el.focus();",
+    "if(el.tagName==='SELECT'){const opt=[...el.options].find(o=>String(o.textContent||o.value).toLocaleLowerCase('tr-TR').includes(val.toLocaleLowerCase('tr-TR')));if(!opt)return{ok:false,reason:'option-not-found'};el.value=opt.value}",
+    "else if(el.isContentEditable){el.textContent=val}",
+    "else{const d=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el),'value');if(d&&d.set)d.set.call(el,val);else el.value=val}",
+    "el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));",
+    "return{ok:true,tag:el.tagName,name:el.name||'',id:el.id||''}",
+    "})()"
+  ].join('');
   return evaluate(workspace,expr,{port});
 }
 async function uploadFile(workspace,selector,filePath,{port=DEFAULT_PORT}={}){
