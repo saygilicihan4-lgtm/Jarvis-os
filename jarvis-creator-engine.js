@@ -566,9 +566,13 @@ function audioDurationSeconds(file,ffprobe){
     return Number.isFinite(n)&&n>0?n:null;
   }catch(_){return null}
 }
-function probeNarrationActivity(file,ffmpeg){
-  if(!ffmpeg)return{ok:false,code:'FFMPEG_MISSING',meanDb:null,maxDb:null};
-  if(!file||!fs.existsSync(file))return{ok:false,code:'CREATOR_NARRATION_MISSING',meanDb:null,maxDb:null};
+function probeNarrationActivity(file,ffmpeg,{minMeanDb=-85,minPeakDb=-80}={}){
+  const thresholds={
+    meanDb:Number.isFinite(Number(minMeanDb))?Number(minMeanDb):-85,
+    maxDb:Number.isFinite(Number(minPeakDb))?Number(minPeakDb):-80
+  };
+  if(!ffmpeg)return{ok:false,code:'FFMPEG_MISSING',meanDb:null,maxDb:null,thresholds};
+  if(!file||!fs.existsSync(file))return{ok:false,code:'CREATOR_NARRATION_MISSING',meanDb:null,maxDb:null,thresholds};
   try{
     const run=childProcess.spawnSync(ffmpeg,[
       '-hide_banner','-nostats','-i',file,
@@ -587,7 +591,8 @@ function probeNarrationActivity(file,ffmpeg){
         code:'CREATOR_NARRATION_PROBE_FAILED',
         meanDb:null,
         maxDb:null,
-        detail:String((run.error&&run.error.message)||run.stderr||'').slice(-400)
+        detail:String((run.error&&run.error.message)||run.stderr||'').slice(-400),
+        thresholds
       };
     }
     const text=String(run.stderr||'');
@@ -603,17 +608,17 @@ function probeNarrationActivity(file,ffmpeg){
     const maxDb=parse(maxMatch);
     // Reject digital silence/noise-floor-only files while still allowing very
     // quiet but recoverable narration to proceed into the loudness master.
-    const ok=Number.isFinite(maxDb)&&Number.isFinite(meanDb)&&maxDb>-80&&meanDb>-85;
+    const ok=Number.isFinite(maxDb)&&Number.isFinite(meanDb)&&maxDb>thresholds.maxDb&&meanDb>thresholds.meanDb;
     return{
       ok,
       code:ok?'CREATOR_NARRATION_ACTIVITY_PASS':'CREATOR_NARRATION_SILENT',
       meanDb,
       maxDb,
-      thresholds:{meanDb:-85,maxDb:-80},
+      thresholds,
       method:'ffmpeg-volumedetect'
     };
   }catch(e){
-    return{ok:false,code:'CREATOR_NARRATION_PROBE_FAILED',meanDb:null,maxDb:null,detail:String(e.message||e).slice(0,400)};
+    return{ok:false,code:'CREATOR_NARRATION_PROBE_FAILED',meanDb:null,maxDb:null,detail:String(e.message||e).slice(0,400),thresholds};
   }
 }
 
@@ -1121,6 +1126,16 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
 
   if(!fs.existsSync(outFile)||fs.statSync(outFile).size<10000)throw new Error('Rendered MP4 verification failed');
   const quality=probeRenderedShort(outFile,status.ffprobe);
+  const outputAudioActivity=probeNarrationActivity(outFile,status.ffmpeg,{minMeanDb:-45,minPeakDb:-30});
+  quality.checks.audioSignal=outputAudioActivity.ok;
+  quality.measured.audioMeanDb=outputAudioActivity.meanDb;
+  quality.measured.audioPeakDb=outputAudioActivity.maxDb;
+  quality.audioSignal=outputAudioActivity;
+  if(!outputAudioActivity.ok){
+    quality.ok=false;
+    quality.code='CREATOR_AUDIO_SIGNAL_MISSING';
+    quality.message='Creator Shorts final ses sinyali kalite kapısı başarısız.';
+  }
   if(!quality.ok){
     const e=new Error(String(quality.message||'Creator Shorts quality gate failed')+' · '+String(quality.code||'CREATOR_QUALITY_FAILED'));
     e.code=String(quality.code||'CREATOR_QUALITY_FAILED');
@@ -1336,6 +1351,16 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
 
   if(!fs.existsSync(outFile)||fs.statSync(outFile).size<1024*1024)throw new Error('Rendered long-form MP4 verification failed');
   const quality=probeRenderedLongform(outFile,status.ffprobe);
+  const outputAudioActivity=probeNarrationActivity(outFile,status.ffmpeg,{minMeanDb:-45,minPeakDb:-30});
+  quality.checks.audioSignal=outputAudioActivity.ok;
+  quality.measured.audioMeanDb=outputAudioActivity.meanDb;
+  quality.measured.audioPeakDb=outputAudioActivity.maxDb;
+  quality.audioSignal=outputAudioActivity;
+  if(!outputAudioActivity.ok){
+    quality.ok=false;
+    quality.code='CREATOR_AUDIO_SIGNAL_MISSING';
+    quality.message='Creator long-form final ses sinyali kalite kapısı başarısız.';
+  }
   if(!quality.ok){
     const e=new Error(String(quality.message||'Creator long-form quality gate failed')+' · '+String(quality.code||'CREATOR_LONGFORM_QUALITY_FAILED'));
     e.code=String(quality.code||'CREATOR_LONGFORM_QUALITY_FAILED');
