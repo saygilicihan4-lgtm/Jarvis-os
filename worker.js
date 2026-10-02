@@ -3100,8 +3100,8 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
       const mission=createCreatorBatchMission(a);
       const out=await runDurableMission(mission.id);
       return{
-        ok:out.status==='completed',
-        message:missionSummaryText(out)+(out.status==='waiting_dependency'?' · child Creator görevi gerekli bağlantı hazır olduğunda aynı batch kaldığı yerden devam eder':out.status==='needs_verification'?' · child görev sonucu doğrulanmadan batch tekrar etmiyor':'')
+        ok:!['failed','cancelled'].includes(String(out.status||'')),
+        message:missionSummaryText(out)+(out.status==='waiting_dependency'?' · render child scheduler üzerinden tamamlanınca aynı batch kaldığı yerden devam eder':out.status==='needs_verification'?' · child görev sonucu doğrulanmadan batch tekrar etmiyor':out.status==='completed'?' · batch tamamlandı':' · batch scheduler sırasına alındı')
       };
     }catch(e){
       return{ok:false,message:'Creator batch görevi başlatılamadı: '+String(e.message||e).slice(0,700)};
@@ -4291,7 +4291,7 @@ function createCreatorBatchMission(args={}){
 }
 function findCreatorBatchChild(parentId,index){
   const pid=String(parentId||'');
-  return getMissionEngine().listMissions(WORKSPACE,{limit:240}).find(m=>
+  return getMissionEngine().listMissions(WORKSPACE,{limit:1000}).find(m=>
     m&&m.type==='creator_short'&&
     String(m.input&&m.input.batchParent||'')===pid&&
     Number(m.input&&m.input.batchIndex)===Number(index)
