@@ -70,6 +70,7 @@ jobs:
           node --check creator-audio-master-selftest.js
           node --check creator-narration-activity-selftest.js
           node --check creator-final-audio-selftest.js
+          node --check creator-motion-coverage-selftest.js
           node --check shopify-mission-selftest.js
           node --check approval-gate-selftest.js
           node --check developer-mission-selftest.js
@@ -107,6 +108,8 @@ jobs:
         run: node creator-narration-activity-selftest.js
       - name: Creator final audio guard selftest
         run: node creator-final-audio-selftest.js
+      - name: Creator motion coverage selftest
+        run: node creator-motion-coverage-selftest.js
       - name: Browser operator selftest
         run: node browser-operator-selftest.js
       - name: Browser mission selftest
