@@ -37,10 +37,11 @@ assert.ok(source.includes("sceneCount:storyboard.length"),'long-form scene evide
 const renderStart=source.indexOf('function renderShort(');
 const renderEnd=source.indexOf('function renderLongform(',renderStart);
 const shortBlock=source.slice(renderStart,renderEnd);
-assert.ok(shortBlock.includes("const storyboard=buildStoryboard(assets,duration,transition)"),'Shorts storyboard behavior changed');
-assert.ok(shortBlock.includes("'-map',String(assets.length)+':a:0'"),'Shorts audio mapping changed');
-assert.ok(!shortBlock.includes('buildLongformStoryboard'),'Long-form edit logic leaked into Shorts');
-assert.ok(!shortBlock.includes('visualEdit'),'Long-form visual metadata leaked into Shorts');
+assert.ok(shortBlock.includes("const storyboard=buildShortStoryboard(assets,duration,transition,3.2,7)"),'Shorts must use its own dedicated motion storyboard');
+assert.ok(shortBlock.includes("'-map',String(storyboard.length)+':a:0'"),'Shorts expanded storyboard audio mapping missing');
+assert.ok(!shortBlock.includes('buildLongformStoryboard'),'Long-form storyboard logic leaked into Shorts');
+assert.ok(shortBlock.includes("e.code='CREATOR_SHORT_EDIT_RHYTHM_FAILED'"),'Shorts must use its own edit-rhythm guard');
+assert.ok(shortBlock.includes("motion:assets.length?'dynamic-pan-crop':'procedural'"),'Shorts must retain a distinct motion profile');
 
 assert.ok(worker.includes('\"Devam et\" tek başına YouTube PUBLIC onayı değildir'),'YouTube approval policy regressed');
 assert.ok(worker.includes('\"Devam et\" tek başına yayınlama onayı değildir'),'Shopify approval policy regressed');
