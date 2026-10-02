@@ -37,10 +37,10 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.80.0';
+const WORKER_VERSION='2.81.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
 CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1','adaptive_model_router_v1','deep_model_fallback_v1','dynamic_chunk_prosody_v1','natural_pause_timing_v1','adaptive_turn_pacing_v1','latency_learning_v1','full_duplex_interrupt_v1','cancellable_agent_v1','adaptive_voice_profile_v1','spoken_voice_preference_v1','speaker_echo_rejection_v1','social_dialogue_v1','response_variation_v1','contextual_followup_v1','dialogue_feedback_learning_v1','social_preference_adaptation_v1','dynamic_wake_ack_v1','wake_ack_turn_timing_v1','auto_quality_escalation_v1','weak_response_escalation_v1','repair_quality_escalation_v1','social_momentum_v1','elliptical_turn_resolution_v1','conversation_cadence_v1','brevity_mirroring_v1','adaptive_response_length_v1','interruption_continuity_v1','spoken_resume_v1','partial_stream_resume_v1');
-CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1');
+CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1','mission_auto_resume_v1','mission_health_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -3283,11 +3283,16 @@ function startLocalTtsBridge(){
         partialChars:x?String(x.partialText||'').length:0
       }));
     }
+    if(req.method==='GET'&&req.url==='/mission-status'){
+      res.writeHead(200,{'content-type':'application/json'});
+      return res.end(JSON.stringify(missionHealthSnapshot()));
+    }
     if(req.method==='GET'&&req.url==='/health'){
       res.writeHead(200,{'content-type':'application/json'});
       return res.end(JSON.stringify({
         ok:true,voice:TTS_VOICE,version:WORKER_VERSION,
         capabilities:CAPS,
+        missionRuntime:missionHealthSnapshot(),
         localBrain:{model:LOCAL_BRAIN_MODEL,url:LOCAL_BRAIN_URL,personaVersion:2,memory:'semantic-local-v2',vision:isLocalVisionModel()},
         localStt:{port:LOCAL_STT_PORT,model:LOCAL_STT_MODEL,engine:'faster-whisper',adaptiveLexicon:true,adaptiveDecode:true,dynamicEndpointing:true,lexiconCount:Object.keys(readSpeechLexicon().aliases||{}).length},
         adaptiveTts:{voice:TTS_VOICE,engine:'edge-neural',interruptible:true,offlineFallback:'windows-sapi',chunkedPipeline:true,prefetch:true,safeCache:true,backchannelPrewarm:true,backchannelState:ttsBackchannelPrewarmState,wakeAckPrewarm:true,wakeAckVariants:JARVIS_WAKE_ACK_PHRASES.length,dynamicChunkProsody:true,naturalPauseTiming:true,adaptiveVoicePreferences:true,voicePreferences:readVoicePreferences(),speakerEchoRejection:true,profiles:['balanced','casual','playful','warm','focused','work','serious','excited','gentle']},
@@ -3843,6 +3848,115 @@ async function runDurableMission(id){
     }
   }
   return engine.loadMission(WORKSPACE,id);
+}
+let durableMissionServiceBusy=false;
+let durableMissionLastRunAt=0;
+let durableMissionLastResult=null;
+
+function missionHealthSnapshot(){
+  try{
+    const engine=getMissionEngine();
+    const rows=engine.listMissions(WORKSPACE,{limit:20});
+    const latest=rows[0]||null;
+    const open=rows.filter(x=>engine.OPEN_STATUSES.has(String(x.status||'')));
+    return{
+      ok:true,
+      autoResume:true,
+      openCount:open.length,
+      latest:latest?engine.summarizeMission(latest):null,
+      serviceBusy:durableMissionServiceBusy,
+      lastRunAt:durableMissionLastRunAt||null,
+      lastResult:durableMissionLastResult
+    };
+  }catch(e){
+    return{ok:false,autoResume:true,openCount:0,latest:null,error:String(e.message||e).slice(0,240)};
+  }
+}
+async function missionDependencyReady(mission){
+  const engine=getMissionEngine();
+  const step=engine.currentStep(mission);
+  const dep=String(step&&step.error&&step.error.dependency||'');
+  if(!dep)return true;
+
+  if(dep==='shopify'){
+    try{
+      const st=await getCommerceEngine().status(WORKSPACE);
+      return !!(st&&st.connected&&st.ok);
+    }catch(_){return false}
+  }
+  if(dep==='youtube_auth'){
+    try{
+      const st=await getYoutubeStudio().status(getBrowserOperator(),WORKSPACE);
+      return !!(st&&st.running&&st.loggedIn);
+    }catch(_){return false}
+  }
+  if(dep==='ffmpeg'){
+    try{return !!getCreatorEngine().ffmpegStatus(WORKSPACE).ok}catch(_){return false}
+  }
+  if(dep==='youtube_studio'){
+    try{
+      const st=await getYoutubeStudio().status(getBrowserOperator(),WORKSPACE);
+      return !!(st&&st.running);
+    }catch(_){return false}
+  }
+  return false;
+}
+async function serviceDurableMissions(){
+  if(durableMissionServiceBusy)return{ok:true,skipped:'busy'};
+  durableMissionServiceBusy=true;
+  durableMissionLastRunAt=Date.now();
+  try{
+    const engine=getMissionEngine();
+    let mission=engine.latestOpenMission(WORKSPACE);
+    if(!mission){
+      durableMissionLastResult={ok:true,status:'idle',at:new Date().toISOString()};
+      return durableMissionLastResult;
+    }
+
+    if(mission.status==='needs_verification'){
+      const checked=await verifyUncertainCampaignStep(mission);
+      mission=checked||mission;
+      if(mission.status==='needs_verification'){
+        durableMissionLastResult={
+          ok:false,status:'needs_verification',missionId:mission.id,step:engine.currentStep(mission)&&engine.currentStep(mission).name||null,at:new Date().toISOString()
+        };
+        return durableMissionLastResult;
+      }
+    }
+
+    if(mission.status==='waiting_dependency'){
+      const ready=await missionDependencyReady(mission);
+      if(!ready){
+        durableMissionLastResult={
+          ok:true,status:'waiting_dependency',missionId:mission.id,dependency:engine.currentStep(mission)&&engine.currentStep(mission).error&&engine.currentStep(mission).error.dependency||null,at:new Date().toISOString()
+        };
+        return durableMissionLastResult;
+      }
+    }
+
+    if(['queued','waiting_dependency'].includes(mission.status)){
+      const before=engine.summarizeMission(mission);
+      const out=await runDurableMission(mission.id);
+      const after=engine.summarizeMission(out);
+      durableMissionLastResult={ok:out.status==='completed'||out.status==='waiting_dependency'||out.status==='needs_verification',status:out.status,missionId:out.id,at:new Date().toISOString()};
+      remember({kind:'durable_mission_auto_resume',before,after});
+      if(out.status==='completed'){
+        console.log('[JARVIS] MISSION AUTO-RESUME COMPLETE: '+out.id);
+      }else{
+        console.log('[JARVIS] MISSION AUTO-RESUME: '+out.id+' -> '+out.status);
+      }
+      return durableMissionLastResult;
+    }
+
+    durableMissionLastResult={ok:true,status:mission.status,missionId:mission.id,at:new Date().toISOString()};
+    return durableMissionLastResult;
+  }catch(e){
+    durableMissionLastResult={ok:false,status:'error',error:String(e.message||e).slice(0,400),at:new Date().toISOString()};
+    console.error('[JARVIS] MISSION AUTO-RESUME:',e.message);
+    return durableMissionLastResult;
+  }finally{
+    durableMissionServiceBusy=false;
+  }
 }
 function openShopifyConnectWindow(){
   if(process.platform!=='win32')return{ok:false,message:'Shopify güvenli bağlantı sihirbazı şu anda Windows için hazır.'};
@@ -5064,6 +5178,7 @@ if(!TEST_MODE){
     }).catch(()=>{});
   },900);
   setTimeout(()=>prewarmJarvisBackchannels().catch(()=>{}),2200);
+  setTimeout(()=>serviceDurableMissions().catch(()=>{}),5000);
 }
 console.log('Cloud:',BASE);
 console.log('Workspace:',WORKSPACE);
@@ -5074,6 +5189,9 @@ if(!TEST_MODE){
   // speech feels conversational instead of waiting up to three seconds.
   setInterval(()=>serviceMobileBrain().catch(()=>{}),650);
   setInterval(()=>serviceMobileTts().catch(()=>{}),650);
+  // Previously authorized draft-only missions may continue after their
+  // dependency becomes ready. The service never auto-publishes content.
+  setInterval(()=>serviceDurableMissions().catch(()=>{}),20000);
 }else{
   console.log('[JARVIS] TEST MODE: cloud polling and Windows helpers disabled');
 }
