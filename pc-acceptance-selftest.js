@@ -9,6 +9,9 @@ assert.ok(worker.includes("'pc_acceptance_snapshot_v1'"),'acceptance capability 
 assert.ok(worker.includes("'silent_startup_diagnostics_v1'"),'silent startup diagnostics capability missing');
 assert.ok(worker.includes("'pc_acceptance_hardened_v1'"),'hardened acceptance capability missing');
 assert.ok(worker.includes("'pc_self_repair_v1'"),'PC self-repair capability missing');
+assert.ok(worker.includes("'pc_runtime_integrity_repair_v1'"),'runtime integrity repair capability missing');
+assert.ok(worker.includes("['jarvis-creator-semantic-quality.js',\"SEMANTIC_QUALITY_VERSION='1.4'\"]"),'semantic quality runtime must be repairable');
+assert.ok(worker.includes("['jarvis-creator-web-media.js',\"CREATOR_WEB_MEDIA_VERSION='1.0'\"]"),'web media runtime must be repairable');
 
 const start=worker.indexOf('async function buildPcAcceptanceSnapshot()');
 const end=worker.indexOf('function acceptanceSummaryText',start);
