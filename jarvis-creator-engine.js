@@ -440,7 +440,7 @@ function probeHookMotion(file,ffmpeg,{start=0,seconds=0.95,fps=8}={}){
       '-ss',at.toFixed(3),'-i',file,
       '-t',span.toFixed(3),
       '-an',
-      '-vf','fps='+rate+',scale=64:64:flags=area,tblend=all_mode=difference,signalstats,metadata=mode=print:key=lavfi.signalstats.YAVG:file=-',
+      '-vf','fps='+rate+',scale=64:64:flags=area,format=gray,tblend=all_mode=difference,signalstats,metadata=mode=print:key=lavfi.signalstats.YAVG:file=-',
       '-f','null','-'
     ],{timeout:20000,maxBuffer:1024*1024*2});
     const diffs=String(raw||'').split(/\r?\n/)
