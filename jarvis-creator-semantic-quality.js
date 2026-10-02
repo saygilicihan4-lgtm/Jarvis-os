@@ -29,7 +29,12 @@ function semanticSimilarity(a,b){
   let intersection=0;
   for(const token of aa)if(bb.has(token))intersection++;
   const union=aa.size+bb.size-intersection;
-  return union?intersection/union:0;
+  const jaccard=union?intersection/union:0;
+  const overlap=intersection/Math.min(aa.size,bb.size);
+  // Overlap coefficient catches near-duplicates where one caption/tag set is
+  // effectively a more verbose subset of the other. Jaccard still handles
+  // similarly sized descriptions well.
+  return Math.max(jaccard,overlap);
 }
 function diversifySemanticRows(rows,{
   maxItems=12,
