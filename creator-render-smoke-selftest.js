@@ -58,7 +58,7 @@ const movingHook=creator.findHookMotionWindow(a,ffmpeg,{windowSeconds:0.95,maxOf
 const staticHook=creator.findHookMotionWindow(b,ffmpeg,{windowSeconds:0.95,maxOffsetSeconds:1,stepSeconds:0.5,fps:8});
 assert.strictEqual(movingHook.ok,true,'moving synthetic clip must pass hook motion evidence');
 assert.strictEqual(movingHook.offset,0,'moving synthetic clip should be usable immediately');
-assert.ok(movingHook.sampleCount>=3&&movingHook.uniqueFrames>=2,'moving hook frame evidence missing');
+assert.ok(movingHook.sampleCount>=3&&movingHook.meanDifference>=0.12&&movingHook.peakDifference>=0.25,'moving hook frame-difference evidence missing');
 assert.strictEqual(staticHook.ok,false,'static synthetic clip must fail real hook motion evidence');
 
 const out=creator.renderShort({
