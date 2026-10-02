@@ -23,6 +23,7 @@ jobs:
           node --check jarvis-creator-engine.js
           node --check jarvis-browser-operator.js
           node --check browser-operator-selftest.js
+          node --check browser-mission-selftest.js
           node --check jarvis-commerce-engine.js
           node --check jarvis-youtube-studio.js
           node --check jarvis-mission-engine.js
@@ -55,6 +56,8 @@ jobs:
         run: node creator-engine-selftest.js
       - name: Browser operator selftest
         run: node browser-operator-selftest.js
+      - name: Browser mission selftest
+        run: node browser-mission-selftest.js
       - name: Commerce engine selftest
         run: node commerce-engine-selftest.js
       - name: Native business tools selftest
