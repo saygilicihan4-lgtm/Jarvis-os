@@ -24,9 +24,16 @@ assert.strictEqual(resolved.full,video);
 assert.throws(()=>yt.resolveWorkspaceVideo(tmp,path.resolve(tmp,'..','outside.mp4')),/workspace/);
 
 const source=fs.readFileSync('./jarvis-youtube-studio.js','utf8');
+const worker=fs.readFileSync('./worker.js','utf8');
+const server=fs.readFileSync('./server.js','utf8');
 assert.ok(source.includes("published:false"),'draft result must state not published');
 assert.ok(!source.includes("clickByText(workspace,'Publish'"),'module must never click Publish');
 assert.ok(!source.includes("clickByText(workspace,'Yayınla'"),'module must never click Yayınla');
 assert.ok(source.includes("input[type=file]"),'file input upload path missing');
+assert.ok(worker.includes("name:'youtube_prepare_draft_upload'"),'native YouTube draft tool missing');
+assert.ok(worker.includes("name:'youtube_studio_status'"),'native YouTube status tool missing');
+assert.ok(!worker.includes("name:'youtube_publish'"),'YouTube public publish must not be an autonomous native tool');
+assert.ok(worker.includes('PUBLIC/YAYINLA adımına dokunulmadı')||source.includes('PUBLIC/YAYINLA adımına dokunulmadı'),'draft-only completion message missing');
+assert.ok(server.includes("return'youtube_upload_prepare_v1'"),'server YouTube draft routing missing');
 
 console.log('YOUTUBE STUDIO DRAFT SELFTEST PASS');
