@@ -361,6 +361,39 @@ async function publishProduct(workspace,productId){
     message:'Ürün Online Store kanalında yayınlandı · '+String(update.product&&update.product.title||id)
   };
 }
+function missionTag(missionId){
+  const id=String(missionId||'').trim().replace(/[^A-Za-z0-9_-]/g,'_').slice(0,90);
+  if(!id)throw new Error('mission id required');
+  return 'jarvis_mission_'+id;
+}
+async function findProductByMission(workspace,missionId){
+  const creds=resolveCredentials(workspace);
+  if(!creds.ready)throw new Error('SHOPIFY_NOT_CONNECTED');
+  const tag=missionTag(missionId);
+  const query=`query JarvisMissionProduct($query: String!) {
+    products(first: 5, query: $query) {
+      nodes { id title handle status tags }
+    }
+  }`;
+  const data=await graphQLRequest(creds,query,{query:'tag:'+tag});
+  const nodes=data.products&&data.products.nodes||[];
+  const product=nodes.find(x=>Array.isArray(x.tags)&&x.tags.includes(tag))||nodes[0]||null;
+  return{ok:true,tag,product};
+}
+async function createDraftForMission(workspace,product,missionId){
+  const tag=missionTag(missionId);
+  const existing=await findProductByMission(workspace,missionId);
+  if(existing.product){
+    return{
+      ok:true,reused:true,missionTag:tag,product:existing.product,
+      message:'Shopify mission taslağı zaten mevcut · '+existing.product.title+' · '+existing.product.id
+    };
+  }
+  const input={...(product||{})};
+  input.tags=[...new Set([...normalizeTags(input.tags),tag])];
+  const out=await createDraft(workspace,input);
+  return{...out,reused:false,missionTag:tag};
+}
 function parseKeyValueProduct(text){
   const raw=String(text||'').trim();
   if(!raw)return null;
@@ -397,5 +430,8 @@ module.exports={
   status,
   saveLocalDraft,
   createDraft,
+  missionTag,
+  findProductByMission,
+  createDraftForMission,
   publishProduct
 };

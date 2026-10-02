@@ -52,4 +52,8 @@ const draft=engine.saveLocalDraft(tmp,{title:'Deneme',price:50});
 assert.strictEqual(draft.ok,true);
 assert.ok(fs.existsSync(draft.file));
 
+assert.strictEqual(engine.missionTag('M-ABC-123'),'jarvis_mission_M-ABC-123');
+assert.ok(typeof engine.findProductByMission==='function');
+assert.ok(typeof engine.createDraftForMission==='function');
+
 console.log('COMMERCE ENGINE SELFTEST PASS');

@@ -12,6 +12,8 @@ let commerceEngine=null;
 try{commerceEngine=require('./jarvis-commerce-engine')}catch(_){}
 let youtubeStudio=null;
 try{youtubeStudio=require('./jarvis-youtube-studio')}catch(_){}
+let missionEngine=null;
+try{missionEngine=require('./jarvis-mission-engine')}catch(_){}
 
 const BASE=(process.env.JARVIS_URL||'https://jarvis-os-1iuv.onrender.com').replace(/\/$/,'');
 const TOKEN=process.env.JARVIS_TOKEN||'';
@@ -35,10 +37,10 @@ const CHECKPOINT_DIR=path.join(MEMORY_DIR,'checkpoints');
 const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
-const WORKER_VERSION='2.79.0';
+const WORKER_VERSION='2.80.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
 CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1','adaptive_model_router_v1','deep_model_fallback_v1','dynamic_chunk_prosody_v1','natural_pause_timing_v1','adaptive_turn_pacing_v1','latency_learning_v1','full_duplex_interrupt_v1','cancellable_agent_v1','adaptive_voice_profile_v1','spoken_voice_preference_v1','speaker_echo_rejection_v1','social_dialogue_v1','response_variation_v1','contextual_followup_v1','dialogue_feedback_learning_v1','social_preference_adaptation_v1','dynamic_wake_ack_v1','wake_ack_turn_timing_v1','auto_quality_escalation_v1','weak_response_escalation_v1','repair_quality_escalation_v1','social_momentum_v1','elliptical_turn_resolution_v1','conversation_cadence_v1','brevity_mirroring_v1','adaptive_response_length_v1','interruption_continuity_v1','spoken_resume_v1','partial_stream_resume_v1');
-CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1');
+CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -2430,6 +2432,49 @@ function nativeAgentTools(){
     {
       type:'function',
       function:{
+        name:'mission_status',
+        description:'En son kalıcı JARVIS iş görevinin durumunu getir. Dış sistemlerde değişiklik yapmaz.',
+        parameters:{type:'object',properties:{},additionalProperties:false}
+      }
+    },
+    {
+      type:'function',
+      function:{
+        name:'resume_latest_mission',
+        description:'Kullanıcı açıkça devam et/sürdür dediğinde yarım kalmış en son kalıcı görevi kaldığı adımdan sürdür. Belirsiz dış yan etki varsa tekrar yapmaz; doğrulama durumunda durur.',
+        parameters:{type:'object',properties:{},additionalProperties:false}
+      }
+    },
+    {
+      type:'function',
+      function:{
+        name:'varova_campaign_mission',
+        description:'Kullanıcı VAROVA için ürün + reklam videosu + isteğe bağlı YouTube Studio taslağı gibi çok adımlı işi tek görev olarak istediğinde kalıcı ve devam ettirilebilir kampanya görevi başlat. Shopify ürünü DRAFT kalır, YouTube PUBLIC yapılmaz.',
+        parameters:{
+          type:'object',
+          properties:{
+            campaignName:{type:'string'},
+            script:{type:'string',description:'12-18 saniyelik Türkçe video anlatım metni.'},
+            productTitle:{type:'string'},
+            productDescription:{type:'string'},
+            price:{type:'number'},
+            sku:{type:'string'},
+            productType:{type:'string'},
+            tags:{type:'array',items:{type:'string'}},
+            images:{type:'array',items:{type:'string'}},
+            youtubeTitle:{type:'string'},
+            youtubeDescription:{type:'string'},
+            includeShopify:{type:'boolean'},
+            includeYouTube:{type:'boolean'}
+          },
+          required:['script'],
+          additionalProperties:false
+        }
+      }
+    },
+    {
+      type:'function',
+      function:{
         name:'workspace_search',
         description:'JARVIS çalışma alanındaki güvenli metin dosyalarında arama yap. Hassas dosyalar otomatik dışlanır.',
         parameters:{
@@ -2583,6 +2628,33 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
     }catch(e){
       return{ok:false,message:'YouTube taslak yüklemesi hazırlanamadı: '+String(e.message||e).slice(0,500)};
     }
+  }else if(n==='mission_status'){
+    const latest=getMissionEngine().latestOpenMission(WORKSPACE)||getMissionEngine().listMissions(WORKSPACE,{limit:1})[0]||null;
+    return{ok:true,message:missionSummaryText(latest)};
+  }else if(n==='resume_latest_mission'){
+    const intent=String(userText||'').toLocaleLowerCase('tr-TR');
+    if(!/(?:devam|sürdür|surdur|resume|görev|gorev|mission)/i.test(intent)){
+      return{ok:false,message:'Kalıcı görevi sürdürmek için açık devam komutu gerekli.'};
+    }
+    const latest=getMissionEngine().latestOpenMission(WORKSPACE);
+    if(!latest)return{ok:true,message:'Devam ettirilecek yarım görev yok.'};
+    const out=await runDurableMission(latest.id);
+    return{ok:out.status==='completed',message:missionSummaryText(out)};
+  }else if(n==='varova_campaign_mission'){
+    const intent=String(userText||'').toLocaleLowerCase('tr-TR');
+    if(!/(?:varova|mağaza|magaza|shopify|youtube|video|shorts?)/i.test(intent)||!/(?:hazırla|hazirla|oluştur|olustur|ekle|yükle|yukle|yap)/i.test(intent)){
+      return{ok:false,message:'Kalıcı kampanya görevi yalnızca açık iş isteğiyle başlatılır.'};
+    }
+    try{
+      const mission=createVarovaCampaignMission(a);
+      const out=await runDurableMission(mission.id);
+      return{
+        ok:out.status==='completed',
+        message:missionSummaryText(out)+(out.status==='waiting_dependency'?' · gerekli bağlantı tamamlanınca aynı görev kaldığı yerden devam eder':'')
+      };
+    }catch(e){
+      return{ok:false,message:'Kampanya görevi başlatılamadı: '+String(e.message||e).slice(0,600)};
+    }
   }else if(n==='workspace_search'){
     const query=String(a.query||'').replace(/[\r\n]/g,' ').trim().slice(0,240);
     command=query?'dosyalarda ara '+query:'';
@@ -2670,6 +2742,9 @@ async function runNativeAgent(message,{maxRounds=4,signal=null}={}){
     'Ürünü halka açık mağazada yayınlama native ajan aracı değildir. Yayınlama ancak kullanıcının açık yayınlama komutuyla ayrı güvenli akıştan yapılır.',
     'YouTube için youtube_prepare_draft_upload yalnızca dosyayı Studio yükleme ekranına koyar ve metadata hazırlar; hiçbir zaman Publish/Yayınla düğmesine basmaz.',
     'Kullanıcı aynı istekte Short üretip YouTube taslağına yüklemenizi isterse önce creator_render_short sonucundaki gerçek output yolunu al, sonra youtube_prepare_draft_upload çağır. Dosya yolu uydurma.',
+    'Bir istek VAROVA ürünü + reklam videosu + YouTube taslağı gibi birden fazla dış adım içeriyorsa ayrı ayrı araç çağırmak yerine varova_campaign_mission kullan; böylece görev disk üzerinde kalıcı olur ve kesintiden sonra devam eder.',
+    'Kullanıcı yarım işi "devam et", "kaldığın yerden sürdür" gibi ifadeyle sürdürmek isterse önce mission_status veya doğrudan resume_latest_mission kullan. Tamamlanmış adımı yeniden yapma.',
+    'Kalıcı görev needs_verification durumundaysa belirsiz dış yan etkiyi otomatik tekrar etme; kopya ürün veya kopya video riski yerine doğrulamayı bekle.',
     'Araç sonuçlarında olmayan bilgiyi uydurma. Bir eylem başarısızsa başarılı olmuş gibi konuşma.',
     'workspace_read kullanmadan önce mümkünse workspace_search ile doğru dosya yolunu bul.',
     'Gizli dosya, parola, token, anahtar veya credential aramaya çalışma.',
@@ -3543,6 +3618,232 @@ function getYoutubeStudio(){
     throw new Error('YouTube Studio module load failed: '+e.message);
   }
 }
+function getMissionEngine(){
+  if(missionEngine)return missionEngine;
+  const file=syncRepoRuntimeFile('jarvis-mission-engine.js',"MISSION_ENGINE_VERSION='1.0'");
+  if(!file)throw new Error('Mission Engine module could not be prepared');
+  try{
+    delete require.cache[require.resolve(file)];
+    missionEngine=require(file);
+    return missionEngine;
+  }catch(e){
+    throw new Error('Mission Engine load failed: '+e.message);
+  }
+}
+function cleanCampaignArgs(args={}){
+  const tags=Array.isArray(args.tags)?args.tags.map(x=>String(x||'').trim()).filter(Boolean).slice(0,30):[];
+  const images=Array.isArray(args.images)?args.images.map(x=>String(x||'').trim()).filter(x=>/^https:\/\//i.test(x)).slice(0,12):[];
+  const productTitle=String(args.productTitle||'').replace(/\s+/g,' ').trim().slice(0,255);
+  const campaignName=String(args.campaignName||productTitle||('varova-campaign-'+Date.now())).replace(/[\r\n]/g,' ').trim().slice(0,90);
+  const script=String(args.script||'').replace(/\s+/g,' ').trim().slice(0,1800);
+  const price=(args.price===undefined||args.price===null||args.price==='')?null:Number(args.price);
+  return{
+    campaignName,
+    script,
+    includeShopify:args.includeShopify===true||(args.includeShopify!==false&&!!productTitle),
+    includeYouTube:args.includeYouTube!==false,
+    product:{
+      title:productTitle,
+      description:String(args.productDescription||'').trim().slice(0,6000),
+      price:Number.isFinite(price)?price:null,
+      sku:String(args.sku||'').trim().slice(0,120),
+      vendor:'VAROVA',
+      productType:String(args.productType||'').trim().slice(0,255),
+      tags,
+      images
+    },
+    youtube:{
+      title:String(args.youtubeTitle||productTitle||campaignName).replace(/\s+/g,' ').trim().slice(0,100),
+      description:String(args.youtubeDescription||'').trim().slice(0,5000)
+    }
+  };
+}
+function createVarovaCampaignMission(args={}){
+  const input=cleanCampaignArgs(args);
+  if(!input.script)throw new Error('Kampanya görevi için video anlatım metni gerekli.');
+  if(input.includeShopify&&!input.product.title)throw new Error('Shopify taslağı isteniyorsa ürün başlığı gerekli.');
+  const steps=['render_short'];
+  if(input.includeShopify)steps.push('shopify_draft');
+  if(input.includeYouTube)steps.push('youtube_draft');
+  return getMissionEngine().createMission(WORKSPACE,{
+    type:'varova_campaign',
+    label:input.product.title||input.campaignName,
+    input,
+    steps
+  });
+}
+function missionSummaryText(m){
+  if(!m)return'Kayıtlı görev bulunamadı.';
+  const x=getMissionEngine().summarizeMission(m),step=x&&x.step;
+  return[
+    'MISSION '+x.id,
+    'durum '+x.status,
+    step?('adım '+step.name+' / '+step.status+' / deneme '+step.attempts):'adım yok',
+    x.artifacts&&x.artifacts.length?('çıktılar '+x.artifacts.join(', ')):'çıktı henüz yok'
+  ].join(' · ');
+}
+async function verifyUncertainCampaignStep(mission){
+  const engine=getMissionEngine();
+  const step=engine.currentStep(mission);
+  if(!step||step.status!=='uncertain')return mission;
+  const input=mission.input||{};
+
+  if(step.name==='render_short'){
+    const creator=getCreatorEngine();
+    const status=creator.ffmpegStatus(WORKSPACE);
+    const expected=path.join(status.outputDir,creator.safeName(input.campaignName)+'.mp4');
+    if(fs.existsSync(expected)&&fs.statSync(expected).size>=10000){
+      return engine.resolveUncertainStep(WORKSPACE,mission.id,{
+        completed:true,
+        artifact:{output:expected,recovered:true},
+        note:'render output verified on disk'
+      });
+    }
+    return engine.resolveUncertainStep(WORKSPACE,mission.id,{completed:false,note:'render output absent; safe retry'});
+  }
+
+  if(step.name==='shopify_draft'){
+    try{
+      const found=await getCommerceEngine().findProductByMission(WORKSPACE,mission.id);
+      if(found&&found.product){
+        return engine.resolveUncertainStep(WORKSPACE,mission.id,{
+          completed:true,
+          artifact:{product:found.product,recovered:true},
+          note:'Shopify mission tag verified'
+        });
+      }
+      return engine.resolveUncertainStep(WORKSPACE,mission.id,{completed:false,note:'Shopify mission tag absent; safe retry'});
+    }catch(e){
+      if(String(e.message||e)==='SHOPIFY_NOT_CONNECTED')return mission;
+      throw e;
+    }
+  }
+
+  if(step.name==='youtube_draft'){
+    const receipt=getYoutubeStudio().readReceipt(WORKSPACE,mission.id);
+    if(receipt&&receipt.state==='draft_prepared'){
+      return engine.resolveUncertainStep(WORKSPACE,mission.id,{
+        completed:true,
+        artifact:{receipt:getYoutubeStudio().missionReceiptFile(WORKSPACE,mission.id),file:receipt.file,recovered:true},
+        note:'YouTube mission receipt verified'
+      });
+    }
+    if(!receipt){
+      return engine.resolveUncertainStep(WORKSPACE,mission.id,{completed:false,note:'No upload receipt; safe retry'});
+    }
+    return mission;
+  }
+  return mission;
+}
+async function runDurableMission(id){
+  const engine=getMissionEngine();
+  let mission=engine.loadMission(WORKSPACE,id);
+  if(!mission)throw new Error('Mission not found: '+id);
+
+  for(let guard=0;guard<Math.max(4,mission.steps.length+2);guard++){
+    mission=engine.loadMission(WORKSPACE,id);
+    if(!mission)throw new Error('Mission disappeared: '+id);
+    if(mission.status==='completed'||mission.status==='failed')return mission;
+
+    if(mission.status==='waiting_dependency'){
+      mission=engine.retryBlockedStep(WORKSPACE,id);
+    }
+    if(mission.status==='needs_verification'){
+      mission=await verifyUncertainCampaignStep(mission);
+      if(mission.status==='needs_verification')return mission;
+    }
+
+    mission=engine.startStep(WORKSPACE,id);
+    if(mission.status==='needs_verification')return mission;
+    if(mission.status==='completed')return mission;
+    const step=engine.currentStep(mission);
+    if(!step)throw new Error('Mission current step missing');
+
+    try{
+      if(step.name==='render_short'){
+        const input=mission.input||{};
+        const ready=getCreatorEngine().prepare(WORKSPACE,{allowInstall:true});
+        if(!ready.ok){
+          mission=engine.failStep(WORKSPACE,id,{code:'FFMPEG_NOT_READY',message:'Creator motoru hazır değil.',retryable:true,dependency:'ffmpeg'});
+          return mission;
+        }
+        const voice=await renderCreatorVoiceFile(String(input.script||''),String(input.campaignName||'campaign')+'-voice');
+        const out=getCreatorEngine().renderShort({
+          workspace:WORKSPACE,
+          name:String(input.campaignName||'campaign'),
+          script:String(input.script||''),
+          voicePath:voice
+        });
+        mission=engine.completeStep(WORKSPACE,id,{artifact:{
+          output:out.output,
+          subtitle:out.subtitle,
+          metadata:out.metadata,
+          duration:out.duration
+        }});
+        continue;
+      }
+
+      if(step.name==='shopify_draft'){
+        const product={...(mission.input&&mission.input.product||{})};
+        const out=await getCommerceEngine().createDraftForMission(WORKSPACE,product,id);
+        mission=engine.completeStep(WORKSPACE,id,{artifact:{
+          product:out.product,
+          missionTag:out.missionTag,
+          reused:!!out.reused
+        }});
+        continue;
+      }
+
+      if(step.name==='youtube_draft'){
+        const rendered=mission.artifacts&&mission.artifacts.render_short;
+        const file=rendered&&rendered.output;
+        if(!file){
+          mission=engine.failStep(WORKSPACE,id,{code:'VIDEO_ARTIFACT_MISSING',message:'YouTube adımı için render çıktısı bulunamadı.',retryable:false});
+          return mission;
+        }
+        const yt=mission.input&&mission.input.youtube||{};
+        const out=await getYoutubeStudio().prepareDraft(getBrowserOperator(),WORKSPACE,{
+          file,
+          title:String(yt.title||'').trim(),
+          description:String(yt.description||'').trim(),
+          missionId:id
+        });
+        if(!out.ok){
+          if(out.code==='YOUTUBE_AUTH_REQUIRED'){
+            mission=engine.failStep(WORKSPACE,id,{code:out.code,message:out.message,retryable:true,dependency:'youtube_auth'});
+            return mission;
+          }
+          if(out.code==='YOUTUBE_UPLOAD_UNCERTAIN'){
+            mission=engine.failStep(WORKSPACE,id,{code:out.code,message:out.message,uncertain:true});
+            return mission;
+          }
+          mission=engine.failStep(WORKSPACE,id,{code:out.code||'YOUTUBE_DRAFT_FAILED',message:out.message||'YouTube taslağı hazırlanamadı.',retryable:out.retryable===true,dependency:'youtube_studio'});
+          return mission;
+        }
+        mission=engine.completeStep(WORKSPACE,id,{artifact:{
+          receipt:out.receipt,
+          file:out.file,
+          title:out.title,
+          reused:!!out.reused,
+          published:false
+        }});
+        continue;
+      }
+
+      mission=engine.failStep(WORKSPACE,id,{code:'UNKNOWN_MISSION_STEP',message:'Bilinmeyen görev adımı: '+step.name,retryable:false});
+      return mission;
+    }catch(e){
+      const message=String(e&&e.message||e).slice(0,1000);
+      if(message==='SHOPIFY_NOT_CONNECTED'){
+        mission=engine.failStep(WORKSPACE,id,{code:'SHOPIFY_NOT_CONNECTED',message:'Shopify yerel bağlantısı kurulmalı.',retryable:true,dependency:'shopify'});
+        return mission;
+      }
+      mission=engine.failStep(WORKSPACE,id,{code:String(e&&e.code||'MISSION_STEP_ERROR'),message,retryable:false});
+      return mission;
+    }
+  }
+  return engine.loadMission(WORKSPACE,id);
+}
 function openShopifyConnectWindow(){
   if(process.platform!=='win32')return{ok:false,message:'Shopify güvenli bağlantı sihirbazı şu anda Windows için hazır.'};
   const script=syncRepoRuntimeFile('jarvis-shopify-connect.ps1','SHOPIFY SECURE CONNECT');
@@ -3559,11 +3860,11 @@ function openShopifyConnectWindow(){
 }
 function bootstrapRuntimeUpgrade(){
   if(process.platform!=='win32'||TEST_MODE)return{ok:false,skipped:true};
-  const marker=path.join(MEMORY_DIR,'bootstrap-v43.json');
+  const marker=path.join(MEMORY_DIR,'bootstrap-v44.json');
   try{
     if(fs.existsSync(marker)){
       const x=JSON.parse(fs.readFileSync(marker,'utf8'));
-      if(x&&x.version===43&&x.ok)return{ok:true,already:true};
+      if(x&&x.version===44&&x.ok)return{ok:true,already:true};
     }
   }catch(_){}
 
@@ -3577,7 +3878,8 @@ function bootstrapRuntimeUpgrade(){
     ['jarvis-browser-operator.js',"BROWSER_OPERATOR_VERSION='1.0'"],
     ['jarvis-commerce-engine.js',"ENGINE_VERSION='1.0'"],
     ['jarvis-shopify-connect.ps1','SHOPIFY SECURE CONNECT'],
-    ['jarvis-youtube-studio.js',"YOUTUBE_STUDIO_VERSION='1.0'"]
+    ['jarvis-youtube-studio.js',"YOUTUBE_STUDIO_VERSION='1.0'"],
+    ['jarvis-mission-engine.js',"MISSION_ENGINE_VERSION='1.0'"]
   ];
   const synced=[];
   for(const [name,signature] of files){
@@ -3597,9 +3899,9 @@ function bootstrapRuntimeUpgrade(){
 
   fs.mkdirSync(MEMORY_DIR,{recursive:true});
   fs.writeFileSync(marker,JSON.stringify({
-    version:43,ok:true,at:new Date().toISOString(),worker:WORKER_VERSION,synced
+    version:44,ok:true,at:new Date().toISOString(),worker:WORKER_VERSION,synced
   },null,2),'utf8');
-  console.log('[JARVIS] BOOTSTRAP MIGRATION V43: READY');
+  console.log('[JARVIS] BOOTSTRAP MIGRATION V44: READY');
   return{ok:true,synced};
 }
 function cleanupOrphanedJarvisHelpers(){
@@ -4743,6 +5045,10 @@ async function poll(){
 console.log('JARVIS PC Worker '+WORKER_VERSION+' başladı');
 if(!TEST_MODE){
   try{bootstrapRuntimeUpgrade()}catch(e){console.error('[JARVIS] BOOTSTRAP MIGRATION:',e.message)}
+  try{
+    const recovered=getMissionEngine().recoverInterruptedMissions(WORKSPACE);
+    if(recovered.length)console.log('[JARVIS] MISSION RECOVERY: '+recovered.length+' görev doğrulama bekliyor');
+  }catch(e){console.error('[JARVIS] MISSION RECOVERY:',e.message)}
   cleanupOrphanedJarvisHelpers();
   startWindowsWakeHelper();
   startWindowsClapHelper();

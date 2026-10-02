@@ -28,6 +28,12 @@
       "min_bytes": 7000
     },
     {
+      "path": "jarvis-mission-engine.js",
+      "signature": "MISSION_ENGINE_VERSION='1.0'",
+      "kind": "node",
+      "min_bytes": 7000
+    },
+    {
       "path": "jarvis-commerce-engine.js",
       "signature": "ENGINE_VERSION='1.0'",
       "kind": "node",

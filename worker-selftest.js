@@ -182,7 +182,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.79.0','worker version');
+    assert(hj.version==='2.80.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localStt&&hj.localStt.adaptiveDecode===true,'adaptive STT decode health');
     assert(hj.localStt&&hj.localStt.dynamicEndpointing===true,'dynamic STT endpointing health');
@@ -225,6 +225,9 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.capabilities.includes('youtube_studio_draft_v1'),'YouTube Studio draft capability');
     assert(hj.capabilities.includes('youtube_upload_prepare_v1'),'YouTube upload prepare capability');
     assert(hj.capabilities.includes('native_youtube_tool_v1'),'native YouTube tool capability');
+    assert(hj.capabilities.includes('durable_mission_v1'),'durable mission capability');
+    assert(hj.capabilities.includes('mission_resume_v1'),'mission resume capability');
+    assert(hj.capabilities.includes('varova_campaign_mission_v1'),'VAROVA campaign mission capability');
     assert(hj.capabilities.includes('conversation_cadence_v1'),'conversation cadence capability');
     assert(hj.capabilities.includes('brevity_mirroring_v1'),'brevity mirroring capability');
     assert(hj.capabilities.includes('adaptive_response_length_v1'),'adaptive response length capability');

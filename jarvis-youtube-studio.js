@@ -106,16 +106,59 @@ async function setAnyField(operator,workspace,labels,value){
   }
   return{ok:false};
 }
-function receiptFile(workspace,title){
+function missionReceiptFile(workspace,missionId){
+  const id=String(missionId||'').trim().replace(/[^A-Za-z0-9_-]/g,'_').slice(0,100);
+  if(!id)return null;
+  return path.join(ensureDir(path.join(workspace,'youtube-drafts')),'mission-'+id+'.json');
+}
+function receiptFile(workspace,title,missionId=''){
+  const mission=missionReceiptFile(workspace,missionId);
+  if(mission)return mission;
   const dir=ensureDir(path.join(workspace,'youtube-drafts'));
   const base=String(title||'youtube-upload').normalize('NFKD').replace(/[^A-Za-z0-9._-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').slice(0,60)||'youtube-upload';
   return path.join(dir,base+'-'+Date.now()+'.json');
 }
-async function prepareDraft(operator,workspace,{file,title='',description=''}={}){
+function readReceipt(workspace,missionId){
+  const file=missionReceiptFile(workspace,missionId);
+  if(!file||!fs.existsSync(file))return null;
+  try{return JSON.parse(fs.readFileSync(file,'utf8'))}catch(_){return null}
+}
+function writeReceipt(file,record){
+  const tmp=file+'.tmp-'+process.pid+'-'+Date.now();
+  fs.writeFileSync(tmp,JSON.stringify(record,null,2),'utf8');
+  fs.renameSync(tmp,file);
+}
+async function prepareDraft(operator,workspace,{file,title='',description='',missionId=''}={}){
   if(!operator)throw new Error('browser operator required');
   const video=resolveWorkspaceVideo(workspace,file);
   const cleanTitle=safeText(title||path.basename(video.full,path.extname(video.full)),100);
   const cleanDescription=safeText(description,5000);
+  const receipt=receiptFile(workspace,cleanTitle,missionId);
+  const existing=missionId?readReceipt(workspace,missionId):null;
+  if(existing&&existing.state==='draft_prepared'&&existing.file===video.full){
+    return{
+      ok:true,
+      code:'YOUTUBE_DRAFT_PREPARED',
+      reused:true,
+      published:false,
+      file:video.full,
+      title:existing.title||cleanTitle,
+      titleSet:!!existing.titleSet,
+      descriptionSet:!!existing.descriptionSet,
+      receipt,
+      message:'YouTube Studio mission taslağı zaten hazırlanmış · '+path.basename(video.full)+' · yeniden yüklenmedi'
+    };
+  }
+  if(existing&&existing.state==='upload_started'&&existing.file===video.full){
+    return{
+      ok:false,
+      code:'YOUTUBE_UPLOAD_UNCERTAIN',
+      retryable:false,
+      uncertain:true,
+      receipt,
+      message:'Önceki YouTube yüklemesi yarıda kesilmiş olabilir. Tekrar yükleyip kopya oluşturmamak için otomatik retry durduruldu; Studio ekranı doğrulanmalı.'
+    };
+  }
 
   let browser=await operator.status(workspace);
   if(!browser.running){
@@ -146,6 +189,23 @@ async function prepareDraft(operator,workspace,{file,title='',description=''}={}
     };
   }
 
+  const preflight={
+    schema:1,
+    engine:'JARVIS_YOUTUBE_STUDIO',
+    version:YOUTUBE_STUDIO_VERSION,
+    createdAt:new Date().toISOString(),
+    updatedAt:new Date().toISOString(),
+    missionId:missionId||null,
+    action:'DRAFT_UPLOAD_STARTED',
+    state:'upload_started',
+    file:video.full,
+    bytes:video.size,
+    title:cleanTitle,
+    description:cleanDescription,
+    published:false
+  };
+  writeReceipt(receipt,preflight);
+
   await operator.uploadFile(workspace,'input[type=file]',video.full);
   await sleep(1700);
 
@@ -153,23 +213,16 @@ async function prepareDraft(operator,workspace,{file,title='',description=''}={}
   const descriptionSet=await setAnyField(operator,workspace,['Açıklama','Aciklama','Description'],cleanDescription);
   snap=await snapshot(operator,workspace);
 
-  const receipt=receiptFile(workspace,cleanTitle);
   const record={
-    schema:1,
-    engine:'JARVIS_YOUTUBE_STUDIO',
-    version:YOUTUBE_STUDIO_VERSION,
-    createdAt:new Date().toISOString(),
-    action:'DRAFT_UPLOAD_STARTED',
-    file:video.full,
-    bytes:video.size,
-    title:cleanTitle,
-    description:cleanDescription,
+    ...preflight,
+    updatedAt:new Date().toISOString(),
+    state:'draft_prepared',
     titleSet:!!titleSet.ok,
     descriptionSet:!!descriptionSet.ok,
     studioUrl:snap&&snap.url||STUDIO_URL,
     published:false
   };
-  fs.writeFileSync(receipt,JSON.stringify(record,null,2),'utf8');
+  writeReceipt(receipt,record);
 
   return{
     ok:true,
@@ -191,5 +244,7 @@ module.exports={
   parseUploadSpec,
   authRequired,
   status,
+  missionReceiptFile,
+  readReceipt,
   prepareDraft
 };
