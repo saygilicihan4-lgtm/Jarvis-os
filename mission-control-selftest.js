@@ -6,7 +6,7 @@ const server=fs.readFileSync('./server.js','utf8');
 const html=fs.readFileSync('./public/index.html','utf8');
 const css=fs.readFileSync('./public/style.css','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.100.0'"),'Worker 2.100.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.101.0'"),'Worker 2.101.0 required');
 assert.ok(worker.includes("'mission_control_v1'"),'mission control capability missing');
 assert.ok(worker.includes("'mission_pause_v1'"),'mission pause capability missing');
 assert.ok(worker.includes("'mission_cancel_v1'"),'mission cancel capability missing');
