@@ -4517,6 +4517,10 @@ function requestMissionControl({missionId='',action=''}={}){
     mission=candidates[0];
   }
   const status=String(mission.status||'');
+  const pauseable=new Set(['queued','running','waiting_dependency','needs_verification']);
+  const cancellable=new Set(['queued','running','waiting_dependency','needs_verification','paused']);
+  if(op==='pause'&&!pauseable.has(status))throw new Error('Bu görev şu anda duraklatılamaz.');
+  if(op==='cancel'&&!cancellable.has(status))throw new Error('Bu görev şu anda iptal edilemez.');
   if(op==='resume'){
     if(status!=='paused')throw new Error('Yalnızca paused görev devam ettirilebilir.');
     const resumeStatus=['waiting_dependency','needs_verification'].includes(String(mission.control&&mission.control.resumeStatus||''))
