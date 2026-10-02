@@ -2,7 +2,7 @@ const fs=require('fs');
 const assert=require('assert');
 
 const worker=fs.readFileSync('./worker.js','utf8');
-assert.ok(worker.includes("const WORKER_VERSION='2.95.0'"),'Worker 2.95.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.96.0'"),'Worker 2.96.0 required');
 assert.ok(worker.includes("name:'pc_acceptance_snapshot'"),'native acceptance tool missing');
 assert.ok(worker.includes("req.url==='/acceptance-snapshot'"),'acceptance endpoint missing');
 assert.ok(worker.includes("'pc_acceptance_snapshot_v1'"),'acceptance capability missing');
@@ -20,6 +20,7 @@ assert.ok(block.includes('getBrowserOperator().status(WORKSPACE)'),'browser read
 assert.ok(block.includes('getCommerceEngine().status(WORKSPACE)'),'commerce readiness missing');
 assert.ok(block.includes('getYoutubeStudio().status'),'YouTube readiness missing');
 assert.ok(block.includes('missionHealthSnapshot()'),'mission readiness missing');
+assert.ok(block.includes("pcMissionReady:CAPS.includes('pc_safe_mission_v1')"),'safe PC mission readiness missing');
 assert.ok(!block.includes('publishProduct('),'acceptance snapshot must not publish');
 assert.ok(!block.includes('createDraft('),'acceptance snapshot must not create Shopify data');
 assert.ok(!block.includes('prepareDraft('),'acceptance snapshot must not upload YouTube data');
