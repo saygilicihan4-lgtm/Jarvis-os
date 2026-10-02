@@ -1,9 +1,62 @@
-const SEMANTIC_QUALITY_VERSION='1.1';
+const SEMANTIC_QUALITY_VERSION='1.2';
 
 const STOP=new Set([
   'bir','bu','su','şu','ve','veya','ile','icin','için','olan','olarak','daha','cok','çok','gibi',
   'sey','şey','video','klip','goruntu','görüntü','sahne','the','and','for','with','from','this','that'
 ]);
+
+function clipNarrativeSegment(text,start,length){
+  const raw=String(text||'');
+  const from=Math.max(0,Math.min(raw.length,Math.floor(Number(start)||0)));
+  const size=Math.max(80,Math.floor(Number(length)||0));
+  let segment=raw.slice(from,Math.min(raw.length,from+size));
+  if(from>0){
+    const firstSpace=segment.indexOf(' ');
+    if(firstSpace>=0&&firstSpace<80)segment=segment.slice(firstSpace+1);
+  }
+  if(from+size<raw.length){
+    const lastSpace=segment.lastIndexOf(' ');
+    if(lastSpace>segment.length-100)segment=segment.slice(0,lastSpace);
+  }
+  return segment.replace(/\s+/g,' ').trim();
+}
+function buildNarrativeDigest(value,{maxChars=3200}={}){
+  const raw=String(value||'').replace(/[\r\n]+/g,' ').replace(/\s+/g,' ').trim();
+  const cap=Math.max(900,Math.min(6000,Math.floor(Number(maxChars)||3200)));
+  if(!raw)return{text:'',sections:[],originalChars:0,outputChars:0,truncated:false};
+  if(raw.length<=cap){
+    const text='[TÜM ANLATIM]\n'+raw;
+    return{
+      text:text.slice(0,cap),
+      sections:[{label:'TÜM ANLATIM',ratio:0,text:raw}],
+      originalChars:raw.length,
+      outputChars:Math.min(cap,text.length),
+      truncated:false
+    };
+  }
+  const labels=['BAŞLANGIÇ','ORTA','KAPANIŞ'];
+  const prefixBudget=labels.reduce((sum,label)=>sum+label.length+4,0);
+  const segmentBudget=Math.max(220,Math.floor((cap-prefixBudget)/3));
+  const starts=[
+    0,
+    Math.max(0,Math.floor((raw.length-segmentBudget)/2)),
+    Math.max(0,raw.length-segmentBudget)
+  ];
+  const sections=starts.map((start,index)=>({
+    label:labels[index],
+    ratio:index===0?0:(index===1?0.5:1),
+    text:clipNarrativeSegment(raw,start,segmentBudget)
+  }));
+  let text=sections.map(x=>'['+x.label+']\n'+x.text).join('\n\n');
+  if(text.length>cap)text=text.slice(0,cap).replace(/\s+\S*$/,'').trim();
+  return{
+    text,
+    sections,
+    originalChars:raw.length,
+    outputChars:text.length,
+    truncated:true
+  };
+}
 
 function semanticTokens(value){
   const text=Array.isArray(value)?value.join(' '):String(value||'');
@@ -98,6 +151,7 @@ function diversifySemanticRows(rows,{
 module.exports={
   SEMANTIC_QUALITY_VERSION,
   semanticTokens,
+  buildNarrativeDigest,
   semanticSimilarity,
   diversifySemanticRows
 };
