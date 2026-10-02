@@ -16,6 +16,18 @@
       "min_bytes": 6000
     },
     {
+      "path": "jarvis-shopify-connect.ps1",
+      "signature": "SHOPIFY SECURE CONNECT",
+      "kind": "powershell",
+      "min_bytes": 1800
+    },
+    {
+      "path": "jarvis-commerce-engine.js",
+      "signature": "ENGINE_VERSION='1.0'",
+      "kind": "node",
+      "min_bytes": 9000
+    },
+    {
       "path": "jarvis-startup.ps1",
       "signature": "JARVIS_CINEMATIC_STARTUP_V1",
       "kind": "powershell",
