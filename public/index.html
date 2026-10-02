@@ -2655,7 +2655,7 @@ async function load(){
   commerceAgent.textContent=!pc.online?'STANDBY':commerceReady?'READY':'UPDATE REQUIRED';
   commerceAgent.style.color=commerceReady?'#65ffbf':pc.online?'#ffca66':'';
   if(window.commerceAgentDetail)commerceAgentDetail.textContent=commerceReady
-    ?'Shopify draft engine · durable product mission · account checked at execution'
+    ?'Shopify draft engine · durable product mission · explicit publish approval gate'
     :(pc.online?'Commerce capability update required':'PC Worker dependent');
   lastCloudTasks=Array.isArray(d.tasks)?d.tasks:[];
   renderMissionQueue();
