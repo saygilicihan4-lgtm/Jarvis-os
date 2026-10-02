@@ -93,8 +93,8 @@
       <div class="panel-title">AGENT MATRIX</div>
       <div class="agent"><div class="agent-row"><span>CORE</span><b style="color:#65ffbf">READY</b></div><div class="agent-state">Task routing / safety</div></div>
       <div class="agent"><div class="agent-row"><span>DEVELOPER</span><b id="devAgent">STANDBY</b></div><div class="agent-state">PC Worker dependent</div></div>
-      <div class="agent"><div class="agent-row"><span>CREATOR</span><b id="creatorAgent">STANDBY</b></div><div class="agent-state">Video pipeline not connected</div></div>
-      <div class="agent"><div class="agent-row"><span>COMMERCE</span><b id="commerceAgent">STANDBY</b></div><div class="agent-state">Shopify adapter pending</div></div>
+      <div class="agent"><div class="agent-row"><span>CREATOR</span><b id="creatorAgent">STANDBY</b></div><div class="agent-state" id="creatorAgentDetail">Video pipeline not connected</div></div>
+      <div class="agent"><div class="agent-row"><span>COMMERCE</span><b id="commerceAgent">STANDBY</b></div><div class="agent-state" id="commerceAgentDetail">Shopify adapter pending</div></div>
       <div class="agent"><div class="agent-row"><span>MEMORY</span><b style="color:#ffca66">LIMITED</b></div><div class="agent-state">Persistent DB pending</div></div>
     </aside>
   </section>
@@ -2605,6 +2605,19 @@ async function load(){
   workerReadout.textContent=pc.online?'ON':'OFF';
   devAgent.textContent=!pc.online?'STANDBY':workerCurrent?('READY v'+pc.version):'UPDATE REQUIRED';
   devAgent.style.color=workerCurrent?'#65ffbf':pc.online?'#ffca66':'';
+  const pcCaps=Array.isArray(pc.capabilities)?pc.capabilities:[];
+  const creatorReady=pc.online&&pcCaps.includes('creator_multiscene_v2')&&pcCaps.includes('creator_short_mission_v1');
+  creatorAgent.textContent=!pc.online?'STANDBY':creatorReady?'READY':'UPDATE REQUIRED';
+  creatorAgent.style.color=creatorReady?'#65ffbf':pc.online?'#ffca66':'';
+  if(window.creatorAgentDetail)creatorAgentDetail.textContent=creatorReady
+    ?'Multi-scene Shorts · burned captions · durable mission'
+    :(pc.online?'Creator capability update required':'PC Worker dependent');
+  const commerceReady=pc.online&&pcCaps.includes('commerce_engine_v1')&&pcCaps.includes('shopify_product_draft_v1');
+  commerceAgent.textContent=!pc.online?'STANDBY':commerceReady?'ENGINE READY':'UPDATE REQUIRED';
+  commerceAgent.style.color=commerceReady?'#65ffbf':pc.online?'#ffca66':'';
+  if(window.commerceAgentDetail)commerceAgentDetail.textContent=commerceReady
+    ?'Shopify draft engine ready · account checked at execution'
+    :(pc.online?'Commerce capability update required':'PC Worker dependent');
   lastCloudTasks=Array.isArray(d.tasks)?d.tasks:[];
   renderMissionQueue();
   const localMemory=pc.online&&Array.isArray(pc.capabilities)&&pc.capabilities.includes('local_memory');
