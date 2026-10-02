@@ -29,6 +29,7 @@ jobs:
           node --check worker.js
           node --check jarvis-creator-engine.js
           node --check jarvis-creator-web-media.js
+          node --check jarvis-creator-semantic-quality.js
           node --check jarvis-browser-operator.js
           node --check browser-operator-selftest.js
           node --check browser-mission-selftest.js
@@ -50,6 +51,7 @@ jobs:
           node --check creator-longform-edit-selftest.js
           node --check creator-web-media-selftest.js
           node --check creator-visual-relevance-selftest.js
+          node --check creator-semantic-diversity-selftest.js
           node --check creator-short-motion-selftest.js
           node --check creator-image-motion-selftest.js
           node --check creator-auto-web-selftest.js
@@ -162,6 +164,8 @@ jobs:
         run: node creator-web-media-selftest.js
       - name: Creator visual relevance selftest
         run: node creator-visual-relevance-selftest.js
+      - name: Creator semantic diversity selftest
+        run: node creator-semantic-diversity-selftest.js
       - name: Creator Short motion selftest
         run: node creator-short-motion-selftest.js
       - name: Creator image motion selftest
