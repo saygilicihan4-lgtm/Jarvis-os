@@ -234,6 +234,8 @@ jobs:
         run: node windows-audio-endpoint-selftest.js
       - name: Core Audio switch selftest
         run: node coreaudio-switch-selftest.js
+      - name: Core Audio verify selftest
+        run: node coreaudio-verify-selftest.js
       - name: Safe PC mission selftest
         run: node pc-mission-selftest.js
       - name: Workspace file engine selftest

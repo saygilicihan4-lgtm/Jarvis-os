@@ -1,6 +1,6 @@
 const childProcess=require('child_process');
 const path=require('path');
-const VERSION='1.3';
+const VERSION='1.4';
 function ps(script){
   if(process.platform!=='win32')return{ok:false,reason:'windows_required'};
   try{return{ok:true,output:childProcess.execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',script],{encoding:'utf8',windowsHide:true,timeout:12000,maxBuffer:1024*1024}).trim()}}catch(e){return{ok:false,reason:'powershell_failed',error:String(e.message||e).slice(0,300)}}
@@ -28,12 +28,17 @@ function setDefaultEndpoint(instanceId){
   if(process.platform!=='win32')return{ok:false,reason:'windows_required'};
   try{const out=childProcess.execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(__dirname,'jarvis-set-audio-endpoint.ps1'),'-DeviceId',id],{encoding:'utf8',windowsHide:true,timeout:12000,maxBuffer:1024*1024}).trim();return{ok:out.includes('JARVIS_AUDIO_ENDPOINT_SET'),output:out}}catch(e){return{ok:false,reason:'coreaudio_switch_failed',error:String(e.message||e).slice(0,300)}}
 }
+function verifyDefaultEndpoint(instanceId){
+  const id=String(instanceId||'').trim(); if(!id)return{ok:false,reason:'endpoint_id_required'};
+  if(process.platform!=='win32')return{ok:false,reason:'windows_required'};
+  try{const out=childProcess.execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(__dirname,'jarvis-get-default-audio.ps1')],{encoding:'utf8',windowsHide:true,timeout:12000,maxBuffer:1024*1024}).trim();const v=JSON.parse(out);const ok=['console','multimedia','communications'].every(k=>String(v[k]||'').toLowerCase()===id.toLowerCase());return{ok,reason:ok?'default_endpoint_verified':'default_endpoint_mismatch',active:v}}catch(e){return{ok:false,reason:'endpoint_verification_failed',error:String(e.message||e).slice(0,300)}}
+}
 function selectOutput(name){
   const found=findAudioDevice(name); if(!found.ok)return found;
   if(found.output==='[]')return{ok:false,reason:'audio_device_not_found'};
   const device=parseFoundDevice(found.output); if(!device)return{ok:false,reason:'audio_endpoint_parse_failed'};
   const switched=setDefaultEndpoint(device.InstanceId);
-  if(switched.ok)return{ok:true,reason:'coreaudio_endpoint_set',device};
+  if(switched.ok){const verified=verifyDefaultEndpoint(device.InstanceId);if(verified.ok)return{ok:true,reason:'coreaudio_endpoint_verified',device,active:verified.active};return{ok:false,reason:verified.reason,device,active:verified.active,error:verified.error};}
   const opened=openSoundOutputSettings();
   return{ok:false,reason:switched.reason||'manual_endpoint_selection_required',device,settingsOpened:!!opened.ok,error:switched.error};
 }
@@ -63,4 +68,4 @@ function command(action,args={}){
   if(['playpause','next','previous','stop','volumeup','volumedown','mute'].includes(a))return mediaKey(a);
   return{ok:false,reason:'unsupported_action'};
 }
-module.exports={VERSION,status,pairedAudioDevices,findAudioDevice,defaultAudioEndpoint,parseFoundDevice,setDefaultEndpoint,selectOutput,openSoundOutputSettings,openBluetoothSettings,mediaKey,command};
+module.exports={VERSION,status,pairedAudioDevices,findAudioDevice,defaultAudioEndpoint,parseFoundDevice,setDefaultEndpoint,verifyDefaultEndpoint,selectOutput,openSoundOutputSettings,openBluetoothSettings,mediaKey,command};
