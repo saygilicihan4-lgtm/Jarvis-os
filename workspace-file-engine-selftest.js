@@ -40,12 +40,12 @@ fs.copyFileSync(path.join(root,'in','c.txt'),path.join(root,'out','c.txt'),fs.co
 assert.strictEqual(e.recoveryDecision(root,uncertain).decision,'uncertain','duplicate move state must never auto-delete source');
 
 if(process.platform!=='win32'){
-  fs.mkdirSync(path.join(root,'outside'),{recursive:true});
+  const outside=fs.mkdtempSync(path.join(os.tmpdir(),'jarvis-files-outside-'));
   try{
-    fs.symlinkSync(path.join(root,'outside'),path.join(root,'out','link'),'dir');
-    assert.throws(()=>e.normalizeOperations(root,[{operation:'copy',source:'in/a.txt',destination:'out/link/x.txt'}]),/SYMLINK/);
+    fs.symlinkSync(outside,path.join(root,'out','link'),'dir');
+    assert.throws(()=>e.normalizeOperations(root,[{operation:'copy',source:'in/a.txt',destination:'out/link/x.txt'}]),/SYMLINK_ESCAPE/);
   }catch(err){
-    if(err&&['EPERM','EACCES'].includes(err.code)){} else if(!/SYMLINK/.test(String(err.message||err)))throw err;
+    if(err&&['EPERM','EACCES'].includes(err.code)){} else if(!/SYMLINK_ESCAPE/.test(String(err.message||err)))throw err;
   }
 }
 
