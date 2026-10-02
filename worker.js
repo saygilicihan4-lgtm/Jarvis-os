@@ -45,7 +45,7 @@ const UPDATE_STATE_FILE=path.join(MEMORY_DIR,'update-state.json');
 const WORKER_VERSION='2.102.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
 CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1','adaptive_model_router_v1','deep_model_fallback_v1','dynamic_chunk_prosody_v1','natural_pause_timing_v1','adaptive_turn_pacing_v1','latency_learning_v1','full_duplex_interrupt_v1','cancellable_agent_v1','adaptive_voice_profile_v1','spoken_voice_preference_v1','speaker_echo_rejection_v1','social_dialogue_v1','response_variation_v1','contextual_followup_v1','dialogue_feedback_learning_v1','social_preference_adaptation_v1','dynamic_wake_ack_v1','wake_ack_turn_timing_v1','auto_quality_escalation_v1','weak_response_escalation_v1','repair_quality_escalation_v1','social_momentum_v1','elliptical_turn_resolution_v1','conversation_cadence_v1','brevity_mirroring_v1','adaptive_response_length_v1','interruption_continuity_v1','spoken_resume_v1','partial_stream_resume_v1');
-CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1','mission_auto_resume_v1','mission_health_v1','pc_acceptance_snapshot_v1','silent_startup_diagnostics_v1','pc_acceptance_hardened_v1','bootstrap_migration_v6','mission_fair_scheduler_v1','pc_self_repair_v1','creator_multiscene_v2','creator_burned_captions_v1','cloud_mission_telemetry_v1','creator_short_mission_v1','shopify_product_mission_v1','developer_project_mission_v1','approval_gate_v1','shopify_publish_approval_v1','browser_form_mission_v1','browser_form_prepare_v1','browser_click_approval_v1','youtube_publish_approval_v1','youtube_publish_receipt_v1','developer_patch_mission_v1','developer_patch_rollback_v1','pc_safe_mission_v1','pc_safe_action_catalog_v1','pc_mission_resume_v1','workspace_file_mission_v1','workspace_file_hash_guard_v1','workspace_file_no_overwrite_v1','mission_control_v1','mission_pause_v1','mission_cancel_v1','creator_asset_mission_v1','creator_asset_probe_v1','creator_asset_hash_dedupe_v1','creator_storyboard_v1','creator_explicit_assets_v1','creator_render_mission_bind_v1','creator_batch_mission_v1','creator_batch_child_dedupe_v1','creator_batch_youtube_draft_v1','mission_cooperative_yield_v1','creator_batch_storyboard_lock_v1','creator_batch_render_binding_v1','creator_quality_gate_v1','creator_quality_recovery_v1','creator_longform_mission_v1','creator_longform_quality_v1','creator_longform_recovery_v1','creator_multilingual_voice_v1','creator_daily_longform_v1','creator_daily_idempotency_v1','creator_longform_duration_fit_v1','creator_longform_edit_rhythm_v1','creator_web_media_v1','creator_web_license_manifest_v1','creator_web_zero_key_v1');
+CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1','mission_auto_resume_v1','mission_health_v1','pc_acceptance_snapshot_v1','silent_startup_diagnostics_v1','pc_acceptance_hardened_v1','bootstrap_migration_v6','mission_fair_scheduler_v1','pc_self_repair_v1','creator_multiscene_v2','creator_burned_captions_v1','cloud_mission_telemetry_v1','creator_short_mission_v1','shopify_product_mission_v1','developer_project_mission_v1','approval_gate_v1','shopify_publish_approval_v1','browser_form_mission_v1','browser_form_prepare_v1','browser_click_approval_v1','youtube_publish_approval_v1','youtube_publish_receipt_v1','developer_patch_mission_v1','developer_patch_rollback_v1','pc_safe_mission_v1','pc_safe_action_catalog_v1','pc_mission_resume_v1','workspace_file_mission_v1','workspace_file_hash_guard_v1','workspace_file_no_overwrite_v1','mission_control_v1','mission_pause_v1','mission_cancel_v1','creator_asset_mission_v1','creator_asset_probe_v1','creator_asset_hash_dedupe_v1','creator_storyboard_v1','creator_explicit_assets_v1','creator_render_mission_bind_v1','creator_batch_mission_v1','creator_batch_child_dedupe_v1','creator_batch_youtube_draft_v1','mission_cooperative_yield_v1','creator_batch_storyboard_lock_v1','creator_batch_render_binding_v1','creator_quality_gate_v1','creator_quality_recovery_v1','creator_longform_mission_v1','creator_longform_quality_v1','creator_longform_recovery_v1','creator_multilingual_voice_v1','creator_daily_longform_v1','creator_daily_idempotency_v1','creator_longform_duration_fit_v1','creator_longform_edit_rhythm_v1','creator_web_media_v1','creator_web_license_manifest_v1','creator_web_zero_key_v1','creator_asset_semantic_catalog_v1','creator_visual_relevance_v1','creator_local_vision_broll_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -80,6 +80,7 @@ const SPEECH_LEXICON_FILE=path.join(MEMORY_DIR,'speech-lexicon.json');
 const VOICE_PREFS_FILE=path.join(MEMORY_DIR,'voice-preferences.json');
 const DIALOGUE_FEEDBACK_FILE=path.join(MEMORY_DIR,'dialogue-feedback.json');
 const CREATOR_DAILY_PLAN_FILE=path.join(MEMORY_DIR,'creator-daily-longform.json');
+const CREATOR_ASSET_CATALOG_FILE=path.join(MEMORY_DIR,'creator-asset-catalog.json');
 const TEST_MODE=process.env.JARVIS_TEST_MODE==='1';
 const FORCE_LOCAL_BRIDGE=process.env.JARVIS_LOCAL_BRIDGE_FORCE==='1';
 const LOCAL_STT_PORT=Number(process.env.JARVIS_STT_PORT||8768);
@@ -4835,6 +4836,241 @@ function findCreatorDailyMission(planId,dateKey){
     String(m.input&&m.input.dailyDate||'')===day
   )||null;
 }
+function defaultCreatorAssetCatalog(){
+  return{version:1,updatedAt:null,assets:{}};
+}
+function readCreatorAssetCatalog(){
+  try{
+    if(!fs.existsSync(CREATOR_ASSET_CATALOG_FILE))return defaultCreatorAssetCatalog();
+    const x=JSON.parse(fs.readFileSync(CREATOR_ASSET_CATALOG_FILE,'utf8'));
+    return{
+      version:1,
+      updatedAt:x&&x.updatedAt||null,
+      assets:x&&x.assets&&typeof x.assets==='object'&&!Array.isArray(x.assets)?x.assets:{}
+    };
+  }catch(_){return defaultCreatorAssetCatalog()}
+}
+function writeCreatorAssetCatalog(catalog){
+  fs.mkdirSync(MEMORY_DIR,{recursive:true});
+  const clean={
+    version:1,
+    updatedAt:new Date().toISOString(),
+    assets:catalog&&catalog.assets&&typeof catalog.assets==='object'?catalog.assets:{}
+  };
+  fs.writeFileSync(CREATOR_ASSET_CATALOG_FILE,JSON.stringify(clean,null,2),'utf8');
+  return clean;
+}
+function creatorSemanticTokens(text){
+  const stop=new Set(['bir','bu','ve','veya','ile','için','icin','olan','olarak','daha','çok','cok','gibi','şey','sey','video','klip','görüntü','goruntu','sahne']);
+  return new Set(String(text||'')
+    .toLocaleLowerCase('tr-TR')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9çğıöşü\s-]/gi,' ')
+    .split(/\s+/)
+    .map(x=>x.trim())
+    .filter(x=>x.length>=3&&!stop.has(x))
+    .slice(0,800));
+}
+function creatorCatalogLexicalScore(entry,queryTokens){
+  const tags=Array.isArray(entry&&entry.tags)?entry.tags:[];
+  const tagTokens=creatorSemanticTokens(tags.join(' '));
+  const summaryTokens=creatorSemanticTokens(entry&&entry.summary||'');
+  let score=0;
+  for(const token of queryTokens){
+    if(tagTokens.has(token))score+=4;
+    if(summaryTokens.has(token))score+=2;
+  }
+  return score;
+}
+async function creatorAssetPreviewBase64(relativePath){
+  const rel=getWorkspaceFileEngine().normalizeRel(relativePath);
+  const inspected=getCreatorEngine().inspectAsset(WORKSPACE,rel);
+  if(!inspected.ok)return{ok:false,error:String(inspected.code||'CREATOR_ASSET_INVALID')};
+  const status=getCreatorEngine().ffmpegStatus(WORKSPACE);
+  if(!status.ffmpeg)return{ok:false,error:'FFMPEG_MISSING'};
+  const input=safeFile(rel);
+  const at=Math.max(0.15,Math.min(Math.max(0.15,Number(inspected.duration||1)-0.2),Number(inspected.duration||1)*0.38));
+  const file=path.join(os.tmpdir(),'jarvis-creator-preview-'+process.pid+'-'+Date.now()+'-'+crypto.randomBytes(3).toString('hex')+'.jpg');
+  try{
+    await runHidden(status.ffmpeg,[
+      '-y','-hide_banner','-loglevel','error',
+      '-ss',at.toFixed(3),'-i',input,
+      '-frames:v','1','-vf','scale=768:-2:force_original_aspect_ratio=decrease',
+      '-q:v','4',file
+    ],30000);
+    if(!fs.existsSync(file)||fs.statSync(file).size<512)return{ok:false,error:'CREATOR_PREVIEW_EMPTY'};
+    const image=fs.readFileSync(file).toString('base64');
+    return{ok:true,image,at:Number(at.toFixed(3)),bytes:fs.statSync(file).size,inspected};
+  }catch(e){
+    return{ok:false,error:String(e.message||e).slice(0,300)};
+  }finally{
+    try{if(fs.existsSync(file))fs.unlinkSync(file)}catch(_){}
+  }
+}
+async function classifyCreatorAssetSemantic(relativePath){
+  const rel=getWorkspaceFileEngine().normalizeRel(relativePath);
+  if(!/^creator-assets\//i.test(rel))throw new Error('CREATOR_SEMANTIC_ASSET_SCOPE');
+  const full=safeFile(rel);
+  if(!fs.existsSync(full)||!fs.statSync(full).isFile())throw new Error('CREATOR_SEMANTIC_ASSET_MISSING');
+  const sha256=getWorkspaceFileEngine().hashFile(full);
+  if(!sha256)throw new Error('CREATOR_SEMANTIC_HASH_MISSING');
+  const catalog=readCreatorAssetCatalog();
+  const existing=catalog.assets[rel];
+  if(existing&&String(existing.sha256||'')===sha256&&Array.isArray(existing.tags)&&existing.tags.length){
+    return{...existing,reused:true};
+  }
+
+  const status=await localBrainStatus();
+  if(!status.ready||!status.installed||!isLocalVisionModel(status.model)){
+    return{path:rel,sha256,indexed:false,error:'LOCAL_VISION_NOT_READY'};
+  }
+  const preview=await creatorAssetPreviewBase64(rel);
+  if(!preview.ok)return{path:rel,sha256,indexed:false,error:preview.error};
+
+  const schema={
+    type:'object',
+    properties:{
+      summary:{type:'string'},
+      tags:{type:'array',items:{type:'string'},minItems:3,maxItems:12}
+    },
+    required:['summary','tags'],
+    additionalProperties:false
+  };
+  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),60000);
+  try{
+    const r=await fetch(LOCAL_BRAIN_URL+'/api/chat',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({
+        model:status.model,
+        stream:false,
+        think:false,
+        format:schema,
+        keep_alive:LOCAL_BRAIN_KEEP_ALIVE,
+        options:{temperature:0.18,top_p:0.82,repeat_penalty:1.06,num_ctx:Math.min(LOCAL_BRAIN_CTX,8192),num_predict:220},
+        messages:[
+          {role:'system',content:'Sen JARVIS Creator yerel B-roll katalog modülüsün. Görüntüyü yalnız görünen içerikle sınıflandır. Kişi kimliği veya hassas özellik çıkarımı yapma. 5-12 kısa Türkçe görsel etiket ve tek kısa açıklama üret. SADECE JSON şemasına uy.'},
+          {role:'user',content:'Bu Creator video klibinin temsilî karesini, ileride anlatıma uygun B-roll seçebilmek için etiketle.',images:[preview.image]}
+        ]
+      }),
+      signal:ctl.signal
+    });
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.error||('OLLAMA '+r.status));
+    const parsed=extractLocalBrainJson(j&&j.message&&j.message.content);
+    const tags=Array.isArray(parsed&&parsed.tags)
+      ? parsed.tags.map(x=>String(x||'').toLocaleLowerCase('tr-TR').replace(/[\r\n]+/g,' ').trim().slice(0,60)).filter(Boolean).slice(0,12)
+      : [];
+    const summary=String(parsed&&parsed.summary||'').replace(/\s+/g,' ').trim().slice(0,320);
+    if(tags.length<3||!summary)throw new Error('CREATOR_SEMANTIC_BAD_JSON');
+    const entry={
+      path:rel,sha256,summary,tags,
+      previewAt:preview.at,
+      model:String(status.model||'').slice(0,100),
+      indexedAt:new Date().toISOString()
+    };
+    catalog.assets[rel]=entry;
+    writeCreatorAssetCatalog(catalog);
+    remember({kind:'creator_asset_semantic_index',path:rel,tags:tags.length,model:entry.model,localOnly:true});
+    return{...entry,indexed:true,reused:false};
+  }finally{clearTimeout(timer)}
+}
+let creatorAssetCatalogBusy=false;
+async function serviceCreatorAssetSemanticCatalog({maxItems=1}={}){
+  if(creatorAssetCatalogBusy)return{ok:true,skipped:'busy'};
+  creatorAssetCatalogBusy=true;
+  try{
+    const files=getWorkspaceFileEngine();
+    const catalog=readCreatorAssetCatalog();
+    const all=getCreatorEngine().listAssets(WORKSPACE)
+      .map(full=>path.relative(WORKSPACE,full).replace(/\\/g,'/'));
+    const pending=[];
+    for(const rel of all){
+      const full=safeFile(rel);
+      const sha256=files.hashFile(full);
+      const entry=catalog.assets[rel];
+      if(!entry||String(entry.sha256||'')!==String(sha256||'')||!Array.isArray(entry.tags)||entry.tags.length<3)pending.push(rel);
+    }
+    const limit=Math.max(1,Math.min(4,Number(maxItems)||1));
+    const results=[];
+    for(const rel of pending.slice(0,limit)){
+      try{results.push(await classifyCreatorAssetSemantic(rel))}
+      catch(e){results.push({path:rel,indexed:false,error:String(e.message||e).slice(0,240)})}
+    }
+    return{ok:true,total:all.length,pending:Math.max(0,pending.length-results.length),indexed:results.filter(x=>x&&x.indexed).length,results};
+  }finally{creatorAssetCatalogBusy=false}
+}
+async function selectCreatorRelevantAssetBaselines(query,maxItems=12){
+  const files=getWorkspaceFileEngine();
+  const catalog=readCreatorAssetCatalog();
+  const queryTokens=creatorSemanticTokens(query);
+  const rows=[];
+  for(const [rel,entry] of Object.entries(catalog.assets||{})){
+    try{
+      if(!/^creator-assets\//i.test(rel))continue;
+      const full=safeFile(rel);
+      if(!fs.existsSync(full)||!fs.statSync(full).isFile())continue;
+      const sha256=files.hashFile(full);
+      if(!sha256||sha256!==String(entry&&entry.sha256||''))continue;
+      const score=creatorCatalogLexicalScore(entry,queryTokens);
+      rows.push({id:'A'+String(rows.length+1).padStart(3,'0'),path:rel,sha256,summary:String(entry.summary||''),tags:Array.isArray(entry.tags)?entry.tags:[],score});
+    }catch(_){}
+  }
+  if(!rows.length)return[];
+  rows.sort((a,b)=>b.score-a.score||a.path.localeCompare(b.path));
+  let ordered=rows.slice();
+  try{
+    const status=await localBrainStatus();
+    if(status.ready&&status.installed){
+      const candidates=rows.slice(0,40);
+      const schema={
+        type:'object',
+        properties:{ids:{type:'array',items:{type:'string'},maxItems:20}},
+        required:['ids'],
+        additionalProperties:false
+      };
+      const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),45000);
+      try{
+        const r=await fetch(LOCAL_BRAIN_URL+'/api/chat',{
+          method:'POST',
+          headers:{'content-type':'application/json'},
+          body:JSON.stringify({
+            model:status.deepInstalled&&status.deepModel?status.deepModel:status.model,
+            stream:false,think:false,format:schema,keep_alive:LOCAL_BRAIN_KEEP_ALIVE,
+            options:{temperature:0.12,top_p:0.82,num_ctx:Math.min(LOCAL_BRAIN_CTX,8192),num_predict:180},
+            messages:[
+              {role:'system',content:'Sen JARVIS Creator B-roll seçicisisin. Kullanıcının anlatımına semantik olarak en uygun klip kimliklerini en uygundan başlayarak seç. Yalnız verilen kimlikleri kullan ve SADECE JSON şemasına uy.'},
+              {role:'user',content:'ANLATIM:\n'+String(query||'').slice(0,3200)+'\n\nKLİPLER:\n'+candidates.map(x=>x.id+' | '+x.tags.join(', ')+' | '+x.summary).join('\n')}
+            ]
+          }),signal:ctl.signal
+        });
+        const j=await r.json().catch(()=>({}));
+        if(r.ok){
+          const parsed=extractLocalBrainJson(j&&j.message&&j.message.content);
+          const wanted=Array.isArray(parsed&&parsed.ids)?parsed.ids.map(x=>String(x||'')):[];
+          const map=new Map(candidates.map(x=>[x.id,x]));
+          const picked=wanted.map(id=>map.get(id)).filter(Boolean);
+          if(picked.length)ordered=[...picked,...rows.filter(x=>!picked.some(p=>p.path===x.path))];
+        }
+      }finally{clearTimeout(timer)}
+    }
+  }catch(_){}
+  const limit=Math.max(1,Math.min(20,Number(maxItems)||12));
+  return ordered.slice(0,limit).map(x=>({path:x.path,sha256:x.sha256,relevanceScore:x.score}));
+}
+function mergeCreatorAssetBaselines(primary,fallback,maxItems=12){
+  const out=[],seen=new Set();
+  for(const row of [...(Array.isArray(primary)?primary:[]),...(Array.isArray(fallback)?fallback:[])]){
+    const p=String(row&&row.path||'');
+    const h=String(row&&row.sha256||'');
+    if(!p||!h||seen.has(p))continue;
+    seen.add(p);out.push({path:p,sha256:h});
+    if(out.length>=Math.max(1,Math.min(20,Number(maxItems)||12)))break;
+  }
+  return out;
+}
+
 function creatorDailyAutoAssetBaselines(dateKey,maxItems=12){
   const all=getCreatorEngine().listAssets(WORKSPACE);
   if(!all.length)return[];
@@ -4933,6 +5169,12 @@ async function serviceCreatorDailyPlan({force=false}={}){
     plan=writeCreatorDailyPlan({...plan,lastAttemptAt:new Date().toISOString(),lastAttemptDate:dateKey,lastError:null});
     try{
       const brief=await generateCreatorDailyLongformBrief(plan,dateKey);
+      await serviceCreatorAssetSemanticCatalog({maxItems:2}).catch(()=>({ok:false}));
+      const configured=Array.isArray(plan.creatorAssets)&&plan.creatorAssets.length
+        ?verifyCreatorLongformBaselines(plan.creatorAssets)
+        :[];
+      const semantic=configured.length?[]:await selectCreatorRelevantAssetBaselines(brief.title+' '+brief.script,12);
+      const automatic=configured.length?configured:mergeCreatorAssetBaselines(semantic,creatorDailyAutoAssetBaselines(dateKey,12),12);
       const mission=createCreatorLongformMission({
         campaignName:'daily-'+dateKey+'-'+brief.title,
         script:brief.script,
@@ -4941,9 +5183,7 @@ async function serviceCreatorDailyPlan({force=false}={}){
         creatorVoice:plan.creatorVoice,
         includeYouTube:plan.includeYouTube!==false,
         publish:false,
-        _creatorAssetBaselines:Array.isArray(plan.creatorAssets)&&plan.creatorAssets.length
-          ?verifyCreatorLongformBaselines(plan.creatorAssets)
-          :creatorDailyAutoAssetBaselines(dateKey,12),
+        _creatorAssetBaselines:automatic,
         _dailyPlanId:plan.planId,
         _dailyDate:dateKey
       });
@@ -6561,7 +6801,7 @@ async function buildPcAcceptanceSnapshot(){
   try{commerce=await getCommerceEngine().status(WORKSPACE)}catch(e){commerce={ok:false,connected:false,error:String(e.message||e).slice(0,240)}}
   try{youtube=await getYoutubeStudio().status(getBrowserOperator(),WORKSPACE)}catch(e){youtube={ok:false,running:false,loggedIn:false,error:String(e.message||e).slice(0,240)}}
   const missions=missionHealthSnapshot();
-  const checks={workerVersion:WORKER_VERSION==='2.102.0',creatorQualityGateReady:CAPS.includes('creator_quality_gate_v1')&&CAPS.includes('creator_quality_recovery_v1'),creatorLongformReady:CAPS.includes('creator_longform_mission_v1')&&CAPS.includes('creator_longform_quality_v1')&&CAPS.includes('creator_longform_recovery_v1')&&CAPS.includes('creator_multilingual_voice_v1')&&CAPS.includes('creator_daily_longform_v1')&&CAPS.includes('creator_daily_idempotency_v1')&&CAPS.includes('creator_longform_duration_fit_v1')&&CAPS.includes('creator_longform_edit_rhythm_v1'),creatorBatchMissionReady:CAPS.includes('creator_batch_mission_v1')&&CAPS.includes('creator_batch_child_dedupe_v1')&&CAPS.includes('creator_batch_youtube_draft_v1')&&CAPS.includes('mission_cooperative_yield_v1')&&CAPS.includes('creator_batch_storyboard_lock_v1')&&CAPS.includes('creator_batch_render_binding_v1'),creatorAssetMissionReady:CAPS.includes('creator_asset_mission_v1')&&CAPS.includes('creator_asset_probe_v1')&&CAPS.includes('creator_asset_hash_dedupe_v1'),creatorStoryboardReady:CAPS.includes('creator_storyboard_v1')&&CAPS.includes('creator_explicit_assets_v1')&&CAPS.includes('creator_render_mission_bind_v1'),pcMissionReady:CAPS.includes('pc_safe_mission_v1')&&CAPS.includes('pc_safe_action_catalog_v1'),workspaceFileMissionReady:CAPS.includes('workspace_file_mission_v1')&&CAPS.includes('workspace_file_hash_guard_v1')&&CAPS.includes('workspace_file_no_overwrite_v1'),missionControlReady:CAPS.includes('mission_control_v1')&&CAPS.includes('mission_pause_v1')&&CAPS.includes('mission_cancel_v1'),missionRuntime:!!(missions&&missions.ok&&missions.autoResume),creatorEngineLoaded:!!(creator&&!creator.error),browserOperatorLoaded:!!(browser&&!browser.error),commerceEngineLoaded:!!(commerce&&!commerce.error),youtubeStudioLoaded:!!(youtube&&!youtube.error),silentStartup:process.platform==='win32'?startup.silentOk:true,autoUpdateReady:!!(startup.selfUpdate&&startup.selfUpdate.configured)};
+  const checks={workerVersion:WORKER_VERSION==='2.102.0',creatorQualityGateReady:CAPS.includes('creator_quality_gate_v1')&&CAPS.includes('creator_quality_recovery_v1'),creatorLongformReady:CAPS.includes('creator_longform_mission_v1')&&CAPS.includes('creator_longform_quality_v1')&&CAPS.includes('creator_longform_recovery_v1')&&CAPS.includes('creator_multilingual_voice_v1')&&CAPS.includes('creator_daily_longform_v1')&&CAPS.includes('creator_daily_idempotency_v1')&&CAPS.includes('creator_longform_duration_fit_v1')&&CAPS.includes('creator_longform_edit_rhythm_v1'),creatorBatchMissionReady:CAPS.includes('creator_batch_mission_v1')&&CAPS.includes('creator_batch_child_dedupe_v1')&&CAPS.includes('creator_batch_youtube_draft_v1')&&CAPS.includes('mission_cooperative_yield_v1')&&CAPS.includes('creator_batch_storyboard_lock_v1')&&CAPS.includes('creator_batch_render_binding_v1'),creatorAssetMissionReady:CAPS.includes('creator_asset_mission_v1')&&CAPS.includes('creator_asset_probe_v1')&&CAPS.includes('creator_asset_hash_dedupe_v1'),creatorVisualRelevanceReady:CAPS.includes('creator_asset_semantic_catalog_v1')&&CAPS.includes('creator_visual_relevance_v1')&&CAPS.includes('creator_local_vision_broll_v1'),creatorStoryboardReady:CAPS.includes('creator_storyboard_v1')&&CAPS.includes('creator_explicit_assets_v1')&&CAPS.includes('creator_render_mission_bind_v1'),pcMissionReady:CAPS.includes('pc_safe_mission_v1')&&CAPS.includes('pc_safe_action_catalog_v1'),workspaceFileMissionReady:CAPS.includes('workspace_file_mission_v1')&&CAPS.includes('workspace_file_hash_guard_v1')&&CAPS.includes('workspace_file_no_overwrite_v1'),missionControlReady:CAPS.includes('mission_control_v1')&&CAPS.includes('mission_pause_v1')&&CAPS.includes('mission_cancel_v1'),missionRuntime:!!(missions&&missions.ok&&missions.autoResume),creatorEngineLoaded:!!(creator&&!creator.error),browserOperatorLoaded:!!(browser&&!browser.error),commerceEngineLoaded:!!(commerce&&!commerce.error),youtubeStudioLoaded:!!(youtube&&!youtube.error),silentStartup:process.platform==='win32'?startup.silentOk:true,autoUpdateReady:!!(startup.selfUpdate&&startup.selfUpdate.configured)};
   const corePass=Object.values(checks).every(Boolean);
   const accountSetup={shopifyConnected:!!(commerce&&commerce.ok&&commerce.connected),youtubeLoggedIn:!!(youtube&&youtube.ok&&youtube.loggedIn)};
   const snapshot={ok:true,generatedAt,worker:{version:WORKER_VERSION,name:NAME,platform:process.platform,arch:process.arch},checks,corePass,startup,update:startup.selfUpdate,creator:{ready:!!(creator&&creator.ok),assets:Number(creator&&creator.assets||0),outputDir:creator&&creator.outputDir||null,installable:!!(creator&&creator.installable)},browser:{running:!!(browser&&browser.running),browser:browser&&browser.browser||null,tabs:Array.isArray(browser&&browser.tabs)?browser.tabs.length:0,profile:browser&&browser.profile||null},commerce:{connected:accountSetup.shopifyConnected,shop:commerce&&commerce.shop||null,apiVersion:commerce&&commerce.apiVersion||null,message:String(commerce&&commerce.message||'').slice(0,300)},youtube:{running:!!(youtube&&youtube.running),loggedIn:accountSetup.youtubeLoggedIn,title:youtube&&youtube.title||null,url:youtube&&youtube.url||null,message:String(youtube&&youtube.message||'').slice(0,300)},missions,accountSetup};
@@ -7999,6 +8239,7 @@ if(!TEST_MODE){
   setTimeout(()=>prewarmJarvisBackchannels().catch(()=>{}),2200);
   setTimeout(()=>serviceDurableMissions().catch(()=>{}),5000);
   setTimeout(()=>serviceCreatorDailyPlan().catch(()=>{}),12000);
+  setTimeout(()=>serviceCreatorAssetSemanticCatalog({maxItems:1}).catch(()=>{}),25000);
 }
 console.log('Cloud:',BASE);
 console.log('Workspace:',WORKSPACE);
@@ -8013,6 +8254,8 @@ if(!TEST_MODE){
   // dependency becomes ready. The service never auto-publishes content.
   setInterval(()=>serviceDurableMissions().catch(()=>{}),20000);
   setInterval(()=>serviceCreatorDailyPlan().catch(()=>{}),60000);
+  // Index one local/licensed Creator clip per cycle without starving durable missions.
+  setInterval(()=>serviceCreatorAssetSemanticCatalog({maxItems:1}).catch(()=>{}),180000);
 }else{
   console.log('[JARVIS] TEST MODE: cloud polling and Windows helpers disabled');
 }
