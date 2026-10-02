@@ -4,7 +4,7 @@ const os=require('os');
 const childProcess=require('child_process');
 const crypto=require('crypto');
 
-const ENGINE_VERSION='1.1';
+const ENGINE_VERSION='1.2';
 const CREATOR_PROFILE_VERSION='2.0';
 
 function execFile(exe,args,opts={}){
@@ -135,6 +135,33 @@ function selectAssets(workspace,name,maxScenes=5){
   const rotated=assets.slice(offset).concat(assets.slice(0,offset));
   return rotated.slice(0,limit);
 }
+function resolveAssetSelection(workspace,assetFiles,maxScenes=5){
+  const rows=Array.isArray(assetFiles)?assetFiles.filter(Boolean).slice(0,Math.max(1,Math.min(5,Number(maxScenes)||5))):[];
+  if(!rows.length)return[];
+  const dirs=creatorDirs(workspace);
+  const assetRoot=fs.realpathSync(dirs.assets);
+  const out=[],seen=new Set();
+  for(const raw of rows){
+    const input=String(raw||'').trim();
+    if(!input||input.includes('\0')||/^[\\/]/.test(input)||/^[A-Za-z]:[\\/]/.test(input))throw new Error('CREATOR_STORYBOARD_BAD_PATH');
+    const rel=input.replace(/\\/g,'/').replace(/^\/+/, '').trim();
+    const parts=rel.split('/').filter(Boolean);
+    if(parts.length!==2||parts[0]!=='creator-assets'||parts.some(x=>x==='.'||x==='..'))throw new Error('CREATOR_STORYBOARD_ASSET_SCOPE');
+    const full=path.resolve(workspace,rel);
+    if(path.dirname(full)!==path.resolve(dirs.assets))throw new Error('CREATOR_STORYBOARD_ASSET_SCOPE');
+    if(!fs.existsSync(full))throw new Error('CREATOR_STORYBOARD_ASSET_MISSING');
+    const lst=fs.lstatSync(full);
+    if(lst.isSymbolicLink())throw new Error('CREATOR_STORYBOARD_SYMLINK_BLOCKED');
+    if(!lst.isFile())throw new Error('CREATOR_STORYBOARD_NOT_FILE');
+    if(!CREATOR_ASSET_EXTENSIONS.has(path.extname(full).toLowerCase()))throw new Error('CREATOR_STORYBOARD_UNSUPPORTED_EXTENSION');
+    const real=fs.realpathSync(full);
+    if(path.dirname(real)!==assetRoot)throw new Error('CREATOR_STORYBOARD_SYMLINK_ESCAPE');
+    if(seen.has(real))continue;
+    seen.add(real);out.push(real);
+  }
+  if(!out.length)throw new Error('CREATOR_STORYBOARD_EMPTY');
+  return out;
+}
 function buildStoryboard(assets,durationSeconds,transitionSeconds=0.18){
   const list=Array.isArray(assets)?assets.filter(Boolean):[];
   if(!list.length)return[];
@@ -249,7 +276,7 @@ function buildSrt(text,durationSeconds=15){
   });
   return lines.join('\n');
 }
-function renderShort({workspace,name,script,voicePath}){
+function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId='',assetHashes=[]}){
   if(!workspace)throw new Error('workspace required');
   if(!voicePath||!fs.existsSync(voicePath))throw new Error('creator voice file missing');
   const status=ffmpegStatus(workspace);
@@ -277,7 +304,8 @@ function renderShort({workspace,name,script,voicePath}){
     throw e;
   }
   const duration=measured?Math.max(12,Math.min(18.5,measured+0.35)):18;
-  const assets=selectAssets(workspace,base,5);
+  const explicitAssets=Array.isArray(assetFiles)&&assetFiles.length>0;
+  const assets=explicitAssets?resolveAssetSelection(workspace,assetFiles,5):selectAssets(workspace,base,5);
   const transition=assets.length>1?0.18:0;
   const storyboard=buildStoryboard(assets,duration,transition);
   const captionsBurned=supportsSubtitles(status.ffmpeg);
@@ -369,8 +397,11 @@ function renderShort({workspace,name,script,voicePath}){
     version:ENGINE_VERSION,
     profileVersion:CREATOR_PROFILE_VERSION,
     createdAt:new Date().toISOString(),
+    missionId:String(missionId||'').trim().slice(0,100)||null,
     name:base,
     script:cleanScript,
+    assetSelection:explicitAssets?'explicit':'automatic',
+    sourceAssetHashes:Array.isArray(assetHashes)?assetHashes.map(x=>String(x||'').slice(0,64)).filter(Boolean).slice(0,5):[],
     voicePath:path.relative(workspace,voicePath),
     sourceAsset:assets[0]?path.relative(workspace,assets[0]):null,
     sourceAssets:assets.map(x=>path.relative(workspace,x)),
@@ -411,6 +442,7 @@ module.exports={
   ffmpegFilterPath,
   renderShort,
   listAssets,
+  resolveAssetSelection,
   inspectAsset,
   assetSafeName,
   assetDestinationName,

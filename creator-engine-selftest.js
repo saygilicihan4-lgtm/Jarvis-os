@@ -4,7 +4,7 @@ const fs=require('fs');
 const path=require('path');
 const engine=require('./jarvis-creator-engine');
 
-assert.strictEqual(engine.ENGINE_VERSION,'1.1');
+assert.strictEqual(engine.ENGINE_VERSION,'1.2');
 assert.strictEqual(engine.CREATOR_PROFILE_VERSION,'2.0');
 assert.strictEqual(engine.safeName('Benim Shorts / Test'),'Benim-Shorts-Test');
 assert.strictEqual(engine.assetSafeName('incoming/My Clip.MP4'),'My-Clip.mp4');
@@ -28,6 +28,13 @@ assert.ok(fs.existsSync(status.assetDir));
 for(const name of ['a.mp4','b.mp4','c.mp4']){
   fs.writeFileSync(path.join(status.assetDir,name),Buffer.alloc(32,1));
 }
+const explicit=engine.resolveAssetSelection(tmp,['creator-assets/c.mp4','creator-assets/a.mp4'],5);
+assert.strictEqual(explicit.length,2);
+assert.ok(explicit[0].endsWith(path.join('creator-assets','c.mp4')),'explicit asset order must be preserved');
+assert.ok(explicit[1].endsWith(path.join('creator-assets','a.mp4')),'explicit asset order must be preserved');
+assert.throws(()=>engine.resolveAssetSelection(tmp,['creator-video/out.mp4'],5),/STORYBOARD_ASSET_SCOPE/);
+assert.throws(()=>engine.resolveAssetSelection(tmp,['../outside.mp4'],5),/STORYBOARD/);
+
 const selected=engine.selectAssets(tmp,'kampanya-test',5);
 assert.strictEqual(selected.length,3);
 assert.deepStrictEqual(engine.selectAssets(tmp,'kampanya-test',5),selected,'asset selection must be deterministic');
@@ -47,5 +54,8 @@ assert.ok(source.includes('function inspectAsset(workspace,relativePath)'),'Crea
 assert.ok(source.includes('CREATOR_ASSET_INVALID_VIDEO'),'invalid-video guard missing');
 assert.ok(source.includes('CREATOR_ASSET_SYMLINK_ESCAPE'),'asset symlink escape guard missing');
 assert.ok(source.includes('duration>600'),'Creator asset duration limit missing');
+assert.ok(source.includes('function resolveAssetSelection(workspace,assetFiles,maxScenes=5)'),'explicit Creator asset resolver missing');
+assert.ok(source.includes("assetSelection:explicitAssets?'explicit':'automatic'"),'render metadata must record asset selection mode');
+assert.ok(source.includes("missionId:String(missionId||'')"),'render metadata must bind durable mission id');
 
 console.log('CREATOR ENGINE SELFTEST PASS');

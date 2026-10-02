@@ -6,8 +6,8 @@ const worker=fs.readFileSync('./worker.js','utf8');
 const creatorSource=fs.readFileSync('./jarvis-creator-engine.js','utf8');
 const fileEngine=fs.readFileSync('./jarvis-workspace-file-engine.js','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.99.0'"),'Worker 2.99.0 required');
-assert.strictEqual(creator.ENGINE_VERSION,'1.1');
+assert.ok(worker.includes("const WORKER_VERSION='2.99.1'"),'Worker 2.99.1 required');
+assert.strictEqual(creator.ENGINE_VERSION,'1.2');
 assert.ok(worker.includes("'creator_asset_mission_v1'"),'creator asset mission capability missing');
 assert.ok(worker.includes("'creator_asset_probe_v1'"),'creator asset probe capability missing');
 assert.ok(worker.includes("'creator_asset_hash_dedupe_v1'"),'creator asset dedupe capability missing');

@@ -4,13 +4,19 @@ const assert=require('assert');
 const worker=fs.readFileSync('./worker.js','utf8');
 const server=fs.readFileSync('./server.js','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.99.0'"),'Worker 2.99.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.99.1'"),'Worker 2.99.1 required');
 assert.ok(worker.includes("name:'creator_render_short'"),'native creator render tool missing');
 assert.ok(worker.includes("name:'creator_status'"),'native creator status tool missing');
 assert.ok(worker.includes("name:'shopify_status'"),'native Shopify status tool missing');
 assert.ok(worker.includes("name:'shopify_create_draft'"),'native Shopify draft tool missing');
 assert.ok(worker.includes("getCommerceEngine().createDraft(WORKSPACE,product)"),'Shopify draft execution missing');
-assert.ok(worker.includes("getCreatorEngine().renderShort({workspace:WORKSPACE,name,script,voicePath:voice})"),'Creator native render execution missing');
+const nativeCreatorStart=worker.indexOf("}else if(n==='creator_render_short')");
+const nativeCreatorEnd=worker.indexOf("}else if(n==='shopify_status')",nativeCreatorStart);
+assert.ok(nativeCreatorStart>0&&nativeCreatorEnd>nativeCreatorStart,'Creator native render handler missing');
+const nativeCreator=worker.slice(nativeCreatorStart,nativeCreatorEnd);
+assert.ok(nativeCreator.includes("getCreatorEngine().renderShort({"),'Creator native render execution missing');
+assert.ok(nativeCreator.includes("voicePath:voice"),'Creator native render voice binding missing');
+assert.ok(nativeCreator.includes("assetFiles:selected.map(x=>x.path)"),'Creator native ordered asset binding missing');
 assert.ok(worker.includes('ürün yayınlanmadı'),'draft-only user feedback missing');
 assert.ok(worker.includes('"Devam et" tek başına yayınlama onayı değildir'),'explicit publish approval guardrail prompt missing');
 
