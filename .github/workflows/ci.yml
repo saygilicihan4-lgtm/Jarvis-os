@@ -46,6 +46,7 @@ jobs:
           node --check creator-short-motion-selftest.js
           node --check creator-image-motion-selftest.js
           node --check creator-auto-web-selftest.js
+          node --check creator-scene-web-selftest.js
           node --check shopify-mission-selftest.js
           node --check approval-gate-selftest.js
           node --check developer-mission-selftest.js
@@ -119,6 +120,8 @@ jobs:
         run: node creator-image-motion-selftest.js
       - name: Creator auto web selftest
         run: node creator-auto-web-selftest.js
+      - name: Creator scene web selftest
+        run: node creator-scene-web-selftest.js
       - name: Shopify mission selftest
         run: node shopify-mission-selftest.js
       - name: Approval gate selftest
