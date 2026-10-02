@@ -38,6 +38,8 @@ assert.ok(worker.includes("'creator_semantic_relevance_floor_v1'"),'v97 capabili
 assert.ok(worker.includes("SEMANTIC_QUALITY_VERSION='1.1'"),'runtime sync must require semantic quality v1.1');
 assert.ok(worker.includes("minScore:1"),'worker semantic relevance floor missing');
 assert.ok(worker.includes("allowPaths:modelPickedPaths"),'local semantic model allowlist exception missing');
+assert.ok(worker.includes("const fallbackEligible=ordered.filter(x=>Number(x&&x.score||0)>=1||modelPickedPaths.includes(String(x&&x.path||'')))"),'Worker fallback must enforce the same relevance floor when semantic module sync fails');
+assert.ok(worker.includes("relevanceFloorBlockedAll:ordered.length>0&&fallbackEligible.length===0"),'Worker fallback relevance-floor evidence missing');
 assert.ok(worker.includes('\"Devam et\" tek başına YouTube PUBLIC onayı değildir'),'YouTube PUBLIC approval policy regressed');
 assert.ok(worker.includes('\"Devam et\" tek başına yayınlama onayı değildir'),'Shopify PUBLIC approval policy regressed');
 
