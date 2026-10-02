@@ -719,6 +719,59 @@ function creatorAudioMasterProfile(){
   return{...CREATOR_AUDIO_MASTER_PROFILE};
 }
 
+function probeRenderedAudioLoudness(file,ffmpeg,{targetLufs=-16,toleranceLufs=3,maxTruePeakDb=-0.5}={}){
+  const target=Number.isFinite(Number(targetLufs))?Number(targetLufs):-16;
+  const tolerance=Math.max(0.5,Math.min(6,Number(toleranceLufs)||3));
+  const peakCeiling=Number.isFinite(Number(maxTruePeakDb))?Number(maxTruePeakDb):-0.5;
+  if(!ffmpeg)return{ok:false,code:'FFMPEG_MISSING',integratedLufs:null,truePeakDb:null};
+  if(!file||!fs.existsSync(file))return{ok:false,code:'CREATOR_AUDIO_OUTPUT_MISSING',integratedLufs:null,truePeakDb:null};
+  try{
+    const run=childProcess.spawnSync(ffmpeg,[
+      '-hide_banner','-nostats','-i',file,
+      '-map','0:a:0',
+      '-af','loudnorm=I='+target+':LRA=7:TP=-1.5:print_format=json',
+      '-f','null','-'
+    ],{
+      encoding:'utf8',
+      windowsHide:true,
+      timeout:90000,
+      maxBuffer:1024*1024*8
+    });
+    if(run.error||run.status!==0){
+      return{ok:false,code:'CREATOR_AUDIO_LOUDNESS_PROBE_FAILED',integratedLufs:null,truePeakDb:null,detail:String((run.error&&run.error.message)||run.stderr||'').slice(-500)};
+    }
+    const text=String(run.stderr||'');
+    const integratedMatch=/"input_i"\s*:\s*"(-?inf|-?[0-9]+(?:\.[0-9]+)?)"/i.exec(text);
+    const peakMatch=/"input_tp"\s*:\s*"(-?inf|-?[0-9]+(?:\.[0-9]+)?)"/i.exec(text);
+    const lraMatch=/"input_lra"\s*:\s*"(-?inf|-?[0-9]+(?:\.[0-9]+)?)"/i.exec(text);
+    const parse=(match)=>{
+      if(!match)return null;
+      if(/inf/i.test(match[1]))return -Infinity;
+      const n=Number(match[1]);
+      return Number.isFinite(n)?n:null;
+    };
+    const integratedLufs=parse(integratedMatch);
+    const truePeakDb=parse(peakMatch);
+    const lra=parse(lraMatch);
+    const inBand=Number.isFinite(integratedLufs)&&integratedLufs>=target-tolerance&&integratedLufs<=target+tolerance;
+    const peakSafe=Number.isFinite(truePeakDb)&&truePeakDb<=peakCeiling;
+    const ok=inBand&&peakSafe;
+    return{
+      ok,
+      code:ok?'CREATOR_AUDIO_LOUDNESS_PASS':'CREATOR_AUDIO_LOUDNESS_OUT_OF_RANGE',
+      integratedLufs,
+      truePeakDb,
+      lra,
+      targetLufs:target,
+      toleranceLufs:tolerance,
+      maxTruePeakDb:peakCeiling,
+      method:'ffmpeg-loudnorm-analysis'
+    };
+  }catch(e){
+    return{ok:false,code:'CREATOR_AUDIO_LOUDNESS_PROBE_FAILED',integratedLufs:null,truePeakDb:null,detail:String(e.message||e).slice(0,500)};
+  }
+}
+
 function streamTimelineCoverage(stream,containerDuration){
   const finite=value=>value!==null&&value!==undefined&&String(value).trim()!==''&&Number.isFinite(Number(value))?Number(value):null;
   const start=finite(stream&&stream.start_time);
@@ -1136,6 +1189,16 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     quality.code='CREATOR_AUDIO_SIGNAL_MISSING';
     quality.message='Creator Shorts final ses sinyali kalite kapısı başarısız.';
   }
+  const outputLoudness=probeRenderedAudioLoudness(outFile,status.ffmpeg);
+  quality.checks.audioLoudness=outputLoudness.ok;
+  quality.measured.audioIntegratedLufs=outputLoudness.integratedLufs;
+  quality.measured.audioTruePeakDb=outputLoudness.truePeakDb;
+  quality.audioLoudness=outputLoudness;
+  if(!outputLoudness.ok){
+    quality.ok=false;
+    quality.code='CREATOR_AUDIO_LOUDNESS_OUT_OF_RANGE';
+    quality.message='Creator Shorts final loudness kalite kapısı başarısız.';
+  }
   if(!quality.ok){
     const e=new Error(String(quality.message||'Creator Shorts quality gate failed')+' · '+String(quality.code||'CREATOR_QUALITY_FAILED'));
     e.code=String(quality.code||'CREATOR_QUALITY_FAILED');
@@ -1361,6 +1424,16 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     quality.code='CREATOR_AUDIO_SIGNAL_MISSING';
     quality.message='Creator long-form final ses sinyali kalite kapısı başarısız.';
   }
+  const outputLoudness=probeRenderedAudioLoudness(outFile,status.ffmpeg);
+  quality.checks.audioLoudness=outputLoudness.ok;
+  quality.measured.audioIntegratedLufs=outputLoudness.integratedLufs;
+  quality.measured.audioTruePeakDb=outputLoudness.truePeakDb;
+  quality.audioLoudness=outputLoudness;
+  if(!outputLoudness.ok){
+    quality.ok=false;
+    quality.code='CREATOR_AUDIO_LOUDNESS_OUT_OF_RANGE';
+    quality.message='Creator long-form final loudness kalite kapısı başarısız.';
+  }
   if(!quality.ok){
     const e=new Error(String(quality.message||'Creator long-form quality gate failed')+' · '+String(quality.code||'CREATOR_LONGFORM_QUALITY_FAILED'));
     e.code=String(quality.code||'CREATOR_LONGFORM_QUALITY_FAILED');
@@ -1455,6 +1528,7 @@ module.exports={
   creatorAudioMasterFilter,
   creatorAudioMasterProfile,
   probeNarrationActivity,
+  probeRenderedAudioLoudness,
   probeHookMotion,
   findHookMotionWindow,
   listAssets,
