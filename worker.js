@@ -4802,15 +4802,17 @@ async function creatorAutoWebAssets({title='',script='',query='',provider='auto'
     const ready=getCreatorEngine().prepare(WORKSPACE,{allowInstall:true});
     if(!ready.ok||!ready.ffprobe)return[];
     const wanted=Math.max(1,Math.min(12,Number(count)||5));
+    const candidateTarget=Math.min(12,wanted+Math.min(4,queries.length));
     const unique=[],seen=new Set();
     const perQuery=Math.max(1,Math.min(4,Math.ceil(wanted/queries.length)));
-    for(let i=0;i<queries.length&&unique.length<wanted;i++){
+    const fetchPerQuery=Math.max(perQuery,Math.min(4,perQuery+1));
+    for(let i=0;i<queries.length&&unique.length<candidateTarget;i++){
       try{
         const media=await getCreatorWebMedia().searchAndIngest(WORKSPACE,{
           query:queries[i],
           provider:String(provider||'auto'),
           orientation:String(orientation||'portrait'),
-          count:Math.min(perQuery,wanted-unique.length),
+          count:Math.min(fetchPerQuery,candidateTarget-unique.length),
           inspect:(rel)=>getCreatorEngine().inspectAsset(WORKSPACE,rel),
           animateImage:(rel,opts)=>getCreatorEngine().animateStillAsset(WORKSPACE,rel,opts),
           manifestId:(String(manifestId||'auto').slice(0,78)+'-q'+String(i+1).padStart(2,'0')).slice(0,90)
@@ -4819,20 +4821,26 @@ async function creatorAutoWebAssets({title='',script='',query='',provider='auto'
           const key=String(rel||'');
           if(!key||seen.has(key))continue;
           seen.add(key);unique.push(key);
-          if(unique.length>=wanted)break;
+          if(unique.length>=candidateTarget)break;
         }
       }catch(_){}
     }
     if(unique.length){
+      const recent=creatorRecentWebAssetSet(7);
+      const ordered=creatorPreferFreshAssetPaths(unique,recent,wanted);
+      const freshCount=ordered.filter(rel=>!recent.has(rel)).length;
       remember({
         kind:'creator_auto_web_media',
         queries:queries.slice(0,4),
         orientation:String(orientation||''),
-        count:unique.length,
+        count:ordered.length,
+        candidateCount:unique.length,
+        freshCount,
+        freshnessDays:7,
         localQueryOnly:true,
         sceneAware:queries.length>1
       });
-      return unique;
+      return ordered;
     }
   }catch(_){}
   return[];
@@ -6068,6 +6076,7 @@ async function verifyUncertainCampaignStep(mission){
         if(String(meta&&meta.missionId||'')===String(mission.id)&&String(meta&&meta.mode||'')==='longform'){
           const quality=creator.probeRenderedLongform(expected,status.ffprobe);
           if(quality.ok){
+            try{creatorMarkWebAssetsUsed(meta&&meta.sourceAssets,{missionId:mission.id,type:String(mission.type||'creator_longform_recovery')})}catch(_){}
             return engine.resolveUncertainStep(WORKSPACE,mission.id,{
               completed:true,
               artifact:{output:expected,metadata:metaFile,quality,recovered:true},
@@ -6097,6 +6106,7 @@ async function verifyUncertainCampaignStep(mission){
         if(String(meta&&meta.missionId||'')===String(mission.id)){
           const quality=creator.probeRenderedShort(expected,status.ffprobe);
           if(quality.ok){
+            try{creatorMarkWebAssetsUsed(meta&&meta.sourceAssets,{missionId:mission.id,type:String(mission.type||'creator_short_recovery')})}catch(_){}
             return engine.resolveUncertainStep(WORKSPACE,mission.id,{
               completed:true,
               artifact:{output:expected,metadata:metaFile,quality,recovered:true},
@@ -6510,6 +6520,7 @@ async function runDurableMission(id){
           assetHashes:selected.map(x=>x.sha256),
           missionId:id
         });
+        try{creatorMarkWebAssetsUsed(out.assets.map(x=>path.relative(WORKSPACE,x).replace(/\\/g,'/')),{missionId:id,type:String(mission.type||'creator_longform')})}catch(_){}
         mission=engine.completeStep(WORKSPACE,id,{artifact:{
           output:out.output,
           subtitle:out.subtitle,
@@ -6561,6 +6572,7 @@ async function runDurableMission(id){
           assetHashes:selected.map(x=>x.sha256),
           missionId:id
         });
+        try{creatorMarkWebAssetsUsed(out.assets.map(x=>path.relative(WORKSPACE,x).replace(/\\/g,'/')),{missionId:id,type:String(mission.type||'creator_short')})}catch(_){}
         mission=engine.completeStep(WORKSPACE,id,{artifact:{
           output:out.output,
           subtitle:out.subtitle,
