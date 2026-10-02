@@ -101,6 +101,13 @@ function inspectAsset(workspace,relativePath){
     return{ok:false,code:'CREATOR_ASSET_PROBE_FAILED',file:info.rel,message:String(e.message||e).slice(0,400)};
   }
 }
+function assetDestinationName(relativePath,sha256){
+  const ext=path.extname(String(relativePath||'')).toLowerCase();
+  const stem=safeName(path.basename(String(relativePath||''),ext));
+  const hash=String(sha256||'').replace(/[^a-f0-9]/gi,'').toLowerCase().slice(0,10);
+  if(!hash)throw new Error('CREATOR_ASSET_HASH_REQUIRED');
+  return stem+'-'+hash+ext;
+}
 function listAssets(workspace){
   const dirs=creatorDirs(workspace);
   try{
@@ -404,5 +411,6 @@ module.exports={
   listAssets,
   inspectAsset,
   assetSafeName,
+  assetDestinationName,
   CREATOR_ASSET_EXTENSIONS
 };
