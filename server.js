@@ -454,6 +454,46 @@ function restoreSnapshot(s){
     state.workers.devices[id]={...live,name:d.name||live.name||id,approved:!!d.approved,roles:Array.isArray(d.roles)?d.roles:[],allowedCapabilities:Array.isArray(d.allowedCapabilities)?d.allowedCapabilities:[]};
   }
 }
+function sanitizeMissionTelemetry(raw){
+  if(!raw||typeof raw!=='object')return null;
+  const counts=raw.counts&&typeof raw.counts==='object'?raw.counts:{};
+  const queue=Array.isArray(raw.queue)?raw.queue.slice(0,8).map(m=>{
+    const step=m&&m.step&&typeof m.step==='object'?m.step:null;
+    return{
+      id:String(m&&m.id||'').replace(/[^A-Za-z0-9_-]/g,'').slice(0,90),
+      type:String(m&&m.type||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80),
+      label:String(m&&m.label||'').replace(/[\r\n\t]/g,' ').trim().slice(0,160),
+      status:String(m&&m.status||'').replace(/[^A-Za-z0-9_-]/g,'').slice(0,40),
+      currentStep:Math.max(0,Math.min(100,Number(m&&m.currentStep)||0)),
+      step:step?{
+        name:String(step.name||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80),
+        status:String(step.status||'').replace(/[^A-Za-z0-9_-]/g,'').slice(0,40),
+        attempts:Math.max(0,Math.min(1000,Number(step.attempts)||0)),
+        dependency:String(step.dependency||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80)
+      }:null,
+      artifacts:Array.isArray(m&&m.artifacts)?m.artifacts.map(x=>String(x||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80)).filter(Boolean).slice(0,20):[]
+    };
+  }):[];
+  return{
+    ok:raw.ok!==false,
+    scheduler:String(raw.scheduler||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80),
+    openCount:Math.max(0,Math.min(10000,Number(raw.openCount)||0)),
+    counts:{
+      queued:Math.max(0,Math.min(10000,Number(counts.queued)||0)),
+      waitingDependency:Math.max(0,Math.min(10000,Number(counts.waitingDependency)||0)),
+      needsVerification:Math.max(0,Math.min(10000,Number(counts.needsVerification)||0)),
+      running:Math.max(0,Math.min(10000,Number(counts.running)||0))
+    },
+    queue,
+    lastRunAt:Number(raw.lastRunAt)||null,
+    lastResult:raw.lastResult&&typeof raw.lastResult==='object'?{
+      status:String(raw.lastResult.status||'').replace(/[^A-Za-z0-9_-]/g,'').slice(0,40),
+      missionId:String(raw.lastResult.missionId||'').replace(/[^A-Za-z0-9_-]/g,'').slice(0,90),
+      dependency:String(raw.lastResult.dependency||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80),
+      at:String(raw.lastResult.at||'').slice(0,64)
+    }:null
+  };
+}
 function publicState(){
   const signedPc=Object.values(state.workers.devices).filter(w=>w.approved&&workerOnline(w)).sort((a,b)=>new Date(b.lastSeen)-new Date(a.lastSeen))[0];
   const pc=signedPc||state.workers.pc;
@@ -477,6 +517,7 @@ function publicState(){
         lastSeen:pc.lastSeen,
         capabilities:pc.capabilities||[],
         memory:pc.memory||null,
+        missions:pc.missions||null,
         online:workerOnline(pc)
       },
       devices:publicDevices()
@@ -1053,13 +1094,14 @@ const server=http.createServer((req,res)=>{
         name:String(d.name||'PC Worker'),
         version:d.version?String(d.version):null,
         lastSeen:now(),
-        capabilities:Array.isArray(d.capabilities)?d.capabilities.slice(0,50):[],
+        capabilities:Array.isArray(d.capabilities)?[...new Set(d.capabilities.map(x=>String(x||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,100)).filter(Boolean))].slice(0,160):[],
         networkTag:ipTag(req),
         memory:d.memory&&typeof d.memory==='object'?{
           records:Number(d.memory.records)||0,
           bytes:Number(d.memory.bytes)||0,
           lastAt:d.memory.lastAt?String(d.memory.lastAt):null
-        }:null
+        }:null,
+        missions:sanitizeMissionTelemetry(d.missions)
       };
       const deviceId=d.deviceId?String(d.deviceId).replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80):null;
       if(deviceId){
