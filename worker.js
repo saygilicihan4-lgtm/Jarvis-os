@@ -7366,7 +7366,7 @@ async function repairLocalRuntime(){
     ['install-jarvis-startup.ps1','JARVIS Silent Startup'],
     ['jarvis-creator-engine.js',"ENGINE_VERSION='1.4'"],
     ['jarvis-creator-semantic-quality.js',"SEMANTIC_QUALITY_VERSION='1.4'"],
-    ['jarvis-creator-web-media.js',"WEB_MEDIA_VERSION='1.0'"],
+    ['jarvis-creator-web-media.js',"CREATOR_WEB_MEDIA_VERSION='1.0'"],
     ['jarvis-browser-operator.js',"BROWSER_OPERATOR_VERSION='1.0'"],
     ['jarvis-commerce-engine.js',"ENGINE_VERSION='1.0'"],
     ['jarvis-shopify-connect.ps1','SHOPIFY SECURE CONNECT'],
