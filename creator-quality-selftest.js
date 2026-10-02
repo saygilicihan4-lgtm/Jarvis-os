@@ -9,8 +9,8 @@ assert.ok(worker.includes("'creator_quality_gate_v1'"),'Creator quality gate cap
 assert.ok(worker.includes("'creator_quality_recovery_v1'"),'Creator quality recovery capability missing');
 assert.ok(worker.includes("jarvis-creator-engine.js',\"ENGINE_VERSION='1.4'"),'Creator Engine 1.4 runtime signature missing');
 assert.ok(worker.includes("quality:out.quality"),'render artifact must retain measured quality');
-assert.ok(worker.includes("creator.applyRenderedAudioQuality(creator.probeRenderedShort(expected,status.ffprobe),expected,status.ffmpeg,{mode:'short'})"),'Short recovery must rerun technical + final audio gates');
-assert.ok(worker.includes("creator.applyRenderedAudioQuality(creator.probeRenderedLongform(expected,status.ffprobe),expected,status.ffmpeg,{mode:'longform'})"),'long-form recovery must rerun technical + final audio gates');
+assert.ok(worker.includes("creator.applyRenderedMediaQuality(creator.probeRenderedShort(expected,status.ffprobe),expected,status.ffmpeg,{mode:'short'})"),'Short recovery must rerun technical + final media gates');
+assert.ok(worker.includes("creator.applyRenderedMediaQuality(creator.probeRenderedLongform(expected,status.ffprobe),expected,status.ffmpeg,{mode:'longform'})"),'long-form recovery must rerun technical + final media gates');
 assert.ok(worker.includes("artifact:{output:expected,metadata:metaFile,quality,thumbnail:meta&&meta.thumbnail||null,recovered:true}"),'recovered render must retain quality + thumbnail evidence');
 assert.ok(worker.includes("creatorQualityGateReady:CAPS.includes('creator_quality_gate_v1')"),'PC acceptance must require Creator quality gate');
 
@@ -22,11 +22,11 @@ assert.ok(creator.includes("width:Number(video&&video.width)===1080"),'1080 widt
 assert.ok(creator.includes("height:Number(video&&video.height)===1920"),'1920 height requirement missing');
 assert.ok(creator.includes("Math.abs(fps-30)<=0.05"),'30 FPS requirement missing');
 assert.ok(creator.includes("duration>=11.8&&duration<=18.8"),'12-18s tolerance requirement missing');
-assert.ok(creator.includes("const quality=applyRenderedAudioQuality(")&&creator.includes("probeRenderedShort(outFile,status.ffprobe)"),'post-render technical + final audio gate invocation missing');
+assert.ok(creator.includes("const quality=applyRenderedMediaQuality(")&&creator.includes("probeRenderedShort(outFile,status.ffprobe)"),'post-render technical + final media gate invocation missing');
 assert.ok(creator.includes("e.code=String(quality.code||'CREATOR_QUALITY_FAILED')"),'quality failure must fail closed');
 assert.ok(creator.includes("quality,\n    visualEdit,\n    thumbnail:thumbnail&&thumbnail.ok?thumbnail.path:null,\n    thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),\n    soundDesign,\n    audioMaster:creatorAudioMasterProfile(),\n    narrationActivity,\n    output:path.relative(workspace,outFile)"),'quality + visual edit + thumbnail + sound design + audio master + narration activity evidence missing from Creator job metadata');
 assert.ok(creator.includes("probeNarrationActivity,"),'narration activity probe export missing');
-assert.ok(creator.includes("probeRenderedAudioLoudness,")&&creator.includes("applyRenderedAudioQuality,"),'final audio quality exports missing');
+assert.ok(creator.includes("probeRenderedAudioLoudness,")&&creator.includes("applyRenderedAudioQuality,")&&creator.includes("probeRenderedVisualActivity,")&&creator.includes("applyRenderedMediaQuality,"),'final media quality exports missing');
 assert.ok(creator.includes("creatorAudioMasterFilter,")&&creator.includes("creatorAudioMasterProfile,"),'audio master exports missing');
 assert.ok(creator.includes("probeRenderedShort,")&&creator.includes("probeRenderedLongform,")&&creator.includes("listAssets,"),'quality probe exports missing');
 
