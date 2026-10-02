@@ -2848,7 +2848,9 @@ function nativeAgentTools(){
                   script:{type:'string',description:'12-18 saniyelik Türkçe anlatım metni.'},
                   youtubeTitle:{type:'string'},
                   youtubeDescription:{type:'string'},
-                  creatorAssets:{type:'array',maxItems:5,items:{type:'string'},description:'İsteğe bağlı creator-assets/... yolları; verilen sıra bu videonun storyboard sahne sırası olur.'}
+                  creatorAssets:{type:'array',maxItems:5,items:{type:'string'},description:'İsteğe bağlı creator-assets/... yolları; verilen sıra bu videonun storyboard sahne sırası olur.'},
+                  webMediaQuery:{type:'string',description:'İsteğe bağlı. Bu Short için ücretsiz/lisanslı internet B-roll arama sorgusu; creatorAssets boşsa kullanılır.'},
+                  webMediaProvider:{type:'string',enum:['auto','wikimedia','pexels','pixabay'],description:'Varsayılan auto.'}
                 },
                 required:['script'],
                 additionalProperties:false
@@ -3319,6 +3321,25 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
       return{ok:false,message:'Creator batch görevi yalnızca açık toplu video üretim isteğiyle başlatılır.'};
     }
     try{
+      if(Array.isArray(a.items)){
+        for(let i=0;i<a.items.length;i++){
+          const item=a.items[i]&&typeof a.items[i]==='object'?a.items[i]:null;
+          if(!item||Array.isArray(item.creatorAssets)&&item.creatorAssets.length||!String(item.webMediaQuery||'').trim())continue;
+          try{
+            const ready=getCreatorEngine().prepare(WORKSPACE,{allowInstall:true});
+            if(!ready.ok||!ready.ffprobe)continue;
+            const media=await getCreatorWebMedia().searchAndIngest(WORKSPACE,{
+              query:String(item.webMediaQuery).trim(),
+              provider:String(item.webMediaProvider||'auto'),
+              orientation:'portrait',
+              count:5,
+              inspect:(rel)=>getCreatorEngine().inspectAsset(WORKSPACE,rel),
+              manifestId:'batch-'+Date.now()+'-'+String(i+1).padStart(2,'0')
+            });
+            item.creatorAssets=media.assets;
+          }catch(_){}
+        }
+      }
       const mission=createCreatorBatchMission(a);
       const out=await runDurableMission(mission.id);
       return{
