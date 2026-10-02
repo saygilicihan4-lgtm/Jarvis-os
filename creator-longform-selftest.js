@@ -34,7 +34,9 @@ assert.ok(source.includes("actualSize>=1024*1024"),'minimum output size gate mis
 assert.ok(source.includes("const quality=probeRenderedLongform(outFile,status.ffprobe)"),'post-render long-form quality gate missing');
 assert.ok(source.includes("mode:'longform'"),'long-form metadata mode missing');
 assert.ok(source.includes("sourceAssetHashes:Array.isArray(assetHashes)"),'long-form asset hash metadata missing');
-assert.ok(source.includes("renderLongform,\n  probeRenderedShort,\n  probeRenderedLongform"),'long-form exports missing');
+assert.strictEqual(typeof creator.renderLongform,'function','long-form renderer export missing');
+assert.strictEqual(typeof creator.probeRenderedShort,'function','Shorts probe export missing');
+assert.strictEqual(typeof creator.probeRenderedLongform,'function','long-form probe export missing');
 
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'jarvis-longform-test-'));
 const assetDir=path.join(tmp,'creator-assets');
