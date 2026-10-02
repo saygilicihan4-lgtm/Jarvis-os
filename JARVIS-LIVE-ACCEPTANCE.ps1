@@ -87,7 +87,7 @@ try {
 
 try {
   $acc=Invoke-Json "http://127.0.0.1:8765/acceptance-snapshot" "GET" $null 20
-  $accOk=($acc.ok -eq $true -and $acc.corePass -eq $true -and [string]$acc.worker.version -eq "2.98.0")
+  $accOk=($acc.ok -eq $true -and $acc.corePass -eq $true -and [string]$acc.worker.version -eq "2.99.0")
   $startupDetail=if($acc.startup.windows){"silent="+$acc.startup.silentOk+" task="+$acc.startup.taskRegistered+" hiddenAction="+$acc.startup.hiddenTaskAction+" visibleShells="+@($acc.startup.visibleJarvisShells).Count}else{"Windows startup check deferred"}
   $accountDetail=("shopify="+$acc.accountSetup.shopifyConnected+" youtube="+$acc.accountSetup.youtubeLoggedIn)
   Add-Result "PC acceptance snapshot" $accOk ("Worker "+$acc.worker.version+" · "+$startupDetail+" · "+$accountDetail+" · report="+$acc.report)
