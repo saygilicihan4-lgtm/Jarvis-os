@@ -326,9 +326,17 @@ function buildLongformStoryboard(assets,durationSeconds,transitionSeconds=0.35,t
   const sceneDuration=(duration+(transition*(count-1)))/count;
   const transitions=['fade','smoothleft','wipeleft','slideright','smoothright'];
 
+  const narrativeOrdered=list.length>=6;
   return Array.from({length:count},(_,index)=>{
-    const assetIndex=index%list.length;
-    const cycle=Math.floor(index/list.length);
+    const assetIndex=narrativeOrdered
+      ?Math.min(list.length-1,Math.floor((index*list.length)/count))
+      :index%list.length;
+    const firstIndex=narrativeOrdered
+      ?Math.floor((assetIndex*count)/list.length)
+      :assetIndex;
+    const cycle=narrativeOrdered
+      ?Math.max(0,index-firstIndex)
+      :Math.floor(index/list.length);
     const start=index*(sceneDuration-transition);
     const end=Math.min(duration,start+sceneDuration);
     return{
@@ -336,6 +344,7 @@ function buildLongformStoryboard(assets,durationSeconds,transitionSeconds=0.35,t
       file:list[assetIndex],
       assetIndex,
       cycle,
+      narrativeOrder:narrativeOrdered?'progressive':'cyclic',
       sourceOffset:Number((((cycle*7)+(assetIndex*3))%45).toFixed(3)),
       motionPhase:Number(((index%8)*0.7).toFixed(3)),
       start:Number(start.toFixed(3)),
@@ -774,7 +783,8 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     averageSceneSeconds:storyboard.length?Number((duration/storyboard.length).toFixed(3)):0,
     maxSceneSeconds:Number(maxSceneDuration.toFixed(3)),
     transitions:[...new Set(storyboard.map(x=>x.transition).filter(Boolean))],
-    motion:assets.length?'subtle-pan-crop':'procedural'
+    motion:assets.length?'subtle-pan-crop':'procedural',
+    narrativeAssetOrder:assets.length>=6?'progressive':'cyclic'
   };
   if(assets.length&&!visualEdit.ok){
     const e=new Error('Creator long-form edit rhythm quality gate failed.');
@@ -894,7 +904,7 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     visualEdit,
     output:path.relative(workspace,outFile),
     subtitle:path.relative(workspace,srtFile),
-    profile:{width:1920,height:1080,fps:30,codec:'H.264',audio:'AAC',durationTarget:'9-11m',multiScene:true,transition:'varied',sceneTarget:'20-30s',motion:'subtle-pan-crop'}
+    profile:{width:1920,height:1080,fps:30,codec:'H.264',audio:'AAC',durationTarget:'9-11m',multiScene:true,transition:'varied',sceneTarget:'20-30s',motion:'subtle-pan-crop',narrativeAssetOrder:assets.length>=6?'progressive':'cyclic'}
   };
   fs.writeFileSync(metaFile,JSON.stringify(meta,null,2),'utf8');
 
