@@ -4,7 +4,7 @@ const assert=require('assert');
 const worker=fs.readFileSync('./worker.js','utf8');
 const startup=fs.readFileSync('./jarvis-startup.ps1','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.95.0'"),'worker 2.95.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.96.0'"),'worker 2.96.0 required');
 assert.ok(worker.includes('bootstrap_migration_v2'),'bootstrap v2 capability missing');
 assert.ok(worker.includes('bootstrap_migration_v3'),'bootstrap v3 capability missing');
 assert.ok(worker.includes('bootstrap_migration_v4'),'bootstrap v4 capability missing');
@@ -17,7 +17,7 @@ assert.ok(worker.includes("['jarvis-creator-engine.js',\"ENGINE_VERSION='1.0'\"]
 assert.ok(worker.includes("['jarvis-browser-operator.js',\"BROWSER_OPERATOR_VERSION='1.0'\"]"),'browser operator bootstrap missing');
 assert.ok(worker.includes("['jarvis-commerce-engine.js',\"ENGINE_VERSION='1.0'\"]"),'commerce engine bootstrap missing');
 assert.ok(worker.includes("['jarvis-shopify-connect.ps1','SHOPIFY SECURE CONNECT']"),'Shopify connector bootstrap missing');
-assert.ok(worker.includes("['jarvis-youtube-studio.js',\"YOUTUBE_STUDIO_VERSION='1.0'\"]"),'YouTube Studio draft bootstrap missing');
+assert.ok(worker.includes("['jarvis-youtube-studio.js',\"YOUTUBE_STUDIO_VERSION='1.1'\"]"),'YouTube Studio draft bootstrap missing');
 assert.ok(worker.includes("['jarvis-mission-engine.js',\"MISSION_ENGINE_VERSION='1.0'\"]"),'Mission Engine bootstrap missing');
 assert.ok(worker.includes("['JARVIS-PC-ACCEPTANCE.ps1','JARVIS PC ACCEPTANCE V1']"),'PC acceptance bootstrap missing');
 assert.ok(worker.includes("try{missionEngine=require('./jarvis-mission-engine')}catch(_){}"),'Mission Engine must be optional during migration');
