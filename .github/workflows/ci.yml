@@ -31,6 +31,7 @@ jobs:
           node --check mission-autoresume-selftest.js
           node --check mission-scheduler-selftest.js
           node --check mission-console-selftest.js
+          node --check mission-control-selftest.js
           node --check creator-mission-selftest.js
           node --check shopify-mission-selftest.js
           node --check approval-gate-selftest.js
@@ -77,6 +78,8 @@ jobs:
         run: node mission-scheduler-selftest.js
       - name: Mission console selftest
         run: node mission-console-selftest.js
+      - name: Mission control selftest
+        run: node mission-control-selftest.js
       - name: Creator mission selftest
         run: node creator-mission-selftest.js
       - name: Shopify mission selftest
