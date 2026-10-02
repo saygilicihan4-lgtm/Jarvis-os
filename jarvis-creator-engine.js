@@ -284,7 +284,7 @@ function buildStoryboard(assets,durationSeconds,transitionSeconds=0.18){
     };
   });
 }
-function buildShortStoryboard(assets,durationSeconds,transitionSeconds=0.18,targetSceneSeconds=3.2,maxScenes=7){
+function buildShortStoryboard(assets,durationSeconds,transitionSeconds=0.18,targetSceneSeconds=3.2,maxScenes=7,hookSceneSeconds=0.9){
   const list=Array.isArray(assets)?assets.filter(Boolean):[];
   if(!list.length)return[];
   const duration=Math.max(1,Number(durationSeconds)||15);
@@ -292,19 +292,25 @@ function buildShortStoryboard(assets,durationSeconds,transitionSeconds=0.18,targ
   const target=Math.max(2.4,Math.min(4.2,Number(targetSceneSeconds)||3.2));
   const cap=Math.max(list.length,Math.min(8,Number(maxScenes)||7));
   const desired=Math.max(list.length,Math.ceil(duration/target));
-  const count=Math.min(cap,desired);
-  const sceneDuration=(duration+(transition*(count-1)))/count;
+  const count=Math.max(2,Math.min(cap,desired));
+  const hook=Math.max(0.75,Math.min(1.05,Number(hookSceneSeconds)||0.9));
+  const totalSceneSeconds=duration+(transition*(count-1));
+  const regularSceneSeconds=Math.max(2.2,(totalSceneSeconds-hook)/Math.max(1,count-1));
   const transitions=['fade','smoothleft','wipeleft','slideright','smoothright'];
+  let cursor=0;
   return Array.from({length:count},(_,index)=>{
     const assetIndex=index%list.length;
     const cycle=Math.floor(index/list.length);
-    const start=index*(sceneDuration-transition);
-    const end=Math.min(duration,start+sceneDuration);
+    const start=index===0?0:Math.max(0,cursor-transition);
+    const planned=index===0?hook:regularSceneSeconds;
+    const end=index===count-1?duration:Math.min(duration,start+planned);
+    cursor=end;
     return{
       index,
       file:list[assetIndex],
       assetIndex,
       cycle,
+      hook:index===0,
       sourceOffset:Number((((cycle*1.6)+(assetIndex*0.7))%8).toFixed(3)),
       motionPhase:Number(((index%7)*0.85).toFixed(3)),
       start:Number(start.toFixed(3)),
@@ -654,14 +660,18 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
   const explicitAssets=Array.isArray(assetFiles)&&assetFiles.length>0;
   const assets=explicitAssets?resolveAssetSelection(workspace,assetFiles,5):selectAssets(workspace,base,5);
   const transition=assets.length?0.18:0;
-  const storyboard=buildShortStoryboard(assets,duration,transition,3.2,7);
+  const storyboard=buildShortStoryboard(assets,duration,transition,3.2,7,0.9);
   const maxSceneDuration=storyboard.length?Math.max(...storyboard.map(x=>Number(x.duration||0))):0;
+  const hookScene=storyboard[0]||null;
+  const hookSeconds=Number(hookScene&&hookScene.duration||0);
   const visualEdit={
-    ok:!assets.length||(storyboard.length>=Math.min(4,Math.ceil(duration/4.2))&&maxSceneDuration<=4.5),
+    ok:!assets.length||(storyboard.length>=Math.min(4,Math.ceil(duration/4.2))&&maxSceneDuration<=4.5&&hookSeconds>=0.75&&hookSeconds<=1.05&&hookScene&&hookScene.hook===true),
     sceneCount:storyboard.length,
     distinctAssets:assets.length,
     averageSceneSeconds:storyboard.length?Number((duration/storyboard.length).toFixed(3)):0,
     maxSceneSeconds:Number(maxSceneDuration.toFixed(3)),
+    hookSeconds:Number(hookSeconds.toFixed(3)),
+    hookAssetIndex:hookScene?Number(hookScene.assetIndex):-1,
     transitions:[...new Set(storyboard.map(x=>x.transition).filter(Boolean))],
     motion:assets.length?'dynamic-pan-crop':'procedural'
   };
@@ -785,7 +795,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     output:path.relative(workspace,outFile),
     subtitle:path.relative(workspace,srtFile),
     burnedSubtitle:path.relative(workspace,assFile),
-    profile:{width:1080,height:1920,fps:30,codec:'H.264',audio:'AAC',durationTarget:'12-18s',multiScene:true,transition:'varied',sceneTarget:'2.5-4s',motion:'dynamic-pan-crop',captions:'kinetic-pop-fade'}
+    profile:{width:1080,height:1920,fps:30,codec:'H.264',audio:'AAC',durationTarget:'12-18s',multiScene:true,transition:'varied',hookTarget:'0.75-1.05s',sceneTarget:'2.5-4s',motion:'dynamic-pan-crop',captions:'kinetic-pop-fade'}
   };
   fs.writeFileSync(metaFile,JSON.stringify(meta,null,2),'utf8');
 
