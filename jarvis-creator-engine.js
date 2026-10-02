@@ -40,6 +40,7 @@ function creatorDirs(workspace){
   };
 }
 const CREATOR_ASSET_EXTENSIONS=new Set(['.mp4','.mov','.mkv','.webm','.m4v']);
+const CREATOR_IMAGE_EXTENSIONS=new Set(['.jpg','.jpeg','.png','.webp']);
 function safeWorkspaceVideo(workspace,relativePath){
   const root=path.resolve(String(workspace||''));
   const original=String(relativePath||'').trim();
@@ -61,6 +62,108 @@ function safeWorkspaceVideo(workspace,relativePath){
   if(lst.size<1024)throw new Error('CREATOR_ASSET_TOO_SMALL');
   if(lst.size>1024*1024*1024)throw new Error('CREATOR_ASSET_TOO_LARGE');
   return{root,rel,full,real,ext,bytes:lst.size};
+}
+function safeWorkspaceImage(workspace,relativePath){
+  const root=path.resolve(String(workspace||''));
+  const original=String(relativePath||'').trim();
+  if(!original||original.includes('\0')||/^[\\/]/.test(original)||/^[A-Za-z]:[\\/]/.test(original))throw new Error('CREATOR_IMAGE_BAD_PATH');
+  const rel=original.replace(/\\/g,'/').replace(/^\/+/, '').trim();
+  if(!rel||rel.split('/').some(x=>x==='.'||x==='..'))throw new Error('CREATOR_IMAGE_BAD_PATH');
+  const parts=rel.split('/').filter(Boolean);
+  if(parts.length!==2||parts[0]!=='creator-web-inbox')throw new Error('CREATOR_IMAGE_SCOPE');
+  const full=path.resolve(root,rel);
+  if(path.dirname(full)!==path.resolve(root,'creator-web-inbox'))throw new Error('CREATOR_IMAGE_SCOPE');
+  if(!fs.existsSync(full))throw new Error('CREATOR_IMAGE_SOURCE_MISSING');
+  const lst=fs.lstatSync(full);
+  if(lst.isSymbolicLink())throw new Error('CREATOR_IMAGE_SYMLINK_BLOCKED');
+  if(!lst.isFile())throw new Error('CREATOR_IMAGE_NOT_FILE');
+  const realRoot=fs.realpathSync(root),real=fs.realpathSync(full);
+  if(!(real===realRoot||real.startsWith(realRoot+path.sep)))throw new Error('CREATOR_IMAGE_SYMLINK_ESCAPE');
+  const ext=path.extname(full).toLowerCase();
+  if(!CREATOR_IMAGE_EXTENSIONS.has(ext))throw new Error('CREATOR_IMAGE_UNSUPPORTED_EXTENSION');
+  if(lst.size<1024)throw new Error('CREATOR_IMAGE_TOO_SMALL');
+  if(lst.size>50*1024*1024)throw new Error('CREATOR_IMAGE_TOO_LARGE');
+  return{root,rel,full,real,ext,bytes:lst.size};
+}
+function sha256File(file){
+  const h=crypto.createHash('sha256');
+  const fd=fs.openSync(file,'r');
+  try{
+    const buf=Buffer.alloc(1024*1024);
+    let read=0,pos=0;
+    while((read=fs.readSync(fd,buf,0,buf.length,pos))>0){
+      h.update(buf.subarray(0,read));
+      pos+=read;
+    }
+  }finally{fs.closeSync(fd)}
+  return h.digest('hex');
+}
+function animateStillAsset(workspace,relativePath,{orientation='portrait',duration=6}={}){
+  const info=safeWorkspaceImage(workspace,relativePath);
+  const status=ffmpegStatus(workspace);
+  if(!status.ok||!status.ffprobe){
+    const e=new Error('Still image animation requires FFmpeg + FFprobe');
+    e.code=!status.ok?'FFMPEG_MISSING':'FFPROBE_MISSING';
+    throw e;
+  }
+  const mode=String(orientation||'portrait').toLowerCase()==='landscape'?'landscape':'portrait';
+  const seconds=Math.max(4,Math.min(12,Number(duration)||6));
+  const sourceSha256=sha256File(info.full);
+  const styleHash=crypto.createHash('sha256').update(sourceSha256+'|'+mode+'|'+seconds.toFixed(3)).digest('hex').slice(0,20);
+  const dirs=creatorDirs(workspace);
+  const outFile=path.join(dirs.assets,'still-'+styleHash+'.mp4');
+  let reused=false;
+  if(fs.existsSync(outFile)){
+    const probe=inspectAsset(workspace,path.relative(workspace,outFile).replace(/\\/g,'/'));
+    if(!probe.ok)throw new Error('CREATOR_IMAGE_MOTION_EXISTING_INVALID');
+    reused=true;
+  }else{
+    const filter=mode==='landscape'
+      ?"scale=2048:1152:force_original_aspect_ratio=increase,crop=1920:1080:x='(in_w-out_w)/2+40*sin(t*0.75)':y='(in_h-out_h)/2+22*cos(t*0.55)',fps=30,setsar=1,format=yuv420p"
+      :"scale=1180:2100:force_original_aspect_ratio=increase,crop=1080:1920:x='(in_w-out_w)/2+35*sin(t*0.95)':y='(in_h-out_h)/2+55*cos(t*0.72)',fps=30,setsar=1,format=yuv420p";
+    try{
+      execFile(status.ffmpeg,[
+        '-y','-hide_banner','-loglevel','error',
+        '-loop','1','-i',info.full,
+        '-t',seconds.toFixed(3),
+        '-vf',filter,
+        '-an',
+        '-c:v','libx264','-preset','veryfast','-crf','20','-pix_fmt','yuv420p',
+        '-movflags','+faststart',
+        outFile
+      ],{timeout:4*60*1000,maxBuffer:1024*1024*16});
+    }catch(err){
+      const message=String((err&&err.stderr)||err.message||err).slice(-2500);
+      throw new Error('Creator still image animation failed: '+message);
+    }
+  }
+  const rel=path.relative(workspace,outFile).replace(/\\/g,'/');
+  const probe=inspectAsset(workspace,rel);
+  const expectedWidth=mode==='landscape'?1920:1080;
+  const expectedHeight=mode==='landscape'?1080:1920;
+  if(!probe.ok||String(probe.codec||'').toLowerCase()!=='h264'||Number(probe.width)!==expectedWidth||Number(probe.height)!==expectedHeight||Number(probe.duration)<seconds-0.35){
+    if(!reused){try{fs.unlinkSync(outFile)}catch(_){}}
+    const e=new Error('CREATOR_IMAGE_MOTION_VERIFY_FAILED');
+    e.code='CREATOR_IMAGE_MOTION_VERIFY_FAILED';
+    e.probe=probe;
+    throw e;
+  }
+  return{
+    ok:true,
+    path:rel,
+    fullPath:outFile,
+    sha256:sha256File(outFile),
+    bytes:Number(fs.statSync(outFile).size||0),
+    sourceSha256,
+    sourcePath:info.rel,
+    orientation:mode,
+    duration:Number(probe.duration||seconds),
+    width:Number(probe.width||0),
+    height:Number(probe.height||0),
+    codec:String(probe.codec||''),
+    reused,
+    derivedFromImage:true
+  };
 }
 function assetSafeName(relativePath){
   const input=String(relativePath||'');
@@ -836,5 +939,7 @@ module.exports={
   inspectAsset,
   assetSafeName,
   assetDestinationName,
-  CREATOR_ASSET_EXTENSIONS
+  animateStillAsset,
+  CREATOR_ASSET_EXTENSIONS,
+  CREATOR_IMAGE_EXTENSIONS
 };
