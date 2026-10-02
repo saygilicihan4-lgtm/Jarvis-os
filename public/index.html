@@ -2645,11 +2645,11 @@ async function load(){
   if(window.devAgentDetail)devAgentDetail.textContent=developerReady
     ?'Durable workspace app builder · conflict-safe source writes'
     :(pc.online?'Developer capability update required':'PC Worker dependent');
-  const creatorReady=pc.online&&pcCaps.includes('creator_multiscene_v2')&&pcCaps.includes('creator_short_mission_v1');
+  const creatorReady=pc.online&&pcCaps.includes('creator_multiscene_v2')&&pcCaps.includes('creator_short_mission_v1')&&pcCaps.includes('youtube_publish_approval_v1');
   creatorAgent.textContent=!pc.online?'STANDBY':creatorReady?'READY':'UPDATE REQUIRED';
   creatorAgent.style.color=creatorReady?'#65ffbf':pc.online?'#ffca66':'';
   if(window.creatorAgentDetail)creatorAgentDetail.textContent=creatorReady
-    ?'Multi-scene Shorts · burned captions · durable mission'
+    ?'Multi-scene Shorts · burned captions · durable mission · YouTube approval gate'
     :(pc.online?'Creator capability update required':'PC Worker dependent');
   const commerceReady=pc.online&&pcCaps.includes('commerce_engine_v1')&&pcCaps.includes('shopify_product_draft_v1')&&pcCaps.includes('shopify_product_mission_v1');
   commerceAgent.textContent=!pc.online?'STANDBY':commerceReady?'READY':'UPDATE REQUIRED';
