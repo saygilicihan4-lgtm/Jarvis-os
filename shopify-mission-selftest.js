@@ -4,7 +4,7 @@ const assert=require('assert');
 const worker=fs.readFileSync('./worker.js','utf8');
 const html=fs.readFileSync('./public/index.html','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.90.0'"),'Worker 2.90.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.91.0'"),'Worker 2.91.0 required');
 assert.ok(worker.includes("'shopify_product_mission_v1'"),'durable Shopify product mission capability missing');
 assert.ok(worker.includes('function createShopifyProductMission(args={})'),'Shopify product mission factory missing');
 assert.ok(worker.includes("type:'shopify_product'"),'shopify_product mission type missing');
