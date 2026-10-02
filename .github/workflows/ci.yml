@@ -25,6 +25,8 @@ jobs:
           node --check browser-operator-selftest.js
           node --check jarvis-commerce-engine.js
           node --check jarvis-youtube-studio.js
+          node --check jarvis-mission-engine.js
+          node --check mission-engine-selftest.js
           node --check youtube-studio-selftest.js
           node --check commerce-engine-selftest.js
           node --check business-tools-selftest.js
@@ -48,6 +50,8 @@ jobs:
         run: node business-tools-selftest.js
       - name: YouTube Studio draft selftest
         run: node youtube-studio-selftest.js
+      - name: Durable mission engine selftest
+        run: node mission-engine-selftest.js
       - name: Routing selftest
         run: node routing-selftest.js
       - name: Bootstrap bridge selftest
