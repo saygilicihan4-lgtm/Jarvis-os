@@ -4,7 +4,7 @@ const os=require('os');
 const childProcess=require('child_process');
 const crypto=require('crypto');
 
-const ENGINE_VERSION='1.4';
+const ENGINE_VERSION='1.5';
 const CREATOR_PROFILE_VERSION='2.0';
 
 function execFile(exe,args,opts={}){
@@ -181,6 +181,68 @@ function buildStoryboard(assets,durationSeconds,transitionSeconds=0.18){
     };
   });
 }
+function buildLongformStoryboard(assets,assetInfo,durationSeconds,transitionSeconds=0.18,targetSceneSeconds=8.5,maxScenes=72){
+  const list=Array.isArray(assets)?assets.filter(Boolean):[];
+  if(!list.length)return[];
+  const duration=Math.max(1,Number(durationSeconds)||600);
+  const transition=list.length>1?Math.max(0,Math.min(0.3,Number(transitionSeconds)||0)):0;
+  const target=Math.max(6.5,Math.min(10,Number(targetSceneSeconds)||8.5));
+  const cap=Math.max(list.length,Math.min(96,Number(maxScenes)||72));
+  const desired=Math.ceil(Math.max(1,duration-transition)/Math.max(1,target-transition));
+  const count=Math.max(list.length,Math.min(cap,desired));
+  const sceneDuration=(duration+(transition*(count-1)))/count;
+  const info=Array.isArray(assetInfo)?assetInfo:[];
+  return Array.from({length:count},(_,index)=>{
+    const assetIndex=index%list.length;
+    const file=list[assetIndex];
+    const meta=info[assetIndex]||{};
+    const sourceDuration=Math.max(0,Number(meta.duration)||0);
+    const available=Math.max(0,sourceDuration-sceneDuration-0.05);
+    const h=crypto.createHash('sha1').update(String(file)+'#'+String(index)).digest();
+    const ratio=h.readUInt32BE(0)/0xffffffff;
+    const sourceStart=available>0?ratio*available:0;
+    const start=index*(sceneDuration-transition);
+    const end=Math.min(duration,start+sceneDuration);
+    return{
+      index,
+      assetIndex,
+      file,
+      start:Number(start.toFixed(3)),
+      end:Number(end.toFixed(3)),
+      duration:Number((end-start).toFixed(3)),
+      sourceStart:Number(sourceStart.toFixed(3)),
+      sourceDuration:Number(sourceDuration.toFixed(3)),
+      transition:index===0?null:'fade'
+    };
+  });
+}
+function evaluateLongformEditQuality(storyboard,assets,durationSeconds){
+  const scenes=Array.isArray(storyboard)?storyboard:[];
+  const duration=Math.max(1,Number(durationSeconds)||600);
+  const durations=scenes.map(x=>Number(x&&x.duration)||0).filter(x=>x>0);
+  const average=durations.length?durations.reduce((a,b)=>a+b,0)/durations.length:0;
+  const max=durations.length?Math.max(...durations):0;
+  const min=durations.length?Math.min(...durations):0;
+  const distinct=new Set((Array.isArray(assets)?assets:[]).map(x=>String(x||''))).size;
+  const checks={
+    sceneCount:scenes.length>=Math.max(12,Math.ceil(duration/10.5))&&scenes.length<=96,
+    pacing:average>=6.5&&average<=10.5,
+    maxScene:max>0&&max<=11,
+    visualVariety:distinct>=3
+  };
+  return{
+    ok:Object.values(checks).every(Boolean),
+    checks,
+    measured:{
+      scenes:scenes.length,
+      distinctAssets:distinct,
+      averageSceneSeconds:Number(average.toFixed(3)),
+      minSceneSeconds:Number(min.toFixed(3)),
+      maxSceneSeconds:Number(max.toFixed(3))
+    }
+  };
+}
+
 function supportsSubtitles(ffmpeg){
   if(!ffmpeg)return false;
   try{
@@ -514,6 +576,8 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     sourceAssets:assets.map(x=>path.relative(workspace,x)),
     storyboard:storyboard.map(x=>({...x,file:path.relative(workspace,x.file)})),
     captionsBurned,
+    professionalMode:professionalMode===true,
+    editQuality,
     quality,
     output:path.relative(workspace,outFile),
     subtitle:path.relative(workspace,srtFile),
@@ -530,15 +594,17 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     asset:assets[0]||null,
     assets,
     storyboard,
-    sceneCount:assets.length,
+    sceneCount:storyboard.length,
     captionsBurned,
+    professionalMode:professionalMode===true,
+    editQuality,
     duration,
     quality,
     profileVersion:CREATOR_PROFILE_VERSION
   };
 }
 
-function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId='',assetHashes=[]}){
+function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId='',assetHashes=[],professionalMode=false}){
   if(!workspace)throw new Error('workspace required');
   if(!voicePath||!fs.existsSync(voicePath))throw new Error('creator long-form voice file missing');
   const status=ffmpegStatus(workspace);
@@ -568,8 +634,25 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
 
   const explicitAssets=Array.isArray(assetFiles)&&assetFiles.length>0;
   const assets=explicitAssets?resolveAssetSelection(workspace,assetFiles,20):selectAssets(workspace,base,12);
-  const transition=assets.length>1?0.35:0;
-  const storyboard=buildStoryboard(assets,duration,transition);
+  const assetInfo=assets.map(full=>{
+    const rel=path.relative(workspace,full).replace(/\\/g,'/');
+    const inspected=inspectAsset(workspace,rel);
+    if(!inspected.ok){
+      const e=new Error('Long-form visual asset doğrulaması başarısız: '+rel+' · '+String(inspected.code||'INVALID'));
+      e.code=String(inspected.code||'CREATOR_LONGFORM_INVALID_ASSET');
+      throw e;
+    }
+    return inspected;
+  });
+  const transition=assets.length>1?0.18:0;
+  const storyboard=buildLongformStoryboard(assets,assetInfo,duration,transition,8.5,72);
+  const editQuality=evaluateLongformEditQuality(storyboard,assets,duration);
+  if(professionalMode&&!editQuality.ok){
+    const e=new Error('Creator Pro Cut görsel kalite kapısı başarısız: '+JSON.stringify(editQuality.measured));
+    e.code=editQuality.checks.visualVariety?'CREATOR_PRO_EDIT_QUALITY_FAILED':'CREATOR_PRO_VISUALS_REQUIRED';
+    e.editQuality=editQuality;
+    throw e;
+  }
   const captionsBurned=supportsSubtitles(status.ffmpeg);
   fs.writeFileSync(srtFile,buildSrt(cleanScript,duration),'utf8');
 
@@ -580,14 +663,26 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     args.push('-i',voicePath);
 
     const filters=[];
+    const sourceLabels=new Map();
+    assets.forEach((_,assetIndex)=>{
+      const scenes=storyboard.filter(x=>x.assetIndex===assetIndex);
+      if(scenes.length<=1){
+        if(scenes[0])sourceLabels.set(scenes[0].index,'['+assetIndex+':v]');
+        return;
+      }
+      const labels=scenes.map((scene,n)=>'[ls'+assetIndex+'_'+n+']');
+      filters.push('['+assetIndex+':v]split='+scenes.length+labels.join(''));
+      scenes.forEach((scene,n)=>sourceLabels.set(scene.index,labels[n]));
+    });
     storyboard.forEach((scene,i)=>{
+      const source=sourceLabels.get(scene.index)||('['+scene.assetIndex+':v]');
       filters.push(
-        '['+i+':v]'+
+        source+
+        'trim=start='+scene.sourceStart.toFixed(3)+':duration='+scene.duration.toFixed(3)+','+
+        'setpts=PTS-STARTPTS,'+
         'scale=1920:1080:force_original_aspect_ratio=increase,'+
         'crop=1920:1080,'+
         'fps=30,setsar=1,'+
-        'trim=duration='+scene.duration.toFixed(3)+','+
-        'setpts=PTS-STARTPTS,'+
         'format=yuv420p[v'+i+']'
       );
     });
@@ -596,7 +691,7 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     if(storyboard.length>1){
       for(let i=1;i<storyboard.length;i++){
         const out='lx'+i;
-        const offset=i*(storyboard[0].duration-transition);
+        const offset=Number(storyboard[i].start||0);
         filters.push('['+videoLabel+'][v'+i+']xfade=transition=fade:duration='+transition.toFixed(3)+':offset='+offset.toFixed(3)+'['+out+']');
         videoLabel=out;
       }
@@ -679,13 +774,13 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     quality,
     output:path.relative(workspace,outFile),
     subtitle:path.relative(workspace,srtFile),
-    profile:{width:1920,height:1080,fps:30,codec:'H.264',audio:'AAC',durationTarget:'9-11m',multiScene:true,transition:'fade'}
+    profile:{width:1920,height:1080,fps:30,codec:'H.264',audio:'AAC',durationTarget:'9-11m',multiScene:true,transition:'pro-fade',sceneTarget:'8-10s',maxScenes:72}
   };
   fs.writeFileSync(metaFile,JSON.stringify(meta,null,2),'utf8');
 
   return{
     ok:true,
-    message:'Long-form video hazır: '+outFile+' · 1920x1080 · 30 FPS · H.264 · '+Number(duration/60).toFixed(1)+' dk · '+(assets.length?assets.length+' sahne':'procedural hareketli arka plan')+(captionsBurned?' · altyazı videoya işlendi':' · altyazı ayrı SRT'),
+    message:'Long-form video hazır: '+outFile+' · 1920x1080 · 30 FPS · H.264 · '+Number(duration/60).toFixed(1)+' dk · '+(assets.length?storyboard.length+' shot / '+assets.length+' asset':'procedural hareketli arka plan')+(professionalMode?' · PRO CUT':'')+(captionsBurned?' · altyazı videoya işlendi':' · altyazı ayrı SRT'),
     output:outFile,
     subtitle:srtFile,
     metadata:metaFile,
@@ -709,6 +804,8 @@ module.exports={
   buildSrt,
   selectAssets,
   buildStoryboard,
+  buildLongformStoryboard,
+  evaluateLongformEditQuality,
   supportsSubtitles,
   ffmpegFilterPath,
   renderShort,
