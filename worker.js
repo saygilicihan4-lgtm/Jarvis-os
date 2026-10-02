@@ -2850,7 +2850,8 @@ function nativeAgentTools(){
                   youtubeDescription:{type:'string'},
                   creatorAssets:{type:'array',maxItems:5,items:{type:'string'},description:'İsteğe bağlı creator-assets/... yolları; verilen sıra bu videonun storyboard sahne sırası olur.'},
                   webMediaQuery:{type:'string',description:'İsteğe bağlı. Bu Short için ücretsiz/lisanslı internet B-roll arama sorgusu; creatorAssets boşsa kullanılır.'},
-                  webMediaProvider:{type:'string',enum:['auto','wikimedia','pexels','pixabay'],description:'Varsayılan auto.'}
+                  webMediaProvider:{type:'string',enum:['auto','wikimedia','pexels','pixabay'],description:'Varsayılan auto.'},
+                  webMediaAuto:{type:'boolean',description:'Varsayılan true. creatorAssets yoksa başlık/senaryodan kısa yerel sorgu üretip lisanslı medya aramayı deneyebilir.'}
                 },
                 required:['script'],
                 additionalProperties:false
@@ -2877,6 +2878,7 @@ function nativeAgentTools(){
             creatorAssets:{type:'array',maxItems:5,items:{type:'string'},description:'İsteğe bağlı creator-assets/... yolları; verilen sıra storyboard sahne sırası olur.'},
             webMediaQuery:{type:'string',description:'İsteğe bağlı. İnternetten ücretsiz/lisanslı stock klip isteniyorsa konu sorgusu. creatorAssets boşsa önce Creator Web Media ile portrait klip alınır.'},
             webMediaProvider:{type:'string',enum:['auto','wikimedia','pexels','pixabay'],description:'Web medya sağlayıcısı; varsayılan auto.'},
+            webMediaAuto:{type:'boolean',description:'Varsayılan true. creatorAssets yoksa JARVIS başlık/senaryodan kısa bir sorgu üretip lisanslı medya aramayı deneyebilir.'},
             includeYouTube:{type:'boolean',description:'true ise render sonrası YouTube Studio taslağı hazırlanır.'},
             publish:{type:'boolean',description:'true ise YouTube taslağından sonra PUBLIC yayın için approval gate oluşturur; bu çağrıda yayınlanmaz.'}
           },
@@ -2901,6 +2903,7 @@ function nativeAgentTools(){
             creatorAssets:{type:'array',maxItems:20,items:{type:'string'},description:'İsteğe bağlı creator-assets/... klipleri; sıra storyboard sırasıdır.'},
             webMediaQuery:{type:'string',description:'İsteğe bağlı. İnternetten ücretsiz/lisanslı stock klip isteniyorsa konu sorgusu. creatorAssets boşsa önce Creator Web Media ile landscape klip alınır.'},
             webMediaProvider:{type:'string',enum:['auto','wikimedia','pexels','pixabay'],description:'Web medya sağlayıcısı; varsayılan auto.'},
+            webMediaAuto:{type:'boolean',description:'Varsayılan true. creatorAssets yoksa JARVIS başlık/senaryodan kısa bir sorgu üretip lisanslı medya aramayı deneyebilir.'},
             includeYouTube:{type:'boolean',description:'true ise render sonrası YouTube Studio DRAFT hazırlanır.'},
             publish:{type:'boolean',description:'true yalnızca PUBLIC approval adımını sıraya koyar; bu çağrıda yayınlamaz.'}
           },
@@ -2950,6 +2953,9 @@ function nativeAgentTools(){
             youtubeTitle:{type:'string'},
             youtubeDescription:{type:'string'},
             creatorAssets:{type:'array',maxItems:5,items:{type:'string'},description:'İsteğe bağlı creator-assets/... yolları; verilen sıra reklam videosu sahne sırası olur.'},
+            webMediaQuery:{type:'string',description:'İsteğe bağlı lisanslı B-roll arama sorgusu.'},
+            webMediaProvider:{type:'string',enum:['auto','wikimedia','pexels','pixabay'],description:'Varsayılan auto.'},
+            webMediaAuto:{type:'boolean',description:'Varsayılan true. creatorAssets yoksa ürün/başlık/senaryodan lisanslı B-roll aramayı deneyebilir.'},
             includeShopify:{type:'boolean'},
             includeYouTube:{type:'boolean'},
             publishYouTube:{type:'boolean',description:'true ise YouTube taslağından sonra PUBLIC yayın için approval gate oluşturur; bu çağrıda yayınlanmaz.'}
