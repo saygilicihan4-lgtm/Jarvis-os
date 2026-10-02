@@ -23,15 +23,25 @@ try{
   const silent=audio('silent','anullsrc=r=48000:cl=mono:d=12.2');
   const quiet=audio('quiet','sine=frequency=440:sample_rate=48000:duration=12.2,volume=0.002');
   const normal=audio('normal','sine=frequency=440:sample_rate=48000:duration=12.2,volume=0.2');
+  const mastered=path.join(workspace,'mastered.wav');
+  cp.execFileSync(status.ffmpeg,[
+    '-y','-hide_banner','-loglevel','error','-i',quiet,
+    '-af',creator.creatorAudioMasterFilter({pad:false}),
+    '-c:a','pcm_s16le',mastered
+  ],{timeout:60000,stdio:['ignore','pipe','pipe']});
 
   const silentProbe=creator.probeNarrationActivity(silent,status.ffmpeg);
   const quietProbe=creator.probeNarrationActivity(quiet,status.ffmpeg);
   const normalProbe=creator.probeNarrationActivity(normal,status.ffmpeg);
+  const finalProbe=creator.probeNarrationActivity(mastered,status.ffmpeg,{minMeanDb:-45,minPeakDb:-30});
+  const silentFinalProbe=creator.probeNarrationActivity(silent,status.ffmpeg,{minMeanDb:-45,minPeakDb:-30});
 
   assert.strictEqual(silentProbe.ok,false,'digital silence must fail narration activity gate');
   assert.strictEqual(silentProbe.code,'CREATOR_NARRATION_SILENT');
   assert.strictEqual(quietProbe.ok,true,'very quiet but recoverable narration must pass');
   assert.strictEqual(normalProbe.ok,true,'normal narration must pass');
+  assert.strictEqual(finalProbe.ok,true,'mastered final audio must pass stricter output activity gate');
+  assert.strictEqual(silentFinalProbe.ok,false,'silent final audio must fail stricter output activity gate');
   assert.ok(quietProbe.maxDb>-80&&quietProbe.meanDb>-85);
   assert.strictEqual(quietProbe.method,'ffmpeg-volumedetect');
 
@@ -54,8 +64,10 @@ try{
   assert.strictEqual((source.match(/const narrationActivity=probeNarrationActivity\(voicePath,status\.ffmpeg\);/g)||[]).length,2,'Short and long-form must both gate narration activity');
   assert.ok(source.includes('narrationActivity,\n    output:path.relative(workspace,outFile)'),'Short metadata must retain narration activity evidence');
   assert.ok(source.includes('audioMaster:creatorAudioMasterProfile(),\n    narrationActivity,\n    profile:{width:1920,height:1080'),'long-form metadata must retain narration activity evidence');
+  assert.strictEqual((source.match(/const outputAudioActivity=probeNarrationActivity\(outFile,status\.ffmpeg,\{minMeanDb:-45,minPeakDb:-30\}\);/g)||[]).length,2,'Short and long-form must both verify final mastered audio activity');
+  assert.strictEqual((source.match(/quality\.checks\.audioSignal=outputAudioActivity\.ok;/g)||[]).length,2,'final audio activity evidence must be retained in quality payloads');
 
-  console.log('CREATOR NARRATION ACTIVITY V89 SELFTEST PASS',JSON.stringify({silent:silentProbe,quiet:quietProbe,normal:normalProbe}));
+  console.log('CREATOR NARRATION ACTIVITY V89 SELFTEST PASS',JSON.stringify({silent:silentProbe,quiet:quietProbe,normal:normalProbe,final:finalProbe}));
 }finally{
   fs.rmSync(workspace,{recursive:true,force:true});
 }
