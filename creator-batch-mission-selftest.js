@@ -8,6 +8,8 @@ assert.ok(worker.includes("'creator_batch_mission_v1'"),'creator batch mission c
 assert.ok(worker.includes("'creator_batch_child_dedupe_v1'"),'creator batch child dedupe capability missing');
 assert.ok(worker.includes("'creator_batch_youtube_draft_v1'"),'creator batch YouTube draft capability missing');
 assert.ok(worker.includes("'mission_cooperative_yield_v1'"),'cooperative scheduler yield capability missing');
+assert.ok(worker.includes("'creator_batch_storyboard_lock_v1'"),'reused child storyboard lock capability missing');
+assert.ok(worker.includes("'creator_batch_render_binding_v1'"),'batch render binding capability missing');
 assert.ok(worker.includes("'creator_storyboard_v1'"),'Creator storyboard capability must remain');
 assert.ok(worker.includes("'creator_explicit_assets_v1'"),'Creator explicit asset capability must remain');
 assert.ok(worker.includes("'creator_render_mission_bind_v1'"),'Creator mission-bound render capability must remain');
@@ -35,6 +37,8 @@ assert.ok(worker.includes('const existing=findCreatorBatchChild(parentMission.id
 assert.ok(worker.includes('if(existing)return existing;'),'batch must reuse existing child');
 
 assert.ok(worker.includes('function verifyCreatorBatchItemAssets(item)'),'parent-baseline storyboard verification missing');
+assert.ok(worker.includes('function creatorBatchAssetsMatch(expected,actual)'),'parent/child storyboard equality helper missing');
+assert.ok(worker.includes('CREATOR_BATCH_CHILD_STORYBOARD_MISMATCH'),'reused child storyboard mismatch guard missing');
 assert.ok(worker.includes("throw new Error('CREATOR_STORYBOARD_HASH_CONFLICT: '+rel)"),'batch must stop when parent storyboard hash changes');
 assert.ok(worker.includes("getCreatorEngine().inspectAsset(WORKSPACE,rel)"),'batch child creation must revalidate selected videos');
 assert.ok(worker.includes('creatorAssets:selected.map(x=>x.path)'),'verified ordered storyboard must be passed into child');
@@ -55,6 +59,9 @@ assert.ok(worker.includes("dependency:'mission:'+child.id"),'parent must yield t
 assert.ok(worker.includes("if(/^creator_batch_youtube_\\d+$/.test(step.name))"),'batch YouTube DRAFT execution/recovery missing');
 assert.ok(worker.includes("missionId:receiptId"),'each batch DRAFT must use its own receipt id');
 assert.ok(worker.includes("published:false"),'batch YouTube artifact must remain non-public');
+assert.ok(worker.includes("BATCH_RENDER_BINDING_MISMATCH"),'YouTube DRAFT must require mission/storyboard-bound render metadata');
+assert.ok(worker.includes("String(meta&&meta.missionId||'')!==String(child.id)"),'batch DRAFT must verify render metadata child mission binding');
+assert.ok(worker.includes("meta&&meta.sourceAssetHashes"),'batch DRAFT must verify rendered storyboard hash list');
 
 const depStart=worker.indexOf("if(/^mission:M-[A-Z0-9-]{12,80}$/.test(dep))");
 const depEnd=worker.indexOf("if(dep==='pc_runtime')",depStart);
