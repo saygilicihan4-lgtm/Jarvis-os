@@ -2550,7 +2550,8 @@ function nativeAgentTools(){
           properties:{
             file:{type:'string',description:'JARVIS workspace içindeki video dosya yolu. Creator aracının ürettiği output yolu kullanılabilir.'},
             title:{type:'string',description:'YouTube video başlığı.'},
-            description:{type:'string',description:'YouTube açıklaması.'}
+            description:{type:'string',description:'YouTube açıklaması.'},
+            thumbnail:{type:'string',description:'İsteğe bağlı workspace içindeki JPG/PNG/WebP thumbnail yolu. Yüklenemezse video DRAFT akışı devam eder.'}
           },
           required:['file'],
           additionalProperties:false
@@ -3128,7 +3129,8 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
       const out=await getYoutubeStudio().prepareDraft(getBrowserOperator(),WORKSPACE,{
         file,
         title:String(a.title||'').trim(),
-        description:String(a.description||'').trim()
+        description:String(a.description||'').trim(),
+        thumbnail:String(a.thumbnail||'').trim()
       });
       return{ok:!!out.ok,message:out.message};
     }catch(e){
