@@ -25,6 +25,7 @@ assert.ok(telemetry.includes('queue:cleanQueue'),'sanitized mission queue missin
 assert.ok(telemetry.includes('paused:Number(h.counts.paused||0)'),'paused mission count missing from cloud telemetry');
 assert.ok(server.includes('paused:Math.max(0,Math.min(10000,Number(counts.paused)||0))'),'server sanitizer drops paused mission count');
 assert.ok(css.includes('.status.paused'),'paused durable mission styling missing');
+assert.ok(html.includes("paused=Number(c.paused||0)"),'paused count is not shown in Mission Console state');
 
 assert.ok(server.includes('function sanitizeMissionTelemetry(raw)'),'server mission telemetry sanitizer missing');
 assert.ok(server.includes('.slice(0,160)'), 'server still truncates capability heartbeat too aggressively');
