@@ -640,13 +640,26 @@ function findHookMotionWindow(file,ffmpeg,{windowSeconds=0.95,maxOffsetSeconds=3
   };
 }
 
+function streamTimelineCoverage(stream,containerDuration){
+  const finite=value=>value!==null&&value!==undefined&&String(value).trim()!==''&&Number.isFinite(Number(value))?Number(value):null;
+  const start=finite(stream&&stream.start_time);
+  const duration=finite(stream&&stream.duration);
+  const target=finite(containerDuration);
+  const end=start!==null&&duration!==null?start+duration:null;
+  // Allow muxing/encoder rounding and the renderer's short end padding, but
+  // never accept a container duration as evidence of complete media tracks.
+  const tolerance=0.5;
+  const ok=start!==null&&duration!==null&&duration>0&&target!==null&&target>0&&
+    Math.abs(start)<=tolerance&&Math.abs(end-target)<=tolerance;
+  return{ok,start,duration,end,tolerance};
+}
 function probeRenderedShort(file,ffprobe){
   if(!ffprobe)return{ok:false,code:'FFPROBE_MISSING',message:'Rendered Shorts kalite doğrulaması için FFprobe gerekli.'};
   if(!file||!fs.existsSync(file))return{ok:false,code:'CREATOR_OUTPUT_MISSING',message:'Rendered MP4 bulunamadı.'};
   try{
     const raw=execFile(ffprobe,[
       '-v','error',
-      '-show_entries','stream=index,codec_type,codec_name,width,height,r_frame_rate:format=duration',
+      '-show_entries','stream=index,codec_type,codec_name,width,height,r_frame_rate,start_time,duration:format=duration',
       '-of','json',
       file
     ],{timeout:20000,maxBuffer:1024*1024*2}).trim();
@@ -655,6 +668,8 @@ function probeRenderedShort(file,ffprobe){
     const video=streams.find(x=>x&&x.codec_type==='video');
     const audio=streams.find(x=>x&&x.codec_type==='audio');
     const duration=Number(data&&data.format&&data.format.duration);
+    const videoTimeline=streamTimelineCoverage(video,duration);
+    const audioTimeline=streamTimelineCoverage(audio,duration);
     const rate=String(video&&video.r_frame_rate||'0/1').split('/');
     const fpsDen=Number(rate[1]||1),fpsNum=Number(rate[0]||0);
     const fps=fpsDen?fpsNum/fpsDen:0;
@@ -665,7 +680,9 @@ function probeRenderedShort(file,ffprobe){
       width:Number(video&&video.width)===1080,
       height:Number(video&&video.height)===1920,
       fps:Number.isFinite(fps)&&Math.abs(fps-30)<=0.05,
-      duration:Number.isFinite(duration)&&duration>=11.8&&duration<=18.8
+      duration:Number.isFinite(duration)&&duration>=11.8&&duration<=18.8,
+      videoTimeline:videoTimeline.ok,
+      audioTimeline:audioTimeline.ok
     };
     const ok=Object.values(checks).every(Boolean);
     return{
@@ -678,7 +695,11 @@ function probeRenderedShort(file,ffprobe){
         width:Number(video&&video.width||0),
         height:Number(video&&video.height||0),
         fps:Number(Number(fps||0).toFixed(3)),
-        duration:Number(Number(duration||0).toFixed(3))
+        duration:Number(Number(duration||0).toFixed(3)),
+        videoStart:videoTimeline.start,
+        videoDuration:videoTimeline.duration,
+        audioStart:audioTimeline.start,
+        audioDuration:audioTimeline.duration
       },
       message:ok?'Creator Shorts kalite kapısı geçti.':'Creator Shorts teknik kalite kapısı başarısız.'
     };
@@ -692,7 +713,7 @@ function probeRenderedLongform(file,ffprobe){
   try{
     const raw=execFile(ffprobe,[
       '-v','error',
-      '-show_entries','stream=index,codec_type,codec_name,width,height,r_frame_rate:format=duration,size,format_name',
+      '-show_entries','stream=index,codec_type,codec_name,width,height,r_frame_rate,start_time,duration:format=duration,size,format_name',
       '-of','json',
       file
     ],{timeout:30000,maxBuffer:1024*1024*2}).trim();
@@ -702,6 +723,8 @@ function probeRenderedLongform(file,ffprobe){
     const audio=streams.find(x=>x&&x.codec_type==='audio');
     const format=data&&data.format||{};
     const duration=Number(format.duration);
+    const videoTimeline=streamTimelineCoverage(video,duration);
+    const audioTimeline=streamTimelineCoverage(audio,duration);
     const declaredSize=Number(format.size);
     const actualSize=Number(fs.statSync(file).size||0);
     const rate=String(video&&video.r_frame_rate||'0/1').split('/');
@@ -715,6 +738,8 @@ function probeRenderedLongform(file,ffprobe){
       height:Number(video&&video.height)===1080,
       fps:Number.isFinite(fps)&&Math.abs(fps-30)<=0.05,
       duration:Number.isFinite(duration)&&duration>=540&&duration<=660,
+      videoTimeline:videoTimeline.ok,
+      audioTimeline:audioTimeline.ok,
       container:String(format.format_name||'').toLowerCase().split(',').includes('mp4'),
       size:Number.isFinite(actualSize)&&actualSize>=1024*1024&&(!Number.isFinite(declaredSize)||Math.abs(declaredSize-actualSize)<=16)
     };
@@ -730,6 +755,10 @@ function probeRenderedLongform(file,ffprobe){
         height:Number(video&&video.height||0),
         fps:Number(Number(fps||0).toFixed(3)),
         duration:Number(Number(duration||0).toFixed(3)),
+        videoStart:videoTimeline.start,
+        videoDuration:videoTimeline.duration,
+        audioStart:audioTimeline.start,
+        audioDuration:audioTimeline.duration,
         bytes:actualSize,
         container:String(format.format_name||'')
       },
@@ -1301,6 +1330,7 @@ module.exports={
   fitNarrationRatePercent,
   probeRenderedShort,
   probeRenderedLongform,
+  streamTimelineCoverage,
   probeHookMotion,
   findHookMotionWindow,
   listAssets,
