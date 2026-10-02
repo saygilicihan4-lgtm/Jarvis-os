@@ -85,8 +85,9 @@ async function start(workspace,{preferred='',port=DEFAULT_PORT,url='https://www.
   if(process.platform!=='win32')throw new Error('JARVIS Browser Operator currently requires Windows');
   const current=await status(workspace,port),target=safeUrl(url);
   if(current.running){
-    const browser=findBrowser(preferred||process.env.JARVIS_BROWSER||'');
-    if(browser)childProcess.spawn(browser.exe,['--new-tab',target],{detached:true,windowsHide:true,stdio:'ignore'}).unref();
+    const page=await activePage(port);
+    runCdpPowerShell(page.webSocketDebuggerUrl,'Page.navigate',{url:target});
+    await new Promise(r=>setTimeout(r,500));
     return{...current,opened:target,reused:true};
   }
   const browser=findBrowser(preferred||process.env.JARVIS_BROWSER||'');
