@@ -31,6 +31,7 @@ assert.ok(creator.includes("probeNarrationActivity,"),'narration activity probe 
 assert.ok(creator.includes("probeRenderedAudioLoudness,")&&creator.includes("applyRenderedAudioQuality,"),'final audio quality exports missing');
 assert.ok(creator.includes("probeAudioContinuity,"),'audio continuity probe export missing');
 assert.ok(creator.includes("probeRenderedMotionCoverage,")&&creator.includes("applyRenderedVisualQuality,"),'final visual quality exports missing');
+assert.ok(creator.includes("probeRenderedExposureWindow,")&&creator.includes("probeRenderedVisualIntegrity,"),'visual integrity exports missing');
 assert.ok(creator.includes("creatorAudioMasterFilter,")&&creator.includes("creatorAudioMasterProfile,"),'audio master exports missing');
 assert.ok(creator.includes("probeRenderedShort,")&&creator.includes("probeRenderedLongform,")&&creator.includes("listAssets,"),'quality probe exports missing');
 
