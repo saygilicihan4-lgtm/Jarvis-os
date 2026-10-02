@@ -56,7 +56,7 @@ assert.ok(worker.includes("if(/^creator_batch_youtube_\\d+$/.test(step.name))"),
 assert.ok(worker.includes("missionId:receiptId"),'each batch DRAFT must use its own receipt id');
 assert.ok(worker.includes("published:false"),'batch YouTube artifact must remain non-public');
 
-const depStart=worker.indexOf("if(/^mission:M-[A-Z0-9-]+$/.test(dep))");
+const depStart=worker.indexOf("if(dep.startsWith('mission:'))");
 const depEnd=worker.indexOf("if(dep==='pc_runtime')",depStart);
 assert.ok(depStart>0&&depEnd>depStart,'child mission dependency readiness block missing');
 const depBlock=worker.slice(depStart,depEnd);
