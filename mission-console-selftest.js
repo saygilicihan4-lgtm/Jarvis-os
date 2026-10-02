@@ -33,7 +33,7 @@ assert.ok(html.includes('id="localMissionState"'),'local mission telemetry HUD m
 assert.ok(html.includes('function localMissionCard(m)'),'durable mission card renderer missing');
 assert.ok(html.includes('function renderMissionQueue()'),'combined mission queue renderer missing');
 assert.ok(html.includes("localMissionRuntimeSource='cloud'"),'phone/cloud mission relay fallback missing');
-assert.ok(html.includes("localMissionRuntimeSource='local'"),'direct local mission source missing');
+assert.ok(html.includes("localMissionRuntimeSource=localMissionRuntime?'local':''"),'direct local mission source missing');
 assert.ok(html.includes('pc.missions&&typeof pc.missions'),'cloud worker mission state is not consumed');
 assert.ok(html.includes('const localCards=localQueue.map(localMissionCard)'),'local durable mission cards not rendered');
 assert.ok(css.includes('.local-mission'),'durable mission styling missing');
