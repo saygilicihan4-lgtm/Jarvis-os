@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions
 title JARVIS PC WORKER
-set "LAUNCHER_VERSION=4.0"
+set "LAUNCHER_VERSION=4.1"
 set "AUTOSTART=0"
 set "SILENT=0"
 set "INSTALL_AUTOSTART=0"
@@ -18,6 +18,22 @@ if "%JARVIS_URL%"=="" set "JARVIS_URL=https://jarvis-os-1iuv.onrender.com"
 set "JARVIS_LOG_DIR=%JARVIS_WORKSPACE%\.jarvis-memory"
 set "JARVIS_WORKER_LOG=%JARVIS_LOG_DIR%\worker.log"
 if not exist "%JARVIS_LOG_DIR%" mkdir "%JARVIS_LOG_DIR%" >nul 2>nul
+
+rem Promote a previously validated updater only before the updater is running.
+if exist "%~dp0jarvis-self-update.next.ps1" (
+  move /Y "%~dp0jarvis-self-update.next.ps1" "%~dp0jarvis-self-update.ps1" >nul 2>nul
+)
+
+set "UNIFIED_UPDATE_OK=0"
+if exist "%~dp0jarvis-self-update.ps1" (
+  if "%SILENT%"=="1" (
+    powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "%~dp0jarvis-self-update.ps1" -Silent >>"%JARVIS_WORKER_LOG%" 2>&1
+  ) else (
+    echo [JARVIS] Tum yerel bilesenler guvenli sekilde guncelleniyor...
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0jarvis-self-update.ps1"
+  )
+  if not errorlevel 1 set "UNIFIED_UPDATE_OK=1"
+)
 
 if "%INSTALL_AUTOSTART%"=="1" (
   echo [JARVIS] Cinematic silent startup kuruluyor...
@@ -66,12 +82,14 @@ if "%SILENT%"=="0" (
   echo [JARVIS] Guncelleme kontrol ediliyor...
 )
 
+if "%UNIFIED_UPDATE_OK%"=="0" (
 if "%SILENT%"=="1" (
   echo.>>"%JARVIS_WORKER_LOG%"
   echo [%date% %time%] [JARVIS] LAUNCHER %LAUNCHER_VERSION% hidden startup>>"%JARVIS_WORKER_LOG%"
   powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command "$u='https://raw.githubusercontent.com/saygilicihan4-lgtm/Jarvis-os/main/worker.js?cb=' + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); try { $n=Join-Path $env:TEMP 'jarvis-worker.new.js'; Invoke-WebRequest -UseBasicParsing -Headers @{'Cache-Control'='no-cache';'Pragma'='no-cache'} -Uri $u -OutFile $n -TimeoutSec 20; node --check $n ^| Out-Null; $txt=Get-Content $n -Raw; $signed=($txt -match 'const WORKER_VERSION='); if($LASTEXITCODE -eq 0 -and $signed){ $ver=([regex]::Match($txt,\"const WORKER_VERSION='([^']+)'\")).Groups[1].Value; if(-not (Test-Path 'worker.js') -or ((Get-FileHash $n).Hash -ne (Get-FileHash 'worker.js').Hash)){ Copy-Item $n 'worker.js' -Force; Write-Output ('[JARVIS] Worker updated: v'+$ver) } else { Write-Output ('[JARVIS] Worker current: v'+$ver) } } else { Write-Output '[JARVIS] Update validation failed; current Worker preserved.' }; Remove-Item $n -Force -ErrorAction SilentlyContinue } catch { Write-Output ('[JARVIS] Update skipped: '+$_.Exception.Message); Write-Output '[JARVIS] Current Worker will be used.' }" >>"%JARVIS_WORKER_LOG%" 2>&1
 ) else (
   powershell -NoProfile -ExecutionPolicy Bypass -Command "$u='https://raw.githubusercontent.com/saygilicihan4-lgtm/Jarvis-os/main/worker.js?cb=' + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); try { $n=Join-Path $env:TEMP 'jarvis-worker.new.js'; Invoke-WebRequest -UseBasicParsing -Headers @{'Cache-Control'='no-cache';'Pragma'='no-cache'} -Uri $u -OutFile $n -TimeoutSec 20; node --check $n ^| Out-Null; $txt=Get-Content $n -Raw; $signed=($txt -match 'const WORKER_VERSION='); if($LASTEXITCODE -eq 0 -and $signed){ $ver=([regex]::Match($txt,\"const WORKER_VERSION='([^']+)'\")).Groups[1].Value; if(-not (Test-Path 'worker.js') -or ((Get-FileHash $n).Hash -ne (Get-FileHash 'worker.js').Hash)){ Copy-Item $n 'worker.js' -Force; Write-Host ('[JARVIS] Worker guncellendi ve dogrulandi: v'+$ver) } else { Write-Host ('[JARVIS] Worker guncel: v'+$ver) } } else { Write-Host '[JARVIS] Guncelleme dogrulanamadi; mevcut Worker korundu.' }; Remove-Item $n -Force -ErrorAction SilentlyContinue } catch { Write-Host ('[JARVIS] Guncelleme kontrolu atlandi: '+$_.Exception.Message); Write-Host '[JARVIS] Mevcut Worker kullaniliyor.' }"
+)
 )
 
 if "%SILENT%"=="0" (
