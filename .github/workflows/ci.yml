@@ -95,6 +95,10 @@ jobs:
         run: node pc-acceptance-selftest.js
       - name: Safe PC mission selftest
         run: node pc-mission-selftest.js
+      - name: Workspace file engine selftest
+        run: node workspace-file-engine-selftest.js
+      - name: Workspace file mission selftest
+        run: node workspace-file-mission-selftest.js
       - name: PC self-repair selftest
         run: node pc-self-repair-selftest.js
       - name: Routing selftest
