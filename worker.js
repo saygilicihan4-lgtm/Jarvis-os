@@ -5490,19 +5490,20 @@ async function selectCreatorRelevantAssetBaselines(query,maxItems=12){
     }
   }catch(_){}
   const limit=Math.max(1,Math.min(20,Number(maxItems)||12));
+  const fallbackEligible=ordered.filter(x=>Number(x&&x.score||0)>=1||modelPickedPaths.includes(String(x&&x.path||'')));
   let diversity={
-    rows:ordered.slice(0,limit),
+    rows:fallbackEligible.slice(0,limit),
     evidence:{
       candidateCount:ordered.length,
-      eligibleCount:ordered.length,
-      selectedCount:Math.min(limit,ordered.length),
+      eligibleCount:fallbackEligible.length,
+      selectedCount:Math.min(limit,fallbackEligible.length),
       rejectedSimilarCount:0,
-      rejectedLowRelevanceCount:0,
+      rejectedLowRelevanceCount:Math.max(0,ordered.length-fallbackEligible.length),
       maxSimilarity:null,
-      minScore:null,
+      minScore:1,
       modelAllowlistCount:modelPickedPaths.length,
       fallbackUsed:true,
-      relevanceFloorBlockedAll:false
+      relevanceFloorBlockedAll:ordered.length>0&&fallbackEligible.length===0
     }
   };
   try{
