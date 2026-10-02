@@ -24,9 +24,9 @@ assert.ok(events.every(x=>x.level<=0.05),'SFX must remain well below narration l
 assert.ok(engine.includes("anoisesrc=color=pink:sample_rate=48000:duration=0.24"),'procedural whoosh source missing');
 assert.ok(engine.includes("sine=frequency=118:sample_rate=48000:duration=0.20"),'procedural impact source missing');
 assert.ok(engine.includes("alimiter=limit=0.45[sfx]"),'SFX bed limiter missing');
-assert.ok(engine.includes("amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.95[aout]"),'voice/SFX mix limiter missing');
+assert.ok(engine.includes("amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.95,'+creatorAudioMasterFilter({pad:false})+'[aout]"),'voice/SFX mix limiter + audio master missing');
 assert.ok(engine.includes("profile:'voice-only-fallback'"),'SFX fail-open voice-only fallback missing');
-assert.ok(engine.includes("if(!soundDesign.enabled)args.push('-af','apad=pad_dur=1')"),'voice-only audio fallback path missing');
+assert.ok(engine.includes("if(!soundDesign.enabled)args.push('-af',creatorAudioMasterFilter())"),'voice-only mastered fallback path missing');
 assert.ok(engine.includes("sfx:'procedural-impact-whoosh'"),'Short profile SFX metadata missing');
 assert.ok(!engine.includes('http://')&&!engine.includes('https://'),'Creator engine SFX must not depend on internet media');
 

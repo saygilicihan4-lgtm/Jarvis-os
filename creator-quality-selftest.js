@@ -23,7 +23,8 @@ assert.ok(creator.includes("Math.abs(fps-30)<=0.05"),'30 FPS requirement missing
 assert.ok(creator.includes("duration>=11.8&&duration<=18.8"),'12-18s tolerance requirement missing');
 assert.ok(creator.includes("const quality=probeRenderedShort(outFile,status.ffprobe)"),'post-render quality gate invocation missing');
 assert.ok(creator.includes("e.code=String(quality.code||'CREATOR_QUALITY_FAILED')"),'quality failure must fail closed');
-assert.ok(creator.includes("quality,\n    visualEdit,\n    thumbnail:thumbnail&&thumbnail.ok?thumbnail.path:null,\n    thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),\n    soundDesign,\n    output:path.relative(workspace,outFile)"),'quality + visual edit + thumbnail + sound design evidence missing from Creator job metadata');
+assert.ok(creator.includes("quality,\n    visualEdit,\n    thumbnail:thumbnail&&thumbnail.ok?thumbnail.path:null,\n    thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),\n    soundDesign,\n    audioMaster:creatorAudioMasterProfile(),\n    output:path.relative(workspace,outFile)"),'quality + visual edit + thumbnail + sound design + audio master evidence missing from Creator job metadata');
+assert.ok(creator.includes("creatorAudioMasterFilter,")&&creator.includes("creatorAudioMasterProfile,"),'audio master exports missing');
 assert.ok(creator.includes("probeRenderedShort,")&&creator.includes("probeRenderedLongform,")&&creator.includes("listAssets,"),'quality probe exports missing');
 
 assert.ok(worker.includes('\"Devam et\" tek başına yayınlama onayı değildir'),'Shopify publish gate must remain');

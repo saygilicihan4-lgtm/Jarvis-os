@@ -640,6 +640,29 @@ function findHookMotionWindow(file,ffmpeg,{windowSeconds=0.95,maxOffsetSeconds=3
   };
 }
 
+const CREATOR_AUDIO_MASTER_PROFILE=Object.freeze({
+  targetIntegratedLufs:-16,
+  targetLra:7,
+  targetTruePeakDb:-1.5,
+  sampleRate:48000,
+  method:'ffmpeg-loudnorm'
+});
+function creatorAudioMasterFilter({pad=true}={}){
+  const profile=CREATOR_AUDIO_MASTER_PROFILE;
+  const filters=[];
+  if(pad)filters.push('apad=pad_dur=1');
+  filters.push(
+    'loudnorm=I='+profile.targetIntegratedLufs+
+    ':LRA='+profile.targetLra+
+    ':TP='+profile.targetTruePeakDb
+  );
+  filters.push('aresample='+profile.sampleRate);
+  return filters.join(',');
+}
+function creatorAudioMasterProfile(){
+  return{...CREATOR_AUDIO_MASTER_PROFILE};
+}
+
 function streamTimelineCoverage(stream,containerDuration){
   const finite=value=>value!==null&&value!==undefined&&String(value).trim()!==''&&Number.isFinite(Number(value))?Number(value):null;
   const start=finite(stream&&stream.start_time);
@@ -995,7 +1018,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     if(soundDesign.enabled){
       filters.push('['+voiceInput+':a]aresample=48000,apad=pad_dur=1,volume=1[voicea]');
       filters.push('['+sfxInput+':a]aresample=48000,volume=1[sfxa]');
-      filters.push('[voicea][sfxa]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.95[aout]');
+      filters.push('[voicea][sfxa]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.95,'+creatorAudioMasterFilter({pad:false})+'[aout]');
       audioMap='[aout]';
     }
 
@@ -1007,7 +1030,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
       '-c:v','libx264','-preset','veryfast','-crf','20','-pix_fmt','yuv420p',
       '-c:a','aac','-b:a','160k'
     );
-    if(!soundDesign.enabled)args.push('-af','apad=pad_dur=1');
+    if(!soundDesign.enabled)args.push('-af',creatorAudioMasterFilter());
     args.push('-movflags','+faststart',outFile);
   }else{
     const graph='color=c=0x030712:s=1080x1920:r=30:d='+duration.toFixed(3)+',noise=alls=8:allf=t+u';
@@ -1025,7 +1048,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     args.push(
       '-map','0:v:0','-map','1:a:0',
       '-c:v','libx264','-preset','veryfast','-crf','20','-pix_fmt','yuv420p',
-      '-c:a','aac','-b:a','160k','-af','apad=pad_dur=1',
+      '-c:a','aac','-b:a','160k','-af',creatorAudioMasterFilter(),
       '-movflags','+faststart',
       outFile
     );
@@ -1080,6 +1103,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     thumbnail:thumbnail&&thumbnail.ok?thumbnail.path:null,
     thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),
     soundDesign,
+    audioMaster:creatorAudioMasterProfile(),
     output:path.relative(workspace,outFile),
     subtitle:path.relative(workspace,srtFile),
     burnedSubtitle:path.relative(workspace,assFile),
@@ -1106,6 +1130,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
     thumbnail:thumbnail&&thumbnail.ok?thumbnail.path:null,
     thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),
     soundDesign,
+    audioMaster:creatorAudioMasterProfile(),
     profileVersion:CREATOR_PROFILE_VERSION
   };
 }
@@ -1209,7 +1234,7 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
       '-map','['+videoLabel+']',
       '-map',String(storyboard.length)+':a:0',
       '-c:v','libx264','-preset','veryfast','-crf','20','-pix_fmt','yuv420p',
-      '-c:a','aac','-b:a','192k','-af','apad=pad_dur=1',
+      '-c:a','aac','-b:a','192k','-af',creatorAudioMasterFilter(),
       '-movflags','+faststart',
       outFile
     );
@@ -1229,7 +1254,7 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     args.push(
       '-map','0:v:0','-map','1:a:0',
       '-c:v','libx264','-preset','veryfast','-crf','20','-pix_fmt','yuv420p',
-      '-c:a','aac','-b:a','192k','-af','apad=pad_dur=1',
+      '-c:a','aac','-b:a','192k','-af',creatorAudioMasterFilter(),
       '-movflags','+faststart',
       outFile
     );
@@ -1285,6 +1310,7 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),
     output:path.relative(workspace,outFile),
     subtitle:path.relative(workspace,srtFile),
+    audioMaster:creatorAudioMasterProfile(),
     profile:{width:1920,height:1080,fps:30,codec:'H.264',audio:'AAC',durationTarget:'9-11m',multiScene:true,transition:'varied',sceneTarget:'20-30s',motion:'subtle-pan-crop',narrativeAssetOrder:assets.length>=6?'progressive':'cyclic'}
   };
   fs.writeFileSync(metaFile,JSON.stringify(meta,null,2),'utf8');
@@ -1305,6 +1331,7 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
     visualEdit,
     thumbnail:thumbnail&&thumbnail.ok?thumbnail.path:null,
     thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),
+    audioMaster:creatorAudioMasterProfile(),
     profileVersion:CREATOR_PROFILE_VERSION
   };
 }
@@ -1331,6 +1358,8 @@ module.exports={
   probeRenderedShort,
   probeRenderedLongform,
   streamTimelineCoverage,
+  creatorAudioMasterFilter,
+  creatorAudioMasterProfile,
   probeHookMotion,
   findHookMotionWindow,
   listAssets,
