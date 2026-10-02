@@ -34,7 +34,9 @@ assert.ok(worker.includes("m&&m.type==='creator_short'"),'batch child lookup mus
 assert.ok(worker.includes("String(m.input&&m.input.batchParent||'')===pid"),'batch child lookup must bind parent id');
 assert.ok(worker.includes("Number(m.input&&m.input.batchIndex)===Number(index)"),'batch child lookup must bind item index');
 assert.ok(worker.includes('const existing=findCreatorBatchChild(parentMission.id,index);'),'batch must search existing child before creation');
-assert.ok(worker.includes('if(existing)return existing;'),'batch must reuse existing child');
+assert.ok(worker.includes('if(existing){'),'existing child must enter guarded reuse branch');
+assert.ok(worker.includes("if(!creatorBatchAssetsMatch(selected,existing.input&&existing.input.creatorAssets))"),'existing child must match parent storyboard before reuse');
+assert.ok(worker.includes('return existing;'),'matching existing child must be reused');
 
 assert.ok(worker.includes('function verifyCreatorBatchItemAssets(item)'),'parent-baseline storyboard verification missing');
 assert.ok(worker.includes('function creatorBatchAssetsMatch(expected,actual)'),'parent/child storyboard equality helper missing');
