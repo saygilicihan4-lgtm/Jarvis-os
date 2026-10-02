@@ -4,11 +4,12 @@ const assert=require('assert');
 const worker=fs.readFileSync('./worker.js','utf8');
 const startup=fs.readFileSync('./jarvis-startup.ps1','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.82.0'"),'worker 2.82.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.83.0'"),'worker 2.83.0 required');
 assert.ok(worker.includes('bootstrap_migration_v2'),'bootstrap v2 capability missing');
 assert.ok(worker.includes('bootstrap_migration_v3'),'bootstrap v3 capability missing');
 assert.ok(worker.includes('bootstrap_migration_v4'),'bootstrap v4 capability missing');
 assert.ok(worker.includes('bootstrap_migration_v5'),'bootstrap v5 capability missing');
+assert.ok(worker.includes('bootstrap_migration_v6'),'bootstrap v6 capability missing');
 assert.ok(worker.includes('function bootstrapRuntimeUpgrade()'),'bootstrap migration function missing');
 assert.ok(worker.includes("['jarvis-self-update.ps1',\"UPDATER_VERSION='5.0'\"]"),'updater bootstrap missing');
 assert.ok(worker.includes("['jarvis-update-manifest.json','\"schema\": 1']"),'manifest bootstrap missing');
@@ -18,6 +19,7 @@ assert.ok(worker.includes("['jarvis-commerce-engine.js',\"ENGINE_VERSION='1.0'\"
 assert.ok(worker.includes("['jarvis-shopify-connect.ps1','SHOPIFY SECURE CONNECT']"),'Shopify connector bootstrap missing');
 assert.ok(worker.includes("['jarvis-youtube-studio.js',\"YOUTUBE_STUDIO_VERSION='1.0'\"]"),'YouTube Studio draft bootstrap missing');
 assert.ok(worker.includes("['jarvis-mission-engine.js',\"MISSION_ENGINE_VERSION='1.0'\"]"),'Mission Engine bootstrap missing');
+assert.ok(worker.includes("['JARVIS-PC-ACCEPTANCE.ps1','JARVIS PC ACCEPTANCE V1']"),'PC acceptance bootstrap missing');
 assert.ok(worker.includes("try{missionEngine=require('./jarvis-mission-engine')}catch(_){}"),'Mission Engine must be optional during migration');
 assert.ok(worker.includes('recoverInterruptedMissions(WORKSPACE)'),'Mission recovery startup hook missing');
 assert.ok(worker.includes("try{youtubeStudio=require('./jarvis-youtube-studio')}catch(_){}"),'YouTube Studio module must be optional during migration');
