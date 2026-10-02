@@ -34,9 +34,13 @@ jobs:
           [scriptblock]::Create((Get-Content ./JARVIS-LIVE-ACCEPTANCE.ps1 -Raw)) | Out-Null
           [scriptblock]::Create((Get-Content ./jarvis-startup.ps1 -Raw)) | Out-Null
           [scriptblock]::Create((Get-Content ./install-jarvis-startup.ps1 -Raw)) | Out-Null
+          [scriptblock]::Create((Get-Content ./jarvis-self-update.ps1 -Raw)) | Out-Null
       - name: Startup regression selftest
         shell: pwsh
         run: ./startup-selftest.ps1
+      - name: Self-update regression selftest
+        shell: pwsh
+        run: ./self-update-selftest.ps1
       - name: Server selftest
         run: node selftest.js
       - name: Local Brain integration selftest
