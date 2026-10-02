@@ -2812,6 +2812,49 @@ function nativeAgentTools(){
     {
       type:'function',
       function:{
+        name:'creator_longform_mission',
+        description:'Yaklaşık 10 dakikalık 16:9 HD YouTube videosunu kalıcı, restart-safe Creator görevi olarak üret. Yerel TTS, çok sahneli kurgu, altyazı ve teknik kalite kapısı kullanılır. includeYouTube=true yalnızca YouTube Studio DRAFT hazırlar. publish=true bile PUBLIC adımı ayrı approval gate bekler.',
+        parameters:{
+          type:'object',
+          properties:{
+            campaignName:{type:'string'},
+            script:{type:'string',description:'Yaklaşık 9-11 dakikalık anlatıma uygun tam metin.'},
+            youtubeTitle:{type:'string'},
+            youtubeDescription:{type:'string'},
+            creatorVoice:{type:'string',description:'Edge TTS Neural voice adı; ör. tr-TR-EmelNeural veya en-US-AriaNeural.'},
+            creatorAssets:{type:'array',maxItems:20,items:{type:'string'},description:'İsteğe bağlı creator-assets/... klipleri; sıra storyboard sırasıdır.'},
+            includeYouTube:{type:'boolean',description:'true ise render sonrası YouTube Studio DRAFT hazırlanır.'},
+            publish:{type:'boolean',description:'true yalnızca PUBLIC approval adımını sıraya koyar; bu çağrıda yayınlamaz.'}
+          },
+          required:['script'],
+          additionalProperties:false
+        }
+      }
+    },
+    {
+      type:'function',
+      function:{
+        name:'creator_daily_longform_plan',
+        description:'Her takvim günü en fazla bir yaklaşık 10 dakikalık Creator long-form görevi üreten kalıcı planı aç/kapat/durumunu göster. Plan local model ile farklı evergreen konular seçer, restart sonrası devam eder ve aynı gün duplicate mission oluşturmaz. YouTube yalnız DRAFT olabilir; günlük plan hiçbir zaman PUBLIC adımı oluşturmaz.',
+        parameters:{
+          type:'object',
+          properties:{
+            action:{type:'string',enum:['enable','disable','status']},
+            timezone:{type:'string',description:'IANA timezone; varsayılan Europe/Istanbul.'},
+            language:{type:'string',description:'Anlatım dili.'},
+            creatorVoice:{type:'string',description:'Seçilen dil için Edge TTS Neural voice adı.'},
+            topicPrompt:{type:'string',description:'Konu çeşitliliği ve kanal yönü.'},
+            includeYouTube:{type:'boolean',description:'true ise günlük video render sonrası YouTube Studio DRAFT hazırlanır; PUBLIC olmaz.'},
+            creatorAssets:{type:'array',maxItems:20,items:{type:'string'},description:'İsteğe bağlı sabit Creator klip havuzu seçimi; SHA-256 baseline ile korunur.'}
+          },
+          required:['action'],
+          additionalProperties:false
+        }
+      }
+    },
+    {
+      type:'function',
+      function:{
         name:'varova_campaign_mission',
         description:'Kullanıcı VAROVA için ürün + reklam videosu + isteğe bağlı YouTube Studio taslağı gibi çok adımlı işi tek görev olarak istediğinde kalıcı ve devam ettirilebilir kampanya görevi başlat. Shopify ürünü DRAFT kalır. publishYouTube=true yalnızca YouTube PUBLIC adımını approval gate arkasına sıraya koyar; bu çağrıda yayınlamaz.',
         parameters:{
@@ -3189,6 +3232,31 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
       };
     }catch(e){
       return{ok:false,message:'Creator batch görevi başlatılamadı: '+String(e.message||e).slice(0,700)};
+    }
+  }else if(n==='creator_longform_mission'){
+    const intent=String(userText||'').toLocaleLowerCase('tr-TR');
+    if(!/(?:youtube|video|uzun|long\s*-?form|10\s*(?:dk|dakika)|belgesel)/i.test(intent)||!/(?:hazırla|hazirla|oluştur|olustur|üret|uret|yap|yükle|yukle|yayınla|yayinla|publish)/i.test(intent)){
+      return{ok:false,message:'Kalıcı long-form görevi yalnızca açık uzun video üretim isteğiyle başlatılır.'};
+    }
+    if(a.publish===true&&!/(?:youtube.{0,40}(?:yayınla|yayinla|publish|public)|(?:yayınla|yayinla|publish|public).{0,40}youtube)/i.test(intent)){
+      return{ok:false,message:'YouTube PUBLIC adımını sıraya koymak için bu turda açık yayınlama isteği gerekli.'};
+    }
+    try{
+      const mission=createCreatorLongformMission(a);
+      return{ok:true,message:missionSummaryText(mission)+' · long-form görev scheduler sırasına alındı'+(a.includeYouTube===true?' · YouTube yalnız DRAFT hazırlanacak':'')+(a.publish===true?' · PUBLIC için ayrıca approval gate beklenecek':' · PUBLIC yayın yok')};
+    }catch(e){
+      return{ok:false,message:'Kalıcı long-form görevi başlatılamadı: '+String(e.message||e).slice(0,700)};
+    }
+  }else if(n==='creator_daily_longform_plan'){
+    const intent=String(userText||'').toLocaleLowerCase('tr-TR');
+    if(!/(?:her\s*gün|günlük|gunluk|daily|günde\s*1|gunde\s*1)/i.test(intent)){
+      return{ok:false,message:'Günlük Creator planı yalnızca açık günlük üretim isteğiyle değiştirilebilir.'};
+    }
+    try{
+      const plan=configureCreatorDailyPlan(a);
+      return{ok:true,message:'CREATOR DAILY LONGFORM '+(plan.enabled?'ENABLED':'DISABLED')+' · timezone '+plan.timezone+' · dil '+plan.language+' · YouTube '+(plan.includeYouTube?'DRAFT':'kapalı')+' · PUBLIC otomasyonu yok'+(plan.lastMissionId?' · son mission '+plan.lastMissionId:'')};
+    }catch(e){
+      return{ok:false,message:'Günlük Creator planı güncellenemedi: '+String(e.message||e).slice(0,700)};
     }
   }else if(n==='creator_short_mission'){
     const intent=String(userText||'').toLocaleLowerCase('tr-TR');
@@ -4547,6 +4615,206 @@ function createCreatorLongformMission(args={}){
     input,
     steps
   });
+}
+
+function creatorDailyDefaultPlan(){
+  return{
+    version:1,
+    planId:'creator-daily-longform-v1',
+    enabled:false,
+    timezone:'Europe/Istanbul',
+    language:'Türkçe',
+    creatorVoice:CREATOR_TTS_VOICE,
+    includeYouTube:true,
+    topicPrompt:'Her gün farklı bir alandan geniş kitleye hitap eden, merak uyandıran ve evergreen bir konu seç. Teknoloji, bilim, tarih, kültür, psikoloji, tasarım, uzay, internet kültürü ve günlük yaşam arasında çeşitlilik sağla.',
+    creatorAssets:[],
+    updatedAt:null,
+    lastAttemptAt:null,
+    lastAttemptDate:null,
+    lastCreatedDate:null,
+    lastMissionId:null,
+    lastError:null
+  };
+}
+function safeCreatorDailyTimezone(value){
+  const zone=String(value||'Europe/Istanbul').trim().slice(0,80)||'Europe/Istanbul';
+  try{new Intl.DateTimeFormat('en-US',{timeZone:zone}).format(new Date());return zone}catch(_){return'Europe/Istanbul'}
+}
+function readCreatorDailyPlan(){
+  const base=creatorDailyDefaultPlan();
+  try{
+    if(!fs.existsSync(CREATOR_DAILY_PLAN_FILE))return base;
+    const x=JSON.parse(fs.readFileSync(CREATOR_DAILY_PLAN_FILE,'utf8'));
+    if(!x||typeof x!=='object')return base;
+    return{
+      ...base,
+      ...x,
+      version:1,
+      planId:'creator-daily-longform-v1',
+      enabled:x.enabled===true,
+      timezone:safeCreatorDailyTimezone(x.timezone),
+      creatorVoice:normalizeCreatorVoiceName(x.creatorVoice||CREATOR_TTS_VOICE),
+      creatorAssets:Array.isArray(x.creatorAssets)?x.creatorAssets.slice(0,20):[]
+    };
+  }catch(e){
+    return{...base,lastError:'DAILY_PLAN_READ_FAILED: '+String(e.message||e).slice(0,220)};
+  }
+}
+function writeCreatorDailyPlan(plan){
+  fs.mkdirSync(MEMORY_DIR,{recursive:true});
+  const clean={...creatorDailyDefaultPlan(),...(plan||{}),version:1,planId:'creator-daily-longform-v1',updatedAt:new Date().toISOString()};
+  fs.writeFileSync(CREATOR_DAILY_PLAN_FILE,JSON.stringify(clean,null,2),'utf8');
+  return clean;
+}
+function configureCreatorDailyPlan(args={}){
+  const action=String(args.action||'status').trim().toLowerCase();
+  const current=readCreatorDailyPlan();
+  if(action==='status')return current;
+  if(action==='disable')return writeCreatorDailyPlan({...current,enabled:false,lastError:null});
+  if(action!=='enable')throw new Error('Creator günlük plan action enable/disable/status olmalı.');
+  const next={
+    ...current,
+    enabled:true,
+    timezone:safeCreatorDailyTimezone(args.timezone||current.timezone),
+    language:String(args.language||current.language||'Türkçe').replace(/[\r\n]+/g,' ').trim().slice(0,80)||'Türkçe',
+    creatorVoice:normalizeCreatorVoiceName(args.creatorVoice||current.creatorVoice||CREATOR_TTS_VOICE),
+    includeYouTube:args.includeYouTube!==false,
+    topicPrompt:String(args.topicPrompt||current.topicPrompt||'').replace(/\s+/g,' ').trim().slice(0,1200),
+    creatorAssets:Array.isArray(args.creatorAssets)?normalizeCreatorLongformAssets(args.creatorAssets):current.creatorAssets,
+    lastAttemptAt:null,
+    lastAttemptDate:null,
+    lastError:null
+  };
+  return writeCreatorDailyPlan(next);
+}
+function creatorDailyDateKey(timezone='Europe/Istanbul',date=new Date()){
+  const zone=safeCreatorDailyTimezone(timezone);
+  const parts=new Intl.DateTimeFormat('en-US',{
+    timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'
+  }).formatToParts(date);
+  const map={};
+  for(const part of parts)if(part.type!=='literal')map[part.type]=part.value;
+  return String(map.year||'0000')+'-'+String(map.month||'00')+'-'+String(map.day||'00');
+}
+function findCreatorDailyMission(planId,dateKey){
+  const pid=String(planId||'creator-daily-longform-v1');
+  const day=String(dateKey||'');
+  return getMissionEngine().listMissions(WORKSPACE,{limit:1000}).find(m=>
+    m&&m.type==='creator_longform'&&
+    String(m.input&&m.input.dailyPlanId||'')===pid&&
+    String(m.input&&m.input.dailyDate||'')===day
+  )||null;
+}
+function creatorDailyTheme(dateKey){
+  const themes=[
+    'teknoloji ve yapay zeka','bilim ve uzay','tarih ve şaşırtıcı olaylar','insan davranışı ve psikoloji',
+    'tasarım ve mühendislik','internet kültürü ve dijital yaşam','doğa ve dünya','gelecek fikirleri',
+    'günlük yaşamı değiştiren icatlar','oyun, eğlence ve yaratıcı kültür'
+  ];
+  const hash=crypto.createHash('sha1').update(String(dateKey||'daily')).digest();
+  return themes[hash.readUInt32BE(0)%themes.length];
+}
+async function generateCreatorDailyLongformBrief(plan,dateKey){
+  const status=await localBrainStatus();
+  if(!status.ready)throw new Error('DAILY_LOCAL_BRAIN_OFFLINE');
+  if(!status.installed)throw new Error('DAILY_LOCAL_MODEL_MISSING');
+  const model=status.deepInstalled&&status.deepModel?status.deepModel:status.model;
+  const schema={
+    type:'object',
+    properties:{
+      title:{type:'string'},
+      description:{type:'string'},
+      script:{type:'string'}
+    },
+    required:['title','description','script'],
+    additionalProperties:false
+  };
+  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),4*60*1000);
+  try{
+    const r=await fetch(LOCAL_BRAIN_URL+'/api/chat',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({
+        model,
+        stream:false,
+        think:false,
+        format:schema,
+        keep_alive:LOCAL_BRAIN_KEEP_ALIVE,
+        options:{temperature:0.68,top_p:0.9,repeat_penalty:1.08,num_ctx:LOCAL_BRAIN_CTX,num_predict:3600},
+        messages:[
+          {role:'system',content:[
+            'Sen JARVIS Creator editörüsün. Ücretli API veya dış kaynak kullanmadan yaklaşık 10 dakikalık YouTube anlatım metni hazırla.',
+            'Dil: '+String(plan.language||'Türkçe')+'.',
+            'Bugünün tema alanı: '+creatorDailyTheme(dateKey)+'.',
+            'Metin doğal seslendirmede yaklaşık 9.5-10.5 dakika sürmeli. Boş lafla uzatma; güçlü hook, anlaşılır bölümler ve net kapanış kullan.',
+            'Güncel/breaking haber iddiası, sahte kaynak, sahte alıntı veya doğrulanmamış kesin sayı üretme. Evergreen ve genel bilgi ağırlıklı kal.',
+            'Başlık merak uyandırsın ama yanıltıcı clickbait olmasın. Açıklama kısa ve yayın taslağına uygun olsun.',
+            'Yalnızca JSON şemasına uy.'
+          ].join(' ')},
+          {role:'user',content:'Tarih anahtarı: '+dateKey+'\nİçerik yönü: '+String(plan.topicPrompt||'Her gün farklı ilgi çekici konu seç.')}
+        ]
+      }),
+      signal:ctl.signal
+    });
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.error||('OLLAMA '+r.status));
+    const parsed=extractLocalBrainJson(j&&j.message&&j.message.content);
+    if(!parsed||!parsed.script)throw new Error('DAILY_CREATOR_BAD_JSON');
+    const script=String(parsed.script||'').replace(/\s+/g,' ').trim().slice(0,18000);
+    const words=script.split(/\s+/).filter(Boolean).length;
+    if(script.length<2500)throw new Error('DAILY_CREATOR_SCRIPT_TOO_SHORT');
+    if(words>400&&(words<1050||words>1750))throw new Error('DAILY_CREATOR_WORD_TARGET_MISS: '+words);
+    return{
+      title:String(parsed.title||('JARVIS Daily '+dateKey)).replace(/\s+/g,' ').trim().slice(0,100),
+      description:String(parsed.description||'').trim().slice(0,5000),
+      script
+    };
+  }finally{clearTimeout(timer)}
+}
+let creatorDailyServiceBusy=false;
+async function serviceCreatorDailyPlan({force=false}={}){
+  if(creatorDailyServiceBusy)return{ok:true,skipped:'busy'};
+  creatorDailyServiceBusy=true;
+  try{
+    let plan=readCreatorDailyPlan();
+    if(!plan.enabled)return{ok:true,status:'disabled'};
+    const dateKey=creatorDailyDateKey(plan.timezone);
+    const existing=findCreatorDailyMission(plan.planId,dateKey);
+    if(existing){
+      if(plan.lastCreatedDate!==dateKey||plan.lastMissionId!==existing.id){
+        plan=writeCreatorDailyPlan({...plan,lastCreatedDate:dateKey,lastMissionId:existing.id,lastError:null});
+      }
+      return{ok:true,status:'existing',dateKey,missionId:existing.id,missionStatus:existing.status};
+    }
+    const lastAttemptMs=Date.parse(String(plan.lastAttemptAt||''));
+    if(!force&&plan.lastAttemptDate===dateKey&&Number.isFinite(lastAttemptMs)&&(Date.now()-lastAttemptMs)<10*60*1000){
+      return{ok:true,status:'cooldown',dateKey,lastAttemptAt:plan.lastAttemptAt};
+    }
+    plan=writeCreatorDailyPlan({...plan,lastAttemptAt:new Date().toISOString(),lastAttemptDate:dateKey,lastError:null});
+    try{
+      const brief=await generateCreatorDailyLongformBrief(plan,dateKey);
+      const mission=createCreatorLongformMission({
+        campaignName:'daily-'+dateKey+'-'+brief.title,
+        script:brief.script,
+        youtubeTitle:brief.title,
+        youtubeDescription:brief.description,
+        creatorVoice:plan.creatorVoice,
+        includeYouTube:plan.includeYouTube!==false,
+        publish:false,
+        _creatorAssetBaselines:Array.isArray(plan.creatorAssets)?plan.creatorAssets:[],
+        _dailyPlanId:plan.planId,
+        _dailyDate:dateKey
+      });
+      writeCreatorDailyPlan({...plan,lastCreatedDate:dateKey,lastMissionId:mission.id,lastError:null});
+      remember({kind:'creator_daily_longform_created',dateKey,missionId:mission.id,includeYouTube:plan.includeYouTube!==false,published:false});
+      return{ok:true,status:'created',dateKey,missionId:mission.id};
+    }catch(e){
+      const error=String(e.message||e).slice(0,500);
+      writeCreatorDailyPlan({...plan,lastError:error});
+      remember({kind:'creator_daily_longform_error',dateKey,error});
+      return{ok:false,status:'error',dateKey,error};
+    }
+  }finally{creatorDailyServiceBusy=false}
 }
 
 function normalizePcMissionActions(args={}){
@@ -7585,6 +7853,7 @@ if(!TEST_MODE){
   },900);
   setTimeout(()=>prewarmJarvisBackchannels().catch(()=>{}),2200);
   setTimeout(()=>serviceDurableMissions().catch(()=>{}),5000);
+  setTimeout(()=>serviceCreatorDailyPlan().catch(()=>{}),12000);
 }
 console.log('Cloud:',BASE);
 console.log('Workspace:',WORKSPACE);
@@ -7598,6 +7867,7 @@ if(!TEST_MODE){
   // Previously authorized draft-only missions may continue after their
   // dependency becomes ready. The service never auto-publishes content.
   setInterval(()=>serviceDurableMissions().catch(()=>{}),20000);
+  setInterval(()=>serviceCreatorDailyPlan().catch(()=>{}),60000);
 }else{
   console.log('[JARVIS] TEST MODE: cloud polling and Windows helpers disabled');
 }
