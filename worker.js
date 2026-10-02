@@ -38,10 +38,10 @@ const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
 const UPDATE_STATE_FILE=path.join(MEMORY_DIR,'update-state.json');
-const WORKER_VERSION='2.90.0';
+const WORKER_VERSION='2.91.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
 CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1','adaptive_model_router_v1','deep_model_fallback_v1','dynamic_chunk_prosody_v1','natural_pause_timing_v1','adaptive_turn_pacing_v1','latency_learning_v1','full_duplex_interrupt_v1','cancellable_agent_v1','adaptive_voice_profile_v1','spoken_voice_preference_v1','speaker_echo_rejection_v1','social_dialogue_v1','response_variation_v1','contextual_followup_v1','dialogue_feedback_learning_v1','social_preference_adaptation_v1','dynamic_wake_ack_v1','wake_ack_turn_timing_v1','auto_quality_escalation_v1','weak_response_escalation_v1','repair_quality_escalation_v1','social_momentum_v1','elliptical_turn_resolution_v1','conversation_cadence_v1','brevity_mirroring_v1','adaptive_response_length_v1','interruption_continuity_v1','spoken_resume_v1','partial_stream_resume_v1');
-CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1','mission_auto_resume_v1','mission_health_v1','pc_acceptance_snapshot_v1','silent_startup_diagnostics_v1','pc_acceptance_hardened_v1','bootstrap_migration_v6','mission_fair_scheduler_v1','pc_self_repair_v1','creator_multiscene_v2','creator_burned_captions_v1','cloud_mission_telemetry_v1','creator_short_mission_v1','shopify_product_mission_v1');
+CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1','mission_auto_resume_v1','mission_health_v1','pc_acceptance_snapshot_v1','silent_startup_diagnostics_v1','pc_acceptance_hardened_v1','bootstrap_migration_v6','mission_fair_scheduler_v1','pc_self_repair_v1','creator_multiscene_v2','creator_burned_captions_v1','cloud_mission_telemetry_v1','creator_short_mission_v1','shopify_product_mission_v1','developer_project_mission_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -2465,6 +2465,36 @@ function nativeAgentTools(){
     {
       type:'function',
       function:{
+        name:'developer_project_mission',
+        description:'Kullanıcı açıkça bir uygulama, site veya yazılım projesi oluşturmanı istediğinde kalıcı ve yeniden başlatılabilir geliştirici görevi başlat. Yalnızca JARVIS workspace içinde güvenli metin kaynak dosyaları oluşturur; mevcut farklı dosyaların üstüne otomatik yazmaz ve deploy etmez.',
+        parameters:{
+          type:'object',
+          properties:{
+            projectName:{type:'string',description:'Workspace içindeki proje klasör adı.'},
+            summary:{type:'string',description:'Projenin kısa amacı.'},
+            features:{type:'array',items:{type:'string'},description:'files verilmezse başlangıç web uygulamasında gösterilecek özellikler.'},
+            files:{
+              type:'array',
+              maxItems:12,
+              items:{
+                type:'object',
+                properties:{
+                  path:{type:'string',description:'Proje köküne göre güvenli kaynak dosya yolu.'},
+                  content:{type:'string',description:'Dosyanın metin içeriği.'}
+                },
+                required:['path','content'],
+                additionalProperties:false
+              }
+            }
+          },
+          required:['projectName'],
+          additionalProperties:false
+        }
+      }
+    },
+    {
+      type:'function',
+      function:{
         name:'shopify_product_mission',
         description:'Kullanıcı mağazaya ürün ekleme veya ürün taslağı hazırlama işinin bağlantı kesilse bile kaldığı yerden devam etmesini istediğinde kalıcı Shopify ürün görevi başlat. Yalnızca DRAFT ürün oluşturur; ürünü yayınlamaz.',
         parameters:{
@@ -2717,6 +2747,18 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
     if(!latest)return{ok:true,message:'Devam ettirilecek yarım görev yok.'};
     const out=await runDurableMission(latest.id);
     return{ok:out.status==='completed',message:missionSummaryText(out)};
+  }else if(n==='developer_project_mission'){
+    const intent=String(userText||'').toLocaleLowerCase('tr-TR');
+    if(!/(?:uygulama|site|web|yazılım|yazilim|proje|app|kod)/i.test(intent)||!/(?:oluştur|olustur|geliştir|gelistir|hazırla|hazirla|yap|kur)/i.test(intent)){
+      return{ok:false,message:'Kalıcı geliştirici görevi yalnızca açık uygulama/proje isteğiyle başlatılır.'};
+    }
+    try{
+      const mission=createDeveloperProjectMission(a);
+      const out=await runDurableMission(mission.id);
+      return{ok:out.status==='completed',message:missionSummaryText(out)+(out.status==='failed'?' · mevcut dosya çakışması varsa otomatik üzerine yazılmadı':'')};
+    }catch(e){
+      return{ok:false,message:'Kalıcı geliştirici görevi başlatılamadı: '+String(e.message||e).slice(0,700)};
+    }
   }else if(n==='shopify_product_mission'){
     const intent=String(userText||'').toLocaleLowerCase('tr-TR');
     if(!/(?:shopify|mağaza|magaza|ürün|urun|varova)/i.test(intent)||!/(?:ekle|hazırla|hazirla|oluştur|olustur|taslak|yap)/i.test(intent)){
@@ -2848,6 +2890,7 @@ async function runNativeAgent(message,{maxRounds=4,signal=null}={}){
     'Kullanıcı tek seferlik değil, tamamlanana kadar sürecek bir Short/Reels üretimi isterse creator_short_mission kullan; bu görev disk üzerinde kalır, kesintiden sonra devam eder ve YouTube istenirse sadece Studio taslağına kadar gider.',
     'Mağaza işlerinde önce shopify_status ile bağlantıyı kontrol edebilirsin. shopify_create_draft yalnızca DRAFT ürün oluşturur; eksik fiyat, SKU veya görseli uydurma.',
     'Kullanıcı bir ürünü mağazaya ekleme işinin tamamlanana kadar sürmesini istiyorsa shopify_product_mission kullan; görev disk üzerinde kalır, bağlantı yoksa bekler ve aynı ürünü mission etiketiyle kopya oluşturmadan sürdürür.',
+    'Kullanıcı uygulama/site/yazılım geliştirmeyi istediğinde developer_project_mission kullan. Bu araç kaynak dosyaları yalnızca JARVIS workspace içine yazar, mevcut farklı dosyanın üzerine otomatik yazmaz ve deploy etmez; böylece geliştirme görevi kesintiden sonra güvenle devam eder.',
     'Ürünü halka açık mağazada yayınlama native ajan aracı değildir. Yayınlama ancak kullanıcının açık yayınlama komutuyla ayrı güvenli akıştan yapılır.',
     'YouTube için youtube_prepare_draft_upload yalnızca dosyayı Studio yükleme ekranına koyar ve metadata hazırlar; hiçbir zaman Publish/Yayınla düğmesine basmaz.',
     'Kullanıcı aynı istekte Short üretip YouTube taslağına yüklemenizi isterse önce creator_render_short sonucundaki gerçek output yolunu al, sonra youtube_prepare_draft_upload çağır. Dosya yolu uydurma.',
@@ -3857,6 +3900,75 @@ function createShopifyProductMission(args={}){
     steps:['shopify_draft']
   });
 }
+
+function developerProjectSlug(value){
+  const s=String(value||'').trim().replace(/\s+/g,'-').replace(/[^A-Za-z0-9._-]/g,'-').replace(/-+/g,'-').replace(/^[-.]+|[-.]+$/g,'').slice(0,80);
+  if(!s||s==='.'||s==='..')throw new Error('Geçerli proje adı gerekli.');
+  return s;
+}
+function normalizeDeveloperFiles(args={},projectName='project'){
+  const allowedExt=new Set(['.html','.css','.js','.mjs','.cjs','.ts','.tsx','.jsx','.json','.md','.txt','.py','.yml','.yaml']);
+  const raw=Array.isArray(args.files)?args.files.slice(0,12):[];
+  let files=raw.map(x=>({
+    path:String(x&&x.path||'').replace(/\\/g,'/').replace(/^\/+/, '').trim(),
+    content:String(x&&x.content||'')
+  }));
+  if(!files.length){
+    const title=String(args.title||args.projectName||projectName).replace(/[<>]/g,'').trim().slice(0,100)||projectName;
+    const summary=String(args.summary||'JARVIS tarafından oluşturulan yerel web uygulaması.').replace(/[<>]/g,'').trim().slice(0,1200);
+    const features=Array.isArray(args.features)?args.features.map(x=>String(x||'').replace(/[<>]/g,'').trim()).filter(Boolean).slice(0,8):[];
+    const featureHtml=features.length?features.map(x=>'<li>'+x.replace(/&/g,'&amp;')+'</li>').join(''):'<li>Başlangıç sürümü hazır</li>';
+    files=[
+      {path:'index.html',content:'<!doctype html>\n<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+title+'</title><link rel="stylesheet" href="styles.css"></head><body><main><h1>'+title+'</h1><p>'+summary.replace(/&/g,'&amp;')+'</p><ul>'+featureHtml+'</ul><button id="jarvisAction">Çalıştır</button><p id="status"></p></main><script src="app.js"></script></body></html>\n'},
+      {path:'styles.css',content:'*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:#07111f;color:#eaf7ff}main{max-width:760px;margin:10vh auto;padding:32px;border:1px solid #2a607d;border-radius:18px;background:#0b1c2e}h1{margin-top:0}button{padding:12px 18px;border:0;border-radius:10px;cursor:pointer}#status{opacity:.8}\n'},
+      {path:'app.js',content:"document.getElementById('jarvisAction').addEventListener('click',()=>{document.getElementById('status').textContent='JARVIS proje başlangıcı çalışıyor.'})\n"},
+      {path:'README.md',content:'# '+title+'\n\n'+summary+'\n\n## Çalıştırma\n\nindex.html dosyasını tarayıcıda açın.\n'}
+    ];
+  }
+  let total=0;
+  const seen=new Set();
+  files=files.map((x,i)=>{
+    const rel=String(x.path||'').replace(/\\/g,'/').replace(/^\/+/, '').trim();
+    if(!rel||rel.includes('..')||path.isAbsolute(rel))throw new Error('Geçersiz proje dosya yolu: '+rel);
+    if(isSensitiveWorkspacePath(projectName+'/'+rel))throw new Error('Hassas proje dosya yolu engellendi: '+rel);
+    const ext=path.extname(rel).toLowerCase();
+    if(!allowedExt.has(ext))throw new Error('Bu proje dosya türüne izin verilmiyor: '+ext);
+    const key=rel.toLowerCase();
+    if(seen.has(key))throw new Error('Tekrarlanan proje dosyası: '+rel);
+    seen.add(key);
+    const content=String(x.content||'');
+    const bytes=Buffer.byteLength(content,'utf8');
+    if(bytes>60000)throw new Error('Proje dosyası 60KB sınırını aşıyor: '+rel);
+    total+=bytes;
+    return{path:rel,content,sha256:crypto.createHash('sha256').update(content,'utf8').digest('hex'),index:i};
+  });
+  if(total>240000)throw new Error('Proje toplam içerik sınırı 240KB.');
+  return files;
+}
+function createDeveloperProjectMission(args={}){
+  const projectName=developerProjectSlug(args.projectName||args.name);
+  const files=normalizeDeveloperFiles(args,projectName);
+  if(!files.length)throw new Error('En az bir proje dosyası gerekli.');
+  const summary=String(args.summary||'').replace(/[\r\n]+/g,' ').trim().slice(0,1200);
+  const steps=[{name:'dev_prepare'}];
+  files.forEach((file,i)=>steps.push({name:'dev_file_'+String(i+1).padStart(2,'0'),meta:{fileIndex:i}}));
+  steps.push({name:'dev_verify'});
+  return getMissionEngine().createMission(WORKSPACE,{
+    type:'developer_project',
+    label:projectName,
+    input:{projectName,summary,files},
+    steps
+  });
+}
+function developerMissionTarget(input,file){
+  const projectName=developerProjectSlug(input&&input.projectName||'project');
+  const rel=String(file&&file.path||'').replace(/\\/g,'/').replace(/^\/+/, '').trim();
+  if(!rel||rel.includes('..')||isSensitiveWorkspacePath(projectName+'/'+rel))throw new Error('Geçersiz geliştirici dosya yolu.');
+  const root=safeFile(projectName);
+  const target=path.resolve(root,rel);
+  if(!(target===root||target.startsWith(root+path.sep)))throw new Error('Proje kökü dışına yazma engellendi.');
+  return{root,target,relative:path.relative(WORKSPACE,target)};
+}
 function missionSummaryText(m){
   if(!m)return'Kayıtlı görev bulunamadı.';
   const x=getMissionEngine().summarizeMission(m),step=x&&x.step;
@@ -4012,6 +4124,70 @@ async function runDurableMission(id){
           reused:!!out.reused,
           published:false
         }});
+        continue;
+      }
+
+      if(step.name==='dev_prepare'){
+        const input=mission.input||{};
+        const projectName=developerProjectSlug(input.projectName||mission.label);
+        const root=safeFile(projectName);
+        fs.mkdirSync(root,{recursive:true});
+        mission=engine.completeStep(WORKSPACE,id,{artifact:{project:projectName,path:root}});
+        continue;
+      }
+
+      if(/^dev_file_\d+$/.test(step.name)){
+        const input=mission.input||{};
+        const files=Array.isArray(input.files)?input.files:[];
+        const index=Math.max(0,Number(step.meta&&step.meta.fileIndex)||0);
+        const file=files[index];
+        if(!file){
+          mission=engine.failStep(WORKSPACE,id,{code:'DEV_FILE_MISSING',message:'Proje dosya girdisi bulunamadı.',retryable:false});
+          return mission;
+        }
+        const loc=developerMissionTarget(input,file);
+        fs.mkdirSync(path.dirname(loc.target),{recursive:true});
+        const expected=String(file.sha256||crypto.createHash('sha256').update(String(file.content||''),'utf8').digest('hex'));
+        if(fs.existsSync(loc.target)){
+          if(!fs.statSync(loc.target).isFile()){
+            mission=engine.failStep(WORKSPACE,id,{code:'PROJECT_PATH_CONFLICT',message:'Proje yolu dosya değil: '+file.path,retryable:false});
+            return mission;
+          }
+          const existing=fileHash(loc.target);
+          if(existing!==expected){
+            mission=engine.failStep(WORKSPACE,id,{code:'PROJECT_FILE_CONFLICT',message:'Mevcut proje dosyası farklı; otomatik üzerine yazma durduruldu: '+file.path,retryable:false});
+            return mission;
+          }
+          mission=engine.completeStep(WORKSPACE,id,{artifact:{file:loc.relative,sha256:expected,reused:true}});
+          continue;
+        }
+        const tmp=loc.target+'.jarvis-'+process.pid+'-'+Date.now()+'.tmp';
+        fs.writeFileSync(tmp,String(file.content||''),'utf8');
+        fs.renameSync(tmp,loc.target);
+        const actual=fileHash(loc.target);
+        if(actual!==expected){
+          try{fs.unlinkSync(loc.target)}catch(_){}
+          mission=engine.failStep(WORKSPACE,id,{code:'DEV_FILE_VERIFY_FAILED',message:'Yazılan proje dosyası doğrulanamadı: '+file.path,retryable:false});
+          return mission;
+        }
+        mission=engine.completeStep(WORKSPACE,id,{artifact:{file:loc.relative,sha256:actual,reused:false}});
+        continue;
+      }
+
+      if(step.name==='dev_verify'){
+        const input=mission.input||{};
+        const files=Array.isArray(input.files)?input.files:[];
+        const verified=[];
+        for(const file of files){
+          const loc=developerMissionTarget(input,file);
+          const expected=String(file.sha256||'');
+          if(!fs.existsSync(loc.target)||!fs.statSync(loc.target).isFile()||fileHash(loc.target)!==expected){
+            mission=engine.failStep(WORKSPACE,id,{code:'DEV_PROJECT_VERIFY_FAILED',message:'Proje doğrulaması başarısız: '+String(file.path||''),retryable:false});
+            return mission;
+          }
+          verified.push(loc.relative);
+        }
+        mission=engine.completeStep(WORKSPACE,id,{artifact:{project:developerProjectSlug(input.projectName),files:verified,verified:true}});
         continue;
       }
 
@@ -4174,7 +4350,7 @@ async function buildPcAcceptanceSnapshot(){
   try{commerce=await getCommerceEngine().status(WORKSPACE)}catch(e){commerce={ok:false,connected:false,error:String(e.message||e).slice(0,240)}}
   try{youtube=await getYoutubeStudio().status(getBrowserOperator(),WORKSPACE)}catch(e){youtube={ok:false,running:false,loggedIn:false,error:String(e.message||e).slice(0,240)}}
   const missions=missionHealthSnapshot();
-  const checks={workerVersion:WORKER_VERSION==='2.90.0',missionRuntime:!!(missions&&missions.ok&&missions.autoResume),creatorEngineLoaded:!!(creator&&!creator.error),browserOperatorLoaded:!!(browser&&!browser.error),commerceEngineLoaded:!!(commerce&&!commerce.error),youtubeStudioLoaded:!!(youtube&&!youtube.error),silentStartup:process.platform==='win32'?startup.silentOk:true,autoUpdateReady:!!(startup.selfUpdate&&startup.selfUpdate.configured)};
+  const checks={workerVersion:WORKER_VERSION==='2.91.0',missionRuntime:!!(missions&&missions.ok&&missions.autoResume),creatorEngineLoaded:!!(creator&&!creator.error),browserOperatorLoaded:!!(browser&&!browser.error),commerceEngineLoaded:!!(commerce&&!commerce.error),youtubeStudioLoaded:!!(youtube&&!youtube.error),silentStartup:process.platform==='win32'?startup.silentOk:true,autoUpdateReady:!!(startup.selfUpdate&&startup.selfUpdate.configured)};
   const corePass=Object.values(checks).every(Boolean);
   const accountSetup={shopifyConnected:!!(commerce&&commerce.ok&&commerce.connected),youtubeLoggedIn:!!(youtube&&youtube.ok&&youtube.loggedIn)};
   const snapshot={ok:true,generatedAt,worker:{version:WORKER_VERSION,name:NAME,platform:process.platform,arch:process.arch},checks,corePass,startup,update:startup.selfUpdate,creator:{ready:!!(creator&&creator.ok),assets:Number(creator&&creator.assets||0),outputDir:creator&&creator.outputDir||null,installable:!!(creator&&creator.installable)},browser:{running:!!(browser&&browser.running),browser:browser&&browser.browser||null,tabs:Array.isArray(browser&&browser.tabs)?browser.tabs.length:0,profile:browser&&browser.profile||null},commerce:{connected:accountSetup.shopifyConnected,shop:commerce&&commerce.shop||null,apiVersion:commerce&&commerce.apiVersion||null,message:String(commerce&&commerce.message||'').slice(0,300)},youtube:{running:!!(youtube&&youtube.running),loggedIn:accountSetup.youtubeLoggedIn,title:youtube&&youtube.title||null,url:youtube&&youtube.url||null,message:String(youtube&&youtube.message||'').slice(0,300)},missions,accountSetup};

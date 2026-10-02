@@ -32,6 +32,7 @@ jobs:
           node --check mission-console-selftest.js
           node --check creator-mission-selftest.js
           node --check shopify-mission-selftest.js
+          node --check developer-mission-selftest.js
           node --check update-trust-selftest.js
           node --check mission-alerts-selftest.js
           node --check pc-acceptance-selftest.js
@@ -71,6 +72,8 @@ jobs:
         run: node creator-mission-selftest.js
       - name: Shopify mission selftest
         run: node shopify-mission-selftest.js
+      - name: Developer mission selftest
+        run: node developer-mission-selftest.js
       - name: Update trust selftest
         run: node update-trust-selftest.js
       - name: Mission alerts selftest
