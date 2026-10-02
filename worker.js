@@ -40,10 +40,10 @@ const JOURNAL_DIR=path.join(MEMORY_DIR,'journals');
 const STRATEGY_FILE=path.join(MEMORY_DIR,'strategy-policy.json');
 const CLOUD_STATE_FILE=path.join(MEMORY_DIR,'cloud-state.json');
 const UPDATE_STATE_FILE=path.join(MEMORY_DIR,'update-state.json');
-const WORKER_VERSION='2.99.0';
+const WORKER_VERSION='2.100.0';
 const CAPS=['system_status','list_files','write_note','write_file','read_file','make_folder','project_scaffold','workspace_bundle','mission_plan','strategy_metrics','strategy_selection','strategy_rollback','resume_checkpoint','multi_device_identity','cloud_state_backup','snapshot_integrity_v2','snapshot_hmac_v3','signed_bootstrap_restore_v1','task_uid_v1','safe_rehydrate_v1','transactional_plan','transaction_crash_recovery_v1','strict_journal_v2','bounded_rollback_v1','transaction_journal_v3','checkpoint_plan_hash_v1','prefix_revalidation_v1','signed_device_credential_v1','device_credential_refresh_v1','pairing_code_v1','restore_before_heartbeat_v1','single_restore_attempt_v1','auth_loss_restore_v1','global_f8_wake_v1','phone_session_code_v1','local_memory','process_list_v1','disk_status_v1','network_status_v1','local_ai_readiness_v1','wake_on_lan_readiness_v1','local_tts_v1','local_tts_bridge_v1','double_clap_wake_v2','helper_autosync_v1','python_clap_listener_v1','double_clap_transient_gate_v2','double_clap_classifier_v3','mobile_tts_relay_v1','creator_tts_v1','desktop_launch_v1','media_control_v1','power_status_v1','local_brain_v1','local_brain_memory_v2','local_brain_eval_v2','local_stt_v1','adaptive_tts_v1','turn_taking_v2','qwen3_local_brain_v1','episodic_memory_v1','stt_hotwords_v1','mobile_brain_relay_v1','mobile_adaptive_tts_v2','expressive_tone_v2','speech_naturalizer_v1','multi_action_plan_v1','workspace_search_v1','dialogue_quality_v2','interruptible_tts_v1','brain_prewarm_v1','latency_runtime_v1','tool_result_reflection_v1','agent_loop_v2','context_continuity_v1','anaphora_resolution_v1','offline_tts_fallback_v1','mobile_handsfree_loop_v1','local_rag_v1','deep_reflection_v1','grounded_workspace_context_v1','qwen35_local_brain_v1','local_multimodal_v1','camera_vision_v1','native_tool_loop_v1','adaptive_tool_chain_v1','safe_workspace_read_v1','selective_reasoning_v1','adaptive_context_v1','chunked_tts_pipeline_v1','tts_prefetch_v1','safe_tts_cache_v1','local_screen_vision_v1','explicit_screen_consent_v1'];
 CAPS.push('adaptive_speech_lexicon_v1','voice_correction_learning_v1','adaptive_stt_decode_v1','dynamic_endpointing_v1','thinking_backchannel_v1','tts_backchannel_prewarm_v1','streaming_chat_v1','sentence_stream_tts_v1','natural_barge_in_v1','spoken_followup_interrupt_v1','conversation_repair_v1','misunderstanding_recovery_v1','adaptive_model_router_v1','deep_model_fallback_v1','dynamic_chunk_prosody_v1','natural_pause_timing_v1','adaptive_turn_pacing_v1','latency_learning_v1','full_duplex_interrupt_v1','cancellable_agent_v1','adaptive_voice_profile_v1','spoken_voice_preference_v1','speaker_echo_rejection_v1','social_dialogue_v1','response_variation_v1','contextual_followup_v1','dialogue_feedback_learning_v1','social_preference_adaptation_v1','dynamic_wake_ack_v1','wake_ack_turn_timing_v1','auto_quality_escalation_v1','weak_response_escalation_v1','repair_quality_escalation_v1','social_momentum_v1','elliptical_turn_resolution_v1','conversation_cadence_v1','brevity_mirroring_v1','adaptive_response_length_v1','interruption_continuity_v1','spoken_resume_v1','partial_stream_resume_v1');
-CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1','mission_auto_resume_v1','mission_health_v1','pc_acceptance_snapshot_v1','silent_startup_diagnostics_v1','pc_acceptance_hardened_v1','bootstrap_migration_v6','mission_fair_scheduler_v1','pc_self_repair_v1','creator_multiscene_v2','creator_burned_captions_v1','cloud_mission_telemetry_v1','creator_short_mission_v1','shopify_product_mission_v1','developer_project_mission_v1','approval_gate_v1','shopify_publish_approval_v1','browser_form_mission_v1','browser_form_prepare_v1','browser_click_approval_v1','youtube_publish_approval_v1','youtube_publish_receipt_v1','developer_patch_mission_v1','developer_patch_rollback_v1','pc_safe_mission_v1','pc_safe_action_catalog_v1','pc_mission_resume_v1','workspace_file_mission_v1','workspace_file_hash_guard_v1','workspace_file_no_overwrite_v1','mission_control_v1','mission_pause_v1','mission_cancel_v1','creator_asset_mission_v1','creator_asset_probe_v1','creator_asset_hash_dedupe_v1');
+CAPS.push('creator_video_v2','shorts_render_v1','ffmpeg_autosetup_v1','bootstrap_migration_v2','bootstrap_migration_v3','bootstrap_migration_v4','bootstrap_migration_v5','browser_operator_v1','dedicated_browser_profile_v1','commerce_engine_v1','shopify_product_draft_v1','shopify_publish_v1','shopify_dpapi_secret_v1','native_creator_tool_v1','native_commerce_tool_v1','draft_first_workflow_v1','youtube_studio_draft_v1','youtube_upload_prepare_v1','native_youtube_tool_v1','durable_mission_v1','mission_resume_v1','varova_campaign_mission_v1','mission_auto_resume_v1','mission_health_v1','pc_acceptance_snapshot_v1','silent_startup_diagnostics_v1','pc_acceptance_hardened_v1','bootstrap_migration_v6','mission_fair_scheduler_v1','pc_self_repair_v1','creator_multiscene_v2','creator_burned_captions_v1','cloud_mission_telemetry_v1','creator_short_mission_v1','shopify_product_mission_v1','developer_project_mission_v1','approval_gate_v1','shopify_publish_approval_v1','browser_form_mission_v1','browser_form_prepare_v1','browser_click_approval_v1','youtube_publish_approval_v1','youtube_publish_receipt_v1','developer_patch_mission_v1','developer_patch_rollback_v1','pc_safe_mission_v1','pc_safe_action_catalog_v1','pc_mission_resume_v1','workspace_file_mission_v1','workspace_file_hash_guard_v1','workspace_file_no_overwrite_v1','mission_control_v1','mission_pause_v1','mission_cancel_v1','creator_asset_mission_v1','creator_asset_probe_v1','creator_asset_hash_dedupe_v1','creator_storyboard_v1','creator_explicit_assets_v1','creator_render_mission_bind_v1');
 
 
 const TTS_ENABLED=process.platform==='win32'&&process.env.JARVIS_TTS!=='0';
@@ -2369,7 +2369,8 @@ function nativeAgentTools(){
           type:'object',
           properties:{
             name:{type:'string',description:'Kısa dosya/proje adı.'},
-            script:{type:'string',description:'Videoda okunacak Türkçe anlatım metni. 12-18 saniyeye uygun kısa tutulmalı.'}
+            script:{type:'string',description:'Videoda okunacak Türkçe anlatım metni. 12-18 saniyeye uygun kısa tutulmalı.'},
+            creatorAssets:{type:'array',maxItems:5,items:{type:'string'},description:'İsteğe bağlı, creator-assets/... yolları. Verilen sıra sahne sırası olur.'}
           },
           required:['script'],
           additionalProperties:false
@@ -2697,6 +2698,7 @@ function nativeAgentTools(){
             script:{type:'string',description:'12-18 saniyelik Türkçe anlatım metni.'},
             youtubeTitle:{type:'string'},
             youtubeDescription:{type:'string'},
+            creatorAssets:{type:'array',maxItems:5,items:{type:'string'},description:'İsteğe bağlı creator-assets/... yolları; verilen sıra storyboard sahne sırası olur.'},
             includeYouTube:{type:'boolean',description:'true ise render sonrası YouTube Studio taslağı hazırlanır.'},
             publish:{type:'boolean',description:'true ise YouTube taslağından sonra PUBLIC yayın için approval gate oluşturur; bu çağrıda yayınlanmaz.'}
           },
@@ -2724,6 +2726,7 @@ function nativeAgentTools(){
             images:{type:'array',items:{type:'string'}},
             youtubeTitle:{type:'string'},
             youtubeDescription:{type:'string'},
+            creatorAssets:{type:'array',maxItems:5,items:{type:'string'},description:'İsteğe bağlı creator-assets/... yolları; verilen sıra reklam videosu sahne sırası olur.'},
             includeShopify:{type:'boolean'},
             includeYouTube:{type:'boolean'},
             publishYouTube:{type:'boolean',description:'true ise YouTube taslağından sonra PUBLIC yayın için approval gate oluşturur; bu çağrıda yayınlanmaz.'}
@@ -2831,7 +2834,18 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
     if(!ready.ok)return{ok:false,message:'Creator motoru hazır değil; FFmpeg kurulamadı.'};
     try{
       const voice=await renderCreatorVoiceFile(script,name+'-voice');
-      const out=getCreatorEngine().renderShort({workspace:WORKSPACE,name,script,voicePath:voice});
+      const selected=normalizeCreatorStoryboardAssets(a.creatorAssets);
+      for(const asset of selected){
+        const current=getWorkspaceFileEngine().hashFile(safeFile(asset.path));
+        if(current!==asset.sha256)return{ok:false,message:'Seçili Creator asset hash değişti; render durduruldu: '+asset.path};
+        const inspected=getCreatorEngine().inspectAsset(WORKSPACE,asset.path);
+        if(!inspected.ok)return{ok:false,message:'Seçili Creator asset video doğrulaması başarısız: '+asset.path+' · '+String(inspected.code||'INVALID')};
+      }
+      const out=getCreatorEngine().renderShort({
+        workspace:WORKSPACE,name,script,voicePath:voice,
+        assetFiles:selected.map(x=>x.path),
+        assetHashes:selected.map(x=>x.sha256)
+      });
       return{ok:true,message:'YEREL SHORTS HAZIR · '+out.output+' · '+Math.round(Number(out.duration||0)*10)/10+' sn · '+Number(out.sceneCount||0)+' sahne · '+(out.captionsBurned?'altyazı işlendi':'SRT hazır')+' · yayınlanmadı'};
     }catch(e){
       return{ok:false,message:'Shorts üretilemedi: '+String(e.message||e).slice(0,500)};
@@ -3194,6 +3208,7 @@ async function runNativeAgent(message,{maxRounds=4,signal=null}={}){
     'Kullanıcı aynı istekte Short üretip YouTube taslağına yüklemenizi isterse önce creator_render_short sonucundaki gerçek output yolunu al, sonra youtube_prepare_draft_upload çağır. Dosya yolu uydurma.',
     'Bir istek VAROVA ürünü + reklam videosu + YouTube taslağı gibi birden fazla dış adım içeriyorsa ayrı ayrı araç çağırmak yerine varova_campaign_mission kullan; böylece görev disk üzerinde kalıcı olur ve kesintiden sonra devam eder.',
     'Workspace içindeki gerçek video kliplerini Creator havuzuna almak için creator_asset_mission kullan. Kaynağı silme; asset FFprobe doğrulaması + SHA-256 kopya doğrulaması geçmeden Creator asset kabul etme.',
+    'Kullanıcı belirli Creator kliplerini veya sahne sırasını istiyorsa creator_short_mission / varova_campaign_mission içindeki creatorAssets alanını kullan. Yalnızca creator-assets/... yollarını ver; sıralamayı değiştirme ve seçili asset hash doğrulaması geçmezse render etme.',
     'Birden fazla güvenli yerel PC işi sırayla yapılacaksa veya iş restart sonrası sürmeliyse pc_safe_mission kullan. Yalnızca durum sorgusu, allowlist uygulama/site açma ve medya kontrollerini sıraya koy; shell/PowerShell, keyfi exe/path, silme, ödeme, public publish veya hesap değişikliği ekleme.',
     'Workspace içindeki mevcut dosyaları kopyalama/taşıma işi restart sonrası sürmeli veya birden fazla dosyayı kapsıyorsa workspace_file_mission kullan. Hedefin üzerine yazma, workspace/internal/hassas yolları kullanma, bağımsız silme işlemi yapma. move yalnızca hedef hash doğrulandıktan sonra kaynak kaldırma anlamına gelir.',
     'Kullanıcı kalıcı görevi açıkça duraklatmak, devam ettirmek veya iptal etmek isterse mission_control kullan. Running dış yan etkiyi zorla kesme; güvenli adım sınırında uygula. Birden fazla uygun görev varsa missionId olmadan seçim yapma.',
@@ -4046,7 +4061,7 @@ function syncRepoRuntimeFile(filename,signature){
 }
 function getCreatorEngine(){
   if(creatorEngine)return creatorEngine;
-  const file=syncRepoRuntimeFile('jarvis-creator-engine.js',"ENGINE_VERSION='1.1'");
+  const file=syncRepoRuntimeFile('jarvis-creator-engine.js',"ENGINE_VERSION='1.2'");
   if(!file)throw new Error('Creator engine module could not be prepared');
   try{
     delete require.cache[require.resolve(file)];
@@ -4116,6 +4131,21 @@ function getWorkspaceFileEngine(){
     throw new Error('Workspace File Engine load failed: '+e.message);
   }
 }
+function normalizeCreatorStoryboardAssets(raw){
+  const rows=Array.isArray(raw)?raw.slice(0,5):[];
+  if(!rows.length)return[];
+  const files=getWorkspaceFileEngine();
+  const creator=getCreatorEngine();
+  const normalized=rows.map(x=>files.normalizeRel(x));
+  const resolved=creator.resolveAssetSelection(WORKSPACE,normalized,5);
+  return resolved.map(full=>{
+    const rel=path.relative(WORKSPACE,full).replace(/\\/g,'/');
+    if(!/^creator-assets\//.test(rel))throw new Error('Creator storyboard asset kapsam dışı: '+rel);
+    const sha256=files.hashFile(full);
+    if(!sha256)throw new Error('Creator storyboard asset hash alınamadı: '+rel);
+    return{path:rel,sha256};
+  });
+}
 function cleanCampaignArgs(args={}){
   const tags=Array.isArray(args.tags)?args.tags.map(x=>String(x||'').trim()).filter(Boolean).slice(0,30):[];
   const images=Array.isArray(args.images)?args.images.map(x=>String(x||'').trim()).filter(x=>/^https:\/\//i.test(x)).slice(0,12):[];
@@ -4129,6 +4159,7 @@ function cleanCampaignArgs(args={}){
     includeShopify:args.includeShopify===true||(args.includeShopify!==false&&!!productTitle),
     includeYouTube:args.includeYouTube!==false,
     publishYouTube:args.publishYouTube===true,
+    creatorAssets:normalizeCreatorStoryboardAssets(args.creatorAssets),
     product:{
       title:productTitle,
       description:String(args.productDescription||'').trim().slice(0,6000),
@@ -4209,9 +4240,11 @@ function createCreatorShortMission(args={}){
   if(publishYouTube&&!includeYouTube)throw new Error('YouTube PUBLIC isteniyorsa includeYouTube=true olmalı.');
   const youtubeTitle=String(args.youtubeTitle||campaignName).replace(/\s+/g,' ').trim().slice(0,100);
   const youtubeDescription=String(args.youtubeDescription||'').trim().slice(0,5000);
+  const creatorAssets=normalizeCreatorStoryboardAssets(args.creatorAssets);
   const input={
     campaignName,
     script,
+    creatorAssets,
     includeShopify:false,
     includeYouTube,
     publishYouTube,
@@ -4753,15 +4786,26 @@ async function verifyUncertainCampaignStep(mission){
   if(step.name==='render_short'){
     const creator=getCreatorEngine();
     const status=creator.ffmpegStatus(WORKSPACE);
-    const expected=path.join(status.outputDir,creator.safeName(input.campaignName)+'.mp4');
-    if(fs.existsSync(expected)&&fs.statSync(expected).size>=10000){
-      return engine.resolveUncertainStep(WORKSPACE,mission.id,{
-        completed:true,
-        artifact:{output:expected,recovered:true},
-        note:'render output verified on disk'
-      });
+    const base=creator.safeName(input.campaignName);
+    const expected=path.join(status.outputDir,base+'.mp4');
+    const metaFile=path.join(WORKSPACE,'creator-jobs',base,'job.json');
+    if(fs.existsSync(expected)&&fs.statSync(expected).size>=10000&&fs.existsSync(metaFile)){
+      try{
+        const meta=JSON.parse(fs.readFileSync(metaFile,'utf8'));
+        if(String(meta&&meta.missionId||'')===String(mission.id)){
+          return engine.resolveUncertainStep(WORKSPACE,mission.id,{
+            completed:true,
+            artifact:{output:expected,metadata:metaFile,recovered:true},
+            note:'render output + mission-bound Creator metadata verified on disk'
+          });
+        }
+      }catch(_){}
+      return mission;
     }
-    return engine.resolveUncertainStep(WORKSPACE,mission.id,{completed:false,note:'render output absent; safe retry'});
+    if(!fs.existsSync(expected)&&!fs.existsSync(metaFile)){
+      return engine.resolveUncertainStep(WORKSPACE,mission.id,{completed:false,note:'render output absent; safe retry'});
+    }
+    return mission;
   }
 
   if(step.name==='shopify_draft'){
@@ -5023,18 +5067,41 @@ async function runDurableMission(id){
           mission=engine.failStep(WORKSPACE,id,{code:'FFMPEG_NOT_READY',message:'Creator motoru hazır değil.',retryable:true,dependency:'ffmpeg'});
           return mission;
         }
+        const selected=Array.isArray(input.creatorAssets)?input.creatorAssets:[];
+        for(const asset of selected){
+          const rel=String(asset&&asset.path||'');
+          const current=getWorkspaceFileEngine().hashFile(safeFile(rel));
+          if(!current||current!==String(asset&&asset.sha256||'')){
+            mission=engine.failStep(WORKSPACE,id,{code:'CREATOR_STORYBOARD_HASH_CONFLICT',message:'Seçili Creator asset hash değişti: '+rel,retryable:false});
+            return mission;
+          }
+          const inspected=getCreatorEngine().inspectAsset(WORKSPACE,rel);
+          if(!inspected.ok){
+            if(inspected.code==='FFPROBE_MISSING'){
+              mission=engine.failStep(WORKSPACE,id,{code:'FFPROBE_MISSING',message:'Seçili storyboard kliplerini doğrulamak için FFprobe gerekli.',retryable:true,dependency:'creator_probe'});
+              return mission;
+            }
+            mission=engine.failStep(WORKSPACE,id,{code:String(inspected.code||'CREATOR_STORYBOARD_INVALID_ASSET'),message:'Seçili Creator asset geçersiz: '+rel,retryable:false});
+            return mission;
+          }
+        }
         const voice=await renderCreatorVoiceFile(String(input.script||''),String(input.campaignName||'campaign')+'-voice');
         const out=getCreatorEngine().renderShort({
           workspace:WORKSPACE,
           name:String(input.campaignName||'campaign'),
           script:String(input.script||''),
-          voicePath:voice
+          voicePath:voice,
+          assetFiles:selected.map(x=>x.path),
+          assetHashes:selected.map(x=>x.sha256),
+          missionId:id
         });
         mission=engine.completeStep(WORKSPACE,id,{artifact:{
           output:out.output,
           subtitle:out.subtitle,
           metadata:out.metadata,
-          duration:out.duration
+          duration:out.duration,
+          assets:out.assets.map(x=>path.relative(WORKSPACE,x).replace(/\\/g,'/')),
+          assetSelection:selected.length?'explicit':'automatic'
         }});
         continue;
       }
@@ -5518,7 +5585,7 @@ async function buildPcAcceptanceSnapshot(){
   try{commerce=await getCommerceEngine().status(WORKSPACE)}catch(e){commerce={ok:false,connected:false,error:String(e.message||e).slice(0,240)}}
   try{youtube=await getYoutubeStudio().status(getBrowserOperator(),WORKSPACE)}catch(e){youtube={ok:false,running:false,loggedIn:false,error:String(e.message||e).slice(0,240)}}
   const missions=missionHealthSnapshot();
-  const checks={workerVersion:WORKER_VERSION==='2.99.0',creatorAssetMissionReady:CAPS.includes('creator_asset_mission_v1')&&CAPS.includes('creator_asset_probe_v1')&&CAPS.includes('creator_asset_hash_dedupe_v1'),pcMissionReady:CAPS.includes('pc_safe_mission_v1')&&CAPS.includes('pc_safe_action_catalog_v1'),workspaceFileMissionReady:CAPS.includes('workspace_file_mission_v1')&&CAPS.includes('workspace_file_hash_guard_v1')&&CAPS.includes('workspace_file_no_overwrite_v1'),missionControlReady:CAPS.includes('mission_control_v1')&&CAPS.includes('mission_pause_v1')&&CAPS.includes('mission_cancel_v1'),missionRuntime:!!(missions&&missions.ok&&missions.autoResume),creatorEngineLoaded:!!(creator&&!creator.error),browserOperatorLoaded:!!(browser&&!browser.error),commerceEngineLoaded:!!(commerce&&!commerce.error),youtubeStudioLoaded:!!(youtube&&!youtube.error),silentStartup:process.platform==='win32'?startup.silentOk:true,autoUpdateReady:!!(startup.selfUpdate&&startup.selfUpdate.configured)};
+  const checks={workerVersion:WORKER_VERSION==='2.100.0',creatorAssetMissionReady:CAPS.includes('creator_asset_mission_v1')&&CAPS.includes('creator_asset_probe_v1')&&CAPS.includes('creator_asset_hash_dedupe_v1'),creatorStoryboardReady:CAPS.includes('creator_storyboard_v1')&&CAPS.includes('creator_explicit_assets_v1')&&CAPS.includes('creator_render_mission_bind_v1'),pcMissionReady:CAPS.includes('pc_safe_mission_v1')&&CAPS.includes('pc_safe_action_catalog_v1'),workspaceFileMissionReady:CAPS.includes('workspace_file_mission_v1')&&CAPS.includes('workspace_file_hash_guard_v1')&&CAPS.includes('workspace_file_no_overwrite_v1'),missionControlReady:CAPS.includes('mission_control_v1')&&CAPS.includes('mission_pause_v1')&&CAPS.includes('mission_cancel_v1'),missionRuntime:!!(missions&&missions.ok&&missions.autoResume),creatorEngineLoaded:!!(creator&&!creator.error),browserOperatorLoaded:!!(browser&&!browser.error),commerceEngineLoaded:!!(commerce&&!commerce.error),youtubeStudioLoaded:!!(youtube&&!youtube.error),silentStartup:process.platform==='win32'?startup.silentOk:true,autoUpdateReady:!!(startup.selfUpdate&&startup.selfUpdate.configured)};
   const corePass=Object.values(checks).every(Boolean);
   const accountSetup={shopifyConnected:!!(commerce&&commerce.ok&&commerce.connected),youtubeLoggedIn:!!(youtube&&youtube.ok&&youtube.loggedIn)};
   const snapshot={ok:true,generatedAt,worker:{version:WORKER_VERSION,name:NAME,platform:process.platform,arch:process.arch},checks,corePass,startup,update:startup.selfUpdate,creator:{ready:!!(creator&&creator.ok),assets:Number(creator&&creator.assets||0),outputDir:creator&&creator.outputDir||null,installable:!!(creator&&creator.installable)},browser:{running:!!(browser&&browser.running),browser:browser&&browser.browser||null,tabs:Array.isArray(browser&&browser.tabs)?browser.tabs.length:0,profile:browser&&browser.profile||null},commerce:{connected:accountSetup.shopifyConnected,shop:commerce&&commerce.shop||null,apiVersion:commerce&&commerce.apiVersion||null,message:String(commerce&&commerce.message||'').slice(0,300)},youtube:{running:!!(youtube&&youtube.running),loggedIn:accountSetup.youtubeLoggedIn,title:youtube&&youtube.title||null,url:youtube&&youtube.url||null,message:String(youtube&&youtube.message||'').slice(0,300)},missions,accountSetup};
@@ -5543,7 +5610,7 @@ async function repairLocalRuntime(){
     ['jarvis-startup.ps1','JARVIS_CINEMATIC_STARTUP_V1'],
     ['JARVIS-STARTUP-HIDDEN.vbs','jarvis-startup.ps1'],
     ['install-jarvis-startup.ps1','JARVIS Silent Startup'],
-    ['jarvis-creator-engine.js',"ENGINE_VERSION='1.1'"],
+    ['jarvis-creator-engine.js',"ENGINE_VERSION='1.2'"],
     ['jarvis-browser-operator.js',"BROWSER_OPERATOR_VERSION='1.0'"],
     ['jarvis-commerce-engine.js',"ENGINE_VERSION='1.0'"],
     ['jarvis-shopify-connect.ps1','SHOPIFY SECURE CONNECT'],
@@ -5723,7 +5790,7 @@ function bootstrapRuntimeUpgrade(){
     ['jarvis-startup.ps1','JARVIS_CINEMATIC_STARTUP_V1'],
     ['JARVIS-STARTUP-HIDDEN.vbs','jarvis-startup.ps1'],
     ['install-jarvis-startup.ps1','JARVIS Silent Startup'],
-    ['jarvis-creator-engine.js',"ENGINE_VERSION='1.1'"],
+    ['jarvis-creator-engine.js',"ENGINE_VERSION='1.2'"],
     ['jarvis-browser-operator.js',"BROWSER_OPERATOR_VERSION='1.0'"],
     ['jarvis-commerce-engine.js',"ENGINE_VERSION='1.0'"],
     ['jarvis-shopify-connect.ps1','SHOPIFY SECURE CONNECT'],
