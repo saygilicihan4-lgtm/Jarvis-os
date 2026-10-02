@@ -8,15 +8,15 @@ assert.ok(worker.includes("creatorAutoWebReady:CAPS.includes('creator_auto_web_q
 assert.ok(worker.includes('function creatorAutoWebQuery(title,script,maxTerms=9)'),'local deterministic query planner missing');
 assert.ok(worker.includes('async function creatorAutoWebAssets('),'central auto-web asset helper missing');
 assert.ok(worker.includes("localQueryOnly:true"),'auto-web evidence must record local query planning');
-assert.ok(worker.includes("if(!q)return[];"),'empty auto query must fail open');
+assert.ok(worker.includes("if(!queries.length)return[];"),'empty auto query set must fail open');
 assert.ok(worker.includes("}catch(_){}\n  return[];"),'auto-web fetch failure must fail open');
-assert.ok(worker.includes("query:creatorAutoWebQuery(brief.title,brief.script,9)"),'daily long-form must use local keyword query');
+assert.ok(worker.includes("const assets=await creatorAutoWebAssets({\n            title:brief.title,\n            script:brief.script"),'daily long-form must use local scene-aware web helper');
 assert.ok((worker.match(/webMediaAuto:\{type:'boolean'/g)||[]).length>=4,'batch/Short/long-form/VAROVA auto-web controls missing');
 assert.ok(worker.includes("item.webMediaAuto===false"),'batch auto-web opt-out missing');
 assert.ok((worker.match(/a\.webMediaAuto!==false/g)||[]).length>=3,'Short/long-form/VAROVA auto-web default-on guard missing');
 
 const start=worker.indexOf('function creatorAutoWebQuery(title,script,maxTerms=9)');
-const end=worker.indexOf('async function creatorAutoWebAssets',start);
+const end=worker.indexOf('function creatorSceneWebQueries',start);
 assert.ok(start>0&&end>start,'query planner block missing');
 const fnSource=worker.slice(start,end);
 const planner=Function(fnSource+'; return creatorAutoWebQuery;')();
