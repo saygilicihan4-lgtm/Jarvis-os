@@ -6,7 +6,7 @@ const server=fs.readFileSync('./server.js','utf8');
 const html=fs.readFileSync('./public/index.html','utf8');
 const css=fs.readFileSync('./public/style.css','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.87.0'"),'Worker 2.87.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.88.0'"),'Worker 2.88.0 required');
 assert.ok(worker.includes("'pc_self_repair_v1'"),'self-repair capability must be preserved');
 assert.ok(worker.includes("'creator_multiscene_v2'"),'multi-scene Creator capability must be preserved');
 assert.ok(worker.includes("'creator_burned_captions_v1'"),'burned-caption Creator capability must be preserved');
