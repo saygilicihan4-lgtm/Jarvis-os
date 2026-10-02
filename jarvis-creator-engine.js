@@ -802,6 +802,104 @@ function applyRenderedAudioQuality(quality,file,ffmpeg,{mode='short'}={}){
   return result;
 }
 
+function probeRenderedVisualWindow(file,ffmpeg,{start=0,seconds=1.4,fps=6}={}){
+  if(!ffmpeg)return{ok:false,code:'FFMPEG_MISSING',start:Number(start)||0};
+  if(!file||!fs.existsSync(file))return{ok:false,code:'CREATOR_VISUAL_OUTPUT_MISSING',start:Number(start)||0};
+  const at=Math.max(0,Number(start)||0);
+  const span=Math.max(0.8,Math.min(1.8,Number(seconds)||1.4));
+  const rate=Math.max(4,Math.min(10,Math.round(Number(fps)||6)));
+  try{
+    const raw=execFile(ffmpeg,[
+      '-hide_banner','-loglevel','error',
+      '-ss',at.toFixed(3),'-i',file,
+      '-t',span.toFixed(3),
+      '-an',
+      '-vf','fps='+rate+',scale=96:54:flags=area,format=gray,tblend=all_mode=difference,signalstats,metadata=mode=print:key=lavfi.signalstats.YAVG:file=-',
+      '-f','null','-'
+    ],{timeout:25000,maxBuffer:1024*1024*2});
+    const diffs=String(raw||'').split(/\r?\n/)
+      .map(x=>x.trim())
+      .filter(x=>x.startsWith('lavfi.signalstats.YAVG='))
+      .map(x=>Number(x.split('=').pop()))
+      .filter(x=>Number.isFinite(x)&&x>=0);
+    const sampleCount=diffs.length;
+    const meanDifference=sampleCount?diffs.reduce((a,b)=>a+b,0)/sampleCount:0;
+    const peakDifference=sampleCount?Math.max(...diffs):0;
+    const activeFrames=diffs.filter(x=>x>=0.015).length;
+    const activeRatio=sampleCount?activeFrames/sampleCount:0;
+    const ok=sampleCount>=3&&meanDifference>=0.015&&peakDifference>=0.04&&activeRatio>=0.2;
+    return{
+      ok,
+      code:ok?'CREATOR_VISUAL_WINDOW_PASS':'CREATOR_VISUAL_WINDOW_FROZEN',
+      start:Number(at.toFixed(3)),
+      seconds:Number(span.toFixed(3)),
+      fps:rate,
+      sampleCount,
+      meanDifference:Number(meanDifference.toFixed(4)),
+      peakDifference:Number(peakDifference.toFixed(4)),
+      activeFrames,
+      activeRatio:Number(activeRatio.toFixed(3))
+    };
+  }catch(e){
+    return{ok:false,code:'CREATOR_VISUAL_WINDOW_PROBE_FAILED',start:Number(at.toFixed(3)),message:String(e.message||e).slice(0,300)};
+  }
+}
+function probeRenderedVisualActivity(file,ffmpeg,{durationSeconds=0}={}){
+  const duration=Number(durationSeconds);
+  if(!Number.isFinite(duration)||duration<=2)return{ok:false,code:'CREATOR_VISUAL_DURATION_UNKNOWN',duration:Number(duration||0),windows:[]};
+  const span=Math.min(1.4,Math.max(0.9,duration/12));
+  const rawOffsets=[
+    0.25,
+    Math.max(0.25,(duration/2)-(span/2)),
+    Math.max(0.25,duration-span-0.25)
+  ];
+  const offsets=[];
+  for(const value of rawOffsets){
+    const rounded=Number(Math.min(Math.max(0,value),Math.max(0,duration-span)).toFixed(3));
+    if(!offsets.includes(rounded))offsets.push(rounded);
+  }
+  const windows=offsets.map(start=>probeRenderedVisualWindow(file,ffmpeg,{start,seconds:span,fps:6}));
+  const activeWindows=windows.filter(x=>x.ok).length;
+  const requiredWindows=Math.min(2,windows.length);
+  const ok=windows.length>=2&&activeWindows>=requiredWindows;
+  return{
+    ok,
+    code:ok?'CREATOR_VISUAL_ACTIVITY_PASS':'CREATOR_VISUAL_ACTIVITY_LOW',
+    duration:Number(duration.toFixed(3)),
+    activeWindows,
+    requiredWindows,
+    windows,
+    method:'ffmpeg-frame-difference'
+  };
+}
+function applyRenderedVisualQuality(quality,file,ffmpeg,{mode='short'}={}){
+  const result=quality&&typeof quality==='object'?quality:{ok:false,code:'CREATOR_QUALITY_FAILED',message:'Creator quality result missing.'};
+  if(!result.checks||typeof result.checks!=='object')result.checks={};
+  if(!result.measured||typeof result.measured!=='object')result.measured={};
+  const baseOk=!!result.ok;
+  const visualActivity=probeRenderedVisualActivity(file,ffmpeg,{durationSeconds:Number(result.measured.duration||0)});
+  result.checks.visualActivity=visualActivity.ok;
+  result.measured.visualActiveWindows=visualActivity.activeWindows;
+  result.measured.visualRequiredWindows=visualActivity.requiredWindows;
+  result.visualActivity=visualActivity;
+  result.ok=baseOk&&visualActivity.ok;
+  if(baseOk&&!visualActivity.ok){
+    result.code='CREATOR_VISUAL_ACTIVITY_LOW';
+    result.message=mode==='longform'
+      ?'Creator long-form final görsel hareket kalite kapısı başarısız.'
+      :'Creator Shorts final görsel hareket kalite kapısı başarısız.';
+  }
+  return result;
+}
+function applyRenderedMediaQuality(quality,file,ffmpeg,{mode='short'}={}){
+  return applyRenderedVisualQuality(
+    applyRenderedAudioQuality(quality,file,ffmpeg,{mode}),
+    file,
+    ffmpeg,
+    {mode}
+  );
+}
+
 function streamTimelineCoverage(stream,containerDuration){
   const finite=value=>value!==null&&value!==undefined&&String(value).trim()!==''&&Number.isFinite(Number(value))?Number(value):null;
   const start=finite(stream&&stream.start_time);
@@ -1208,7 +1306,7 @@ function renderShort({workspace,name,script,voicePath,assetFiles=[],missionId=''
   }
 
   if(!fs.existsSync(outFile)||fs.statSync(outFile).size<10000)throw new Error('Rendered MP4 verification failed');
-  const quality=applyRenderedAudioQuality(
+  const quality=applyRenderedMediaQuality(
     probeRenderedShort(outFile,status.ffprobe),
     outFile,
     status.ffmpeg,
@@ -1428,7 +1526,7 @@ function renderLongform({workspace,name,script,voicePath,assetFiles=[],missionId
   }
 
   if(!fs.existsSync(outFile)||fs.statSync(outFile).size<1024*1024)throw new Error('Rendered long-form MP4 verification failed');
-  const quality=applyRenderedAudioQuality(
+  const quality=applyRenderedMediaQuality(
     probeRenderedLongform(outFile,status.ffprobe),
     outFile,
     status.ffmpeg,
@@ -1530,6 +1628,10 @@ module.exports={
   probeNarrationActivity,
   probeRenderedAudioLoudness,
   applyRenderedAudioQuality,
+  probeRenderedVisualWindow,
+  probeRenderedVisualActivity,
+  applyRenderedVisualQuality,
+  applyRenderedMediaQuality,
   probeHookMotion,
   findHookMotionWindow,
   listAssets,
