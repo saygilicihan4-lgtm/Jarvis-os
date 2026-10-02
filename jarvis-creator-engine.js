@@ -237,6 +237,18 @@ function audioDurationSeconds(file,ffprobe){
     return Number.isFinite(n)&&n>0?n:null;
   }catch(_){return null}
 }
+function fitNarrationRatePercent(measuredSeconds,targetSeconds=600,currentRatePercent=-7){
+  const measured=Number(measuredSeconds);
+  const target=Number(targetSeconds);
+  const current=Number(currentRatePercent);
+  if(!Number.isFinite(measured)||measured<=0||!Number.isFinite(target)||target<=0||!Number.isFinite(current)){
+    return Math.max(-30,Math.min(25,Number.isFinite(current)?current:-7));
+  }
+  const currentFactor=Math.max(0.5,1+(current/100));
+  const desiredFactor=currentFactor*(measured/target);
+  const next=(desiredFactor-1)*100;
+  return Math.max(-30,Math.min(25,Math.round(next)));
+}
 function probeRenderedShort(file,ffprobe){
   if(!ffprobe)return{ok:false,code:'FFPROBE_MISSING',message:'Rendered Shorts kalite doğrulaması için FFprobe gerekli.'};
   if(!file||!fs.existsSync(file))return{ok:false,code:'CREATOR_OUTPUT_MISSING',message:'Rendered MP4 bulunamadı.'};
@@ -713,6 +725,7 @@ module.exports={
   ffmpegFilterPath,
   renderShort,
   renderLongform,
+  fitNarrationRatePercent,
   probeRenderedShort,
   probeRenderedLongform,
   listAssets,
