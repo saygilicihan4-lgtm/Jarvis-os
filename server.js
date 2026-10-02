@@ -237,7 +237,7 @@ function agentFor(c){
   return'CORE';
 }
 function risky(c){
-  return /(öde|satın al|reklam bütçe|para gönder|iade|refund|sözleşme imzala|sil|delete|format)/i.test(String(c||''));
+  return /(öde|satın al|reklam bütçe|para gönder|iade|refund|sözleşme imzala|sil|delete|format|yayınla|yayinla|publish)/i.test(String(c||''));
 }
 function remoteAgent(a){return['DEVELOPER','CREATOR','COMMERCE'].includes(a)}
 function requiredCapability(command){
@@ -336,7 +336,7 @@ function accountActionFor(command){
   if(/shopify|varova|ürün|stok|sipariş/.test(c)){
     if(/delete|sil/.test(c))return{type:'shopify',action:'delete'};
     if(/refund|iade/.test(c))return{type:'shopify',action:'refund'};
-    if(/oluştur|olustur|update|güncelle|stok gir|yayınla|yayinla/.test(c))return{type:'shopify',action:'write'};
+    if(/oluştur|olustur|ekle|taslak|update|güncelle|stok gir|yayınla|yayinla|publish/.test(c))return{type:'shopify',action:'write'};
     return{type:'shopify',action:'read'};
   }
   return null;
