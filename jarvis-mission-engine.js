@@ -90,6 +90,18 @@ function listMissions(workspace,{limit=30}={}){
 function latestOpenMission(workspace){
   return listMissions(workspace,{limit:50}).find(x=>OPEN_STATUSES.has(String(x.status||'')))||null;
 }
+function schedulerOrder(missions){
+  const rows=Array.isArray(missions)?missions.filter(Boolean):[];
+  return rows
+    .filter(x=>OPEN_STATUSES.has(String(x.status||'')))
+    .sort((a,b)=>{
+      const ac=String(a.createdAt||a.updatedAt||'');
+      const bc=String(b.createdAt||b.updatedAt||'');
+      const byCreated=ac.localeCompare(bc);
+      if(byCreated!==0)return byCreated;
+      return String(a.id||'').localeCompare(String(b.id||''));
+    });
+}
 function currentStep(mission){
   if(!mission||!Array.isArray(mission.steps))return null;
   const idx=Math.max(0,Math.min(mission.steps.length-1,Number(mission.currentStep)||0));
@@ -226,6 +238,7 @@ module.exports={
   saveMission,
   listMissions,
   latestOpenMission,
+  schedulerOrder,
   currentStep,
   startStep,
   completeStep,
