@@ -22,6 +22,12 @@
       "min_bytes": 7000
     },
     {
+      "path": "jarvis-youtube-studio.js",
+      "signature": "YOUTUBE_STUDIO_VERSION='1.0'",
+      "kind": "node",
+      "min_bytes": 7000
+    },
+    {
       "path": "jarvis-commerce-engine.js",
       "signature": "ENGINE_VERSION='1.0'",
       "kind": "node",
