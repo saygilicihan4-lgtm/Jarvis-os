@@ -19,7 +19,8 @@ assert.ok(worker.includes("if(action&&action.kind==='status')"),'read-only PC re
 assert.ok(worker.includes("Read-only PC status action is safe to retry"),'read-only retry note missing');
 assert.ok(worker.includes("if(!command||!isLocalSafeControlCommand(command))"),'PC mission must revalidate the safe command catalog');
 assert.ok(worker.includes("code:'PC_ACTION_NOT_SAFE'"),'unsafe PC action guard missing');
-assert.ok(worker.includes("dependency:'pc_runtime'"),'PC runtime dependency missing');
+assert.ok(worker.includes("'pc_runtime'"),'PC runtime dependency token missing');
+assert.ok(worker.includes("if(dep==='pc_runtime')"),'PC runtime dependency readiness handler missing');
 assert.ok(worker.includes("pcMissionReady:CAPS.includes('pc_safe_mission_v1')"),'PC acceptance readiness missing');
 
 const start=worker.indexOf('function normalizePcMissionActions(args={})');
