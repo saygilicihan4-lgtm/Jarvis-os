@@ -31,8 +31,9 @@ assert.ok(source.includes("duration>=540&&duration<=660"),'9-11 minute duration 
 assert.ok(source.includes("audio:!!audio"),'long-form audio requirement missing');
 assert.ok(source.includes("split(',').includes('mp4')"),'MP4 container gate missing');
 assert.ok(source.includes("actualSize>=1024*1024"),'minimum output size gate missing');
-assert.ok(source.includes("const quality=applyRenderedAudioQuality(")&&source.includes("probeRenderedLongform(outFile,status.ffprobe)"),'post-render long-form technical + final audio gate missing');
+assert.ok(source.includes("const quality=applyRenderedMediaQuality(")&&source.includes("probeRenderedLongform(outFile,status.ffprobe)"),'post-render long-form technical + final media gate missing');
 assert.strictEqual(typeof creator.applyRenderedAudioQuality,'function','final audio quality helper export missing');
+assert.strictEqual(typeof creator.applyRenderedMediaQuality,'function','final media quality helper export missing');
 assert.ok(source.includes("mode:'longform'"),'long-form metadata mode missing');
 assert.ok(source.includes("sourceAssetHashes:Array.isArray(assetHashes)"),'long-form asset hash metadata missing');
 assert.strictEqual(typeof creator.renderLongform,'function','long-form renderer export missing');
