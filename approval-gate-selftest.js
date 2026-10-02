@@ -5,7 +5,7 @@ const worker=fs.readFileSync('./worker.js','utf8');
 const commerce=fs.readFileSync('./jarvis-commerce-engine.js','utf8');
 const youtube=fs.readFileSync('./jarvis-youtube-studio.js','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.92.0'"),'Worker 2.92.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.93.0'"),'Worker 2.93.0 required');
 assert.ok(worker.includes("'approval_gate_v1'"),'approval gate capability missing');
 assert.ok(worker.includes("'shopify_publish_approval_v1'"),'Shopify publish approval capability missing');
 assert.ok(worker.includes('function approveMissionGate('),'approval helper missing');
@@ -24,7 +24,8 @@ assert.ok(worker.includes("publish:{type:'boolean'"),'Shopify publish request sc
 
 assert.ok(commerce.includes('async function publishProduct(workspace,productId)'),'Shopify publish engine missing');
 assert.ok(commerce.includes("Geçersiz Shopify Product GID")&&commerce.includes("Product\\/\\d+$/.test(id)"),'Shopify publish product id validation missing');
-assert.ok(youtube.includes('PUBLIC/YAYINLA adımına dokunulmadı'),'YouTube must remain draft-only in this release');
-assert.ok(!youtube.includes('async function publishDraft'),'YouTube publish must not be enabled by Shopify approval work');
+assert.ok(youtube.includes('PUBLIC/YAYINLA adımına dokunulmadı'),'YouTube draft path must remain non-publishing');
+assert.ok(youtube.includes('async function publishPreparedDraft('),'YouTube approved publish path missing');
+assert.ok(worker.includes("'youtube_publish_approval_v1'"),'YouTube publish approval capability missing');
 
 console.log('APPROVAL GATE SELFTEST PASS');
