@@ -30,14 +30,14 @@ const voice=path.join(workspace,'voice.wav');
 
 run(ffmpeg,[
   '-y','-hide_banner','-loglevel','error',
-  '-f','lavfi','-i','testsrc2=size=360x640:rate=30',
+  '-f','lavfi','-i','testsrc2=size=480x854:rate=30',
   '-t','5',
   '-c:v','libx264','-preset','ultrafast','-crf','28','-pix_fmt','yuv420p',
   a
 ]);
 run(ffmpeg,[
   '-y','-hide_banner','-loglevel','error',
-  '-f','lavfi','-i','smptebars=size=360x640:rate=30',
+  '-f','lavfi','-i','smptebars=size=480x854:rate=30',
   '-t','5',
   '-c:v','libx264','-preset','ultrafast','-crf','28','-pix_fmt','yuv420p',
   b
