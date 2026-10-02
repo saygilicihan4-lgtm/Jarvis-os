@@ -29,6 +29,7 @@ assert.ok(creator.includes("e.code=String(quality.code||'CREATOR_QUALITY_FAILED'
 assert.ok(creator.includes("quality,\n    visualEdit,\n    thumbnail:thumbnail&&thumbnail.ok?thumbnail.path:null,\n    thumbnailTitleBurned:!!(thumbnail&&thumbnail.ok&&thumbnail.titleBurned),\n    soundDesign,\n    audioMaster:creatorAudioMasterProfile(),\n    narrationActivity,\n    output:path.relative(workspace,outFile)"),'quality + visual edit + thumbnail + sound design + audio master + narration activity evidence missing from Creator job metadata');
 assert.ok(creator.includes("probeNarrationActivity,"),'narration activity probe export missing');
 assert.ok(creator.includes("probeRenderedAudioLoudness,")&&creator.includes("applyRenderedAudioQuality,"),'final audio quality exports missing');
+assert.ok(creator.includes("probeAudioContinuity,"),'audio continuity probe export missing');
 assert.ok(creator.includes("probeRenderedMotionCoverage,")&&creator.includes("applyRenderedVisualQuality,"),'final visual quality exports missing');
 assert.ok(creator.includes("creatorAudioMasterFilter,")&&creator.includes("creatorAudioMasterProfile,"),'audio master exports missing');
 assert.ok(creator.includes("probeRenderedShort,")&&creator.includes("probeRenderedLongform,")&&creator.includes("listAssets,"),'quality probe exports missing');
