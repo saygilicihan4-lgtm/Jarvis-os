@@ -182,7 +182,7 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     const h=await get('http://127.0.0.1:'+BRIDGE_PORT+'/health');
     assert(h.status===200,'health status');
     const hj=JSON.parse(h.body);
-    assert(hj.version==='2.80.0','worker version');
+    assert(hj.version==='2.81.0','worker version');
     assert(hj.localBrain&&hj.localBrain.personaVersion===2,'persona v2 health');
     assert(hj.localStt&&hj.localStt.adaptiveDecode===true,'adaptive STT decode health');
     assert(hj.localStt&&hj.localStt.dynamicEndpointing===true,'dynamic STT endpointing health');
@@ -228,6 +228,9 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.capabilities.includes('durable_mission_v1'),'durable mission capability');
     assert(hj.capabilities.includes('mission_resume_v1'),'mission resume capability');
     assert(hj.capabilities.includes('varova_campaign_mission_v1'),'VAROVA campaign mission capability');
+    assert(hj.capabilities.includes('mission_auto_resume_v1'),'mission auto-resume capability');
+    assert(hj.capabilities.includes('mission_health_v1'),'mission health capability');
+    assert(hj.missionRuntime&&hj.missionRuntime.autoResume===true,'mission runtime auto-resume health');
     assert(hj.capabilities.includes('conversation_cadence_v1'),'conversation cadence capability');
     assert(hj.capabilities.includes('brevity_mirroring_v1'),'brevity mirroring capability');
     assert(hj.capabilities.includes('adaptive_response_length_v1'),'adaptive response length capability');
@@ -276,6 +279,11 @@ function assert(x,msg){if(!x)throw new Error(msg)}
     assert(hj.capabilities.includes('wake_ack_turn_timing_v1'),'wake acknowledgement turn timing capability');
     assert(hj.adaptiveTts.offlineFallback==='windows-sapi','offline TTS fallback health');
     assert(hj.brainRuntime&&hj.brainRuntime.keepAlive,'brain runtime health');
+
+    const missionState=await get('http://127.0.0.1:'+BRIDGE_PORT+'/mission-status');
+    assert(missionState.status===200,'mission status endpoint');
+    const msj=JSON.parse(missionState.body);
+    assert(msj.ok===true&&msj.autoResume===true,'mission status auto-resume metadata');
 
     const feedback=await post('http://127.0.0.1:'+BRIDGE_PORT+'/brain',{message:'Çok soru soruyorsun, biraz azalt.'});
     assert(feedback.status===200,'dialogue feedback directive status');
