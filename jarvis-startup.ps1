@@ -205,7 +205,37 @@ if (-not $NoSplash) {
 }
 
 try {
-  Set-BootStage "CORE START" "JARVIS background services are starting silently." 10
+  Set-BootStage "UPDATE" "Verified JARVIS components are being checked." 7
+
+  $updater = Join-Path $JarvisDir "jarvis-self-update.ps1"
+  $pendingUpdater = Join-Path $JarvisDir "jarvis-self-update.next.ps1"
+  try {
+    if (Test-Path $pendingUpdater) {
+      Move-Item -LiteralPath $pendingUpdater -Destination $updater -Force
+      Write-StartupLog "Pending updater promoted before execution."
+    }
+  } catch {
+    Write-StartupLog ("Pending updater promotion failed: " + $_.Exception.Message)
+  }
+
+  if (Test-Path $updater) {
+    try {
+      $updateProcess = Start-Process -FilePath "powershell.exe" -ArgumentList @(
+        "-NoProfile",
+        "-ExecutionPolicy","Bypass",
+        "-WindowStyle","Hidden",
+        "-File",$updater,
+        "-Silent"
+      ) -WindowStyle Hidden -PassThru -Wait
+      Write-StartupLog ("Self-update exit code: " + $updateProcess.ExitCode)
+    } catch {
+      Write-StartupLog ("Self-update skipped safely: " + $_.Exception.Message)
+    }
+  } else {
+    Write-StartupLog "Self-updater not present yet; Worker bootstrap fallback will prepare it."
+  }
+
+  Set-BootStage "CORE START" "JARVIS background services are starting silently." 12
 
   $health = $null
   try {
