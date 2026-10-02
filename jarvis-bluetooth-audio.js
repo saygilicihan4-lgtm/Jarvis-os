@@ -1,5 +1,6 @@
 const childProcess=require('child_process');
-const VERSION='1.2';
+const path=require('path');
+const VERSION='1.3';
 function ps(script){
   if(process.platform!=='win32')return{ok:false,reason:'windows_required'};
   try{return{ok:true,output:childProcess.execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',script],{encoding:'utf8',windowsHide:true,timeout:12000,maxBuffer:1024*1024}).trim()}}catch(e){return{ok:false,reason:'powershell_failed',error:String(e.message||e).slice(0,300)}}
@@ -19,14 +20,22 @@ function findAudioDevice(name){
 function defaultAudioEndpoint(){
   return ps("$p='HKCU:\\Software\\Microsoft\\Multimedia\\Sound Mapper'; Get-ItemProperty -Path $p -ErrorAction SilentlyContinue | Select-Object Playback,Record | ConvertTo-Json -Compress");
 }
+function parseFoundDevice(output){
+  try{const v=JSON.parse(output||'[]');const a=Array.isArray(v)?v:[v];return a.find(x=>x&&x.InstanceId&&String(x.Status||'').toLowerCase()==='ok')||a.find(x=>x&&x.InstanceId)||null}catch{return null}
+}
+function setDefaultEndpoint(instanceId){
+  const id=String(instanceId||'').trim(); if(!id)return{ok:false,reason:'endpoint_id_required'};
+  if(process.platform!=='win32')return{ok:false,reason:'windows_required'};
+  try{const out=childProcess.execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(__dirname,'jarvis-set-audio-endpoint.ps1'),'-DeviceId',id],{encoding:'utf8',windowsHide:true,timeout:12000,maxBuffer:1024*1024}).trim();return{ok:out.includes('JARVIS_AUDIO_ENDPOINT_SET'),output:out}}catch(e){return{ok:false,reason:'coreaudio_switch_failed',error:String(e.message||e).slice(0,300)}}
+}
 function selectOutput(name){
   const found=findAudioDevice(name); if(!found.ok)return found;
   if(found.output==='[]')return{ok:false,reason:'audio_device_not_found'};
-  // Windows exposes endpoint discovery here, but provides no supported built-in
-  // PowerShell cmdlet to atomically set an arbitrary default endpoint by name.
-  // Do not fake success: open the native Sound page and return verification-required.
+  const device=parseFoundDevice(found.output); if(!device)return{ok:false,reason:'audio_endpoint_parse_failed'};
+  const switched=setDefaultEndpoint(device.InstanceId);
+  if(switched.ok)return{ok:true,reason:'coreaudio_endpoint_set',device};
   const opened=openSoundOutputSettings();
-  return opened.ok?{ok:false,reason:'manual_endpoint_selection_required',device:found.output,settingsOpened:true}:opened;
+  return{ok:false,reason:switched.reason||'manual_endpoint_selection_required',device,settingsOpened:!!opened.ok,error:switched.error};
 }
 function openSoundOutputSettings(){
   if(process.platform!=='win32')return{ok:false,reason:'windows_required'};
@@ -54,4 +63,4 @@ function command(action,args={}){
   if(['playpause','next','previous','stop','volumeup','volumedown','mute'].includes(a))return mediaKey(a);
   return{ok:false,reason:'unsupported_action'};
 }
-module.exports={VERSION,status,pairedAudioDevices,findAudioDevice,defaultAudioEndpoint,selectOutput,openSoundOutputSettings,openBluetoothSettings,mediaKey,command};
+module.exports={VERSION,status,pairedAudioDevices,findAudioDevice,defaultAudioEndpoint,parseFoundDevice,setDefaultEndpoint,selectOutput,openSoundOutputSettings,openBluetoothSettings,mediaKey,command};
