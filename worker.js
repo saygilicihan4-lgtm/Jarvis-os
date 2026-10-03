@@ -8708,6 +8708,8 @@ let restoreAttempted=false;
 let lastAuthRecovery=0;
 let phoneSessionCodeShown=false;
 let mobileTtsBusy=false;
+let mobileLanguageBusy=false;
+let mobileLanguageEngine=null;
 let mobileBrainBusy=false;
 async function serviceMobileTts(){
   if(mobileTtsBusy)return false;
@@ -8739,6 +8741,25 @@ async function serviceMobileTts(){
   }finally{
     mobileTtsBusy=false;
   }
+}
+function getMobileLanguageEngine(){
+  if(!mobileLanguageEngine){
+    const output=require('./jarvis-language-turn-output').createOutput({brainUrl:LOCAL_BRAIN_URL,model:LOCAL_BRAIN_MODEL});
+    mobileLanguageEngine=require('./jarvis-mobile-language-conversation').createEngine({output});
+  }
+  return mobileLanguageEngine;
+}
+async function serviceMobileLanguage(){
+  if(mobileLanguageBusy)return false;
+  mobileLanguageBusy=true;
+  try{
+    const q=(await api('/api/worker/mobile-language-next')).request;
+    if(!q)return false;
+    let result;
+    try{result=await getMobileLanguageEngine().turn(q)}catch(e){result={ok:false,state:'failed',reason:String(e.message||e),locale:q.locale,learning:false,deviceE2eVerified:false}}
+    await api('/api/worker/mobile-language-result',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:q.id,locale:q.locale,ok:result.ok===true,result,error:result.ok===true?null:String(result.reason||'mobile language failed')})});
+    return true;
+  }catch(e){return false}finally{mobileLanguageBusy=false}
 }
 async function serviceMobileBrain(){
   if(mobileBrainBusy)return false;
@@ -8853,6 +8874,7 @@ async function poll(){
       console.log('[JARVIS] TELEFON SESSION CODE: '+p.code+' (5 dakika, tek kullanim)');
     }
     await serviceMobileTts();
+    await serviceMobileLanguage();
     await serviceMobileBrain();
     if(Date.now()-lastStateSync>30000){
       await recoverTransactionJournals();
@@ -8906,6 +8928,7 @@ if(!TEST_MODE){
   // speech feels conversational instead of waiting up to three seconds.
   setInterval(()=>serviceMobileBrain().catch(()=>{}),650);
   setInterval(()=>serviceMobileTts().catch(()=>{}),650);
+  setInterval(()=>serviceMobileLanguage().catch(()=>{}),650);
   // Previously authorized draft-only missions may continue after their
   // dependency becomes ready. The service never auto-publishes content.
   setInterval(()=>serviceDurableMissions().catch(()=>{}),20000);
