@@ -27,7 +27,7 @@ function observe(session,{locale,confidence=0,sequence,automatic=false,final=fal
   session.candidateCount=session.candidate===n?Math.min(2,session.candidateCount+1):1;
   session.candidate=n;
   if(session.candidateCount>=2)session.pending={locale:n,confidence,sequence};
-  return{ok:true,changed:false,pendingLocale:session.pending?.locale||null,candidateCount:session.candidateCount};
+  return{ok:true,changed:false,candidateLocale:n,pendingLocale:session.pending?.locale||null,candidateCount:session.candidateCount};
 }
 function beginTurn(session,{id,root,systemLocale}={}){
   if(session.activeTurn)throw new Error('language_turn_busy');

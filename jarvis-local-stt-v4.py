@@ -2,6 +2,8 @@ import json
 import math
 import os
 import re
+import select
+import socket
 import sys
 import threading
 import time
@@ -162,7 +164,21 @@ def should_retry_transcription(text, avg_logprob, max_no_speech):
     return False
 
 
-def record_utterance(max_seconds=10.0, wait_seconds=6.0):
+def ensure_capture_active(cancelled=None):
+    if cancelled and cancelled():
+        raise RuntimeError("capture_cancelled")
+
+
+def connection_closed(connection):
+    try:
+        readable, _, _ = select.select([connection], [], [], 0)
+        return bool(readable) and connection.recv(1, socket.MSG_PEEK) == b""
+    except (OSError, ValueError):
+        return True
+
+
+def record_utterance(max_seconds=10.0, wait_seconds=6.0, cancelled=None):
+    ensure_capture_active(cancelled)
     np, sd, _ = load_deps()
     device = sd.query_devices(kind="input")
     native_rate = int(round(float(device.get("default_samplerate", 16000) or 16000)))
@@ -187,6 +203,7 @@ def record_utterance(max_seconds=10.0, wait_seconds=6.0):
         latency="low",
     ) as stream:
         for _ in range(calibration_blocks):
+            ensure_capture_active(cancelled)
             block, _overflowed = stream.read(block_size)
             noise.append(rms(np, block[:, 0]))
 
@@ -197,6 +214,7 @@ def record_utterance(max_seconds=10.0, wait_seconds=6.0):
         ))
 
         for i in range(max_blocks):
+            ensure_capture_active(cancelled)
             block, _overflowed = stream.read(block_size)
             mono = block[:, 0].copy()
             level = rms(np, mono)
@@ -441,10 +459,13 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             started = time.time()
-            audio, meta = record_utterance()
+            cancelled = lambda: connection_closed(self.connection)
+            audio, meta = record_utterance(cancelled=cancelled)
             if audio is None:
                 return self._json(408, {"ok": False, "error": "no_speech", "meta": meta})
+            ensure_capture_active(cancelled)
             text, info = transcribe(audio, language=language)
+            ensure_capture_active(cancelled)
             if not text:
                 return self._json(422, {"ok": False, "error": "empty_transcript", "meta": meta})
             return self._json(200, {
@@ -457,6 +478,8 @@ class Handler(BaseHTTPRequestHandler):
             })
         except Exception as exc:
             log("listen error: " + str(exc))
+            if connection_closed(self.connection):
+                return
             return self._json(500, {"ok": False, "error": str(exc)[:300]})
         finally:
             _listen_lock.release()

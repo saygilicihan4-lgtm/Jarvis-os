@@ -128,6 +128,24 @@
       "signature": "module.exports=",
       "kind": "node",
       "min_bytes": 400
+    },
+    {
+      "path": "jarvis-language-turn-output.js",
+      "signature": "module.exports=",
+      "kind": "node",
+      "min_bytes": 1000
+    },
+    {
+      "path": "jarvis-language-conversation.js",
+      "signature": "module.exports=",
+      "kind": "node",
+      "min_bytes": 1000
+    },
+    {
+      "path": "jarvis-language-sapi.ps1",
+      "signature": "JARVIS_LANGUAGE_SAPI_V1",
+      "kind": "powershell",
+      "min_bytes": 600
     }
   ]
 }

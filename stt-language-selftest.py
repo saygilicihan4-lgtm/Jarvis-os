@@ -61,3 +61,20 @@ for origin in ['http://localhost.evil.test', 'http://127.0.0.1.evil.test', 'http
     assert not stt.Handler._origin_ok(SimpleNamespace(headers={'Origin': origin}))
 assert stt.Handler._origin_ok(SimpleNamespace(headers={'Origin': 'http://localhost:8765'}))
 print('STT LANGUAGE SELFTEST PASS · fake-model contract, not microphone E2E')
+
+# A disconnected request stops microphone capture at the next block boundary.
+import socket
+left, right = socket.socketpair()
+try:
+    assert stt.connection_closed(left) is False
+    right.close()
+    assert stt.connection_closed(left) is True
+finally:
+    left.close()
+    right.close()
+try:
+    stt.record_utterance(cancelled=lambda: True)
+    raise AssertionError('cancelled capture entered microphone setup')
+except RuntimeError as error:
+    assert str(error) == 'capture_cancelled'
+print('STT DISCONNECT CANCELLATION SELFTEST PASS')

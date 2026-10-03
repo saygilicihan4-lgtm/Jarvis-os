@@ -13,8 +13,8 @@ async function freePort(){const s=http.createServer();await new Promise(r=>s.lis
       child.stdout.on('data',data=>{if(String(data).includes('LOCAL TTS BRIDGE READY')){clearTimeout(timeout);resolve()}});
       child.once('exit',code=>{clearTimeout(timeout);reject(new Error('worker exit '+code))});
     });
-    const post=async(data,origin)=>{
-      const response=await fetch('http://127.0.0.1:'+port+'/language-session',{method:'POST',headers:{'content-type':'application/json',...(origin?{origin}:{})},body:JSON.stringify(data),signal:AbortSignal.timeout(3000)});
+    const post=async(data,origin,route="language-session")=>{
+      const response=await fetch('http://127.0.0.1:'+port+'/'+route,{method:'POST',headers:{'content-type':'application/json',...(origin?{origin}:{})},body:JSON.stringify(data),signal:AbortSignal.timeout(3000)});
       return{status:response.status,body:response.status===403?null:await response.json()};
     };
     let response=await post({action:'create'});assert.equal(response.status,200);
@@ -28,9 +28,15 @@ async function freePort(){const s=http.createServer();await new Promise(r=>s.lis
     response=await post({action:'create',requested:'__proto__'});assert.equal(response.status,422);
     response=await post({action:'set-preference',locale:'fr'},'http://localhost.evil.test');assert.equal(response.status,403);
     response=await post({action:'status',sessionId:id});assert.equal(response.body.context.locale,'de-DE','blocked origin cannot mutate');
+    response=await post({action:'create'},null,'language-conversation');assert.equal(response.status,200);
+    const conversationId=response.body.sessionId;
+    response=await post({action:'acknowledge',sessionId:conversationId,receipt:'forged',played:true},null,'language-conversation');
+    assert.equal(response.status,422,'unrendered audio cannot be acknowledged');
+    response=await post({action:'cancel',sessionId:conversationId},null,'language-conversation');assert.equal(response.status,200);
+    response=await post({action:'create'},'http://localhost.evil.test','language-conversation');assert.equal(response.status,403);
     const manifest=JSON.parse(fs.readFileSync('jarvis-update-manifest.json','utf8'));
     const installer=fs.readFileSync('JARVIS-ZERO-COST-ONECLICK.ps1','utf8');
-    for(const file of ['jarvis-language-core.js','jarvis-language-learning.js','jarvis-speech-capabilities.js','jarvis-speech-provider-discovery.js','jarvis-session-language.js','jarvis-speech-session-runtime.js']){
+    for(const file of ['jarvis-language-core.js','jarvis-language-learning.js','jarvis-speech-capabilities.js','jarvis-speech-provider-discovery.js','jarvis-session-language.js','jarvis-speech-session-runtime.js','jarvis-language-conversation.js','jarvis-language-turn-output.js','jarvis-language-sapi.ps1']){
       const entry=manifest.files.find(x=>x.path===file);assert.ok(entry,'updater entry '+file);
       assert.ok(fs.readFileSync(file,'utf8').includes(entry.signature));assert.ok(fs.statSync(file).size>=entry.min_bytes);
       assert.ok(installer.includes('"'+file+'"'),'installer entry '+file);
