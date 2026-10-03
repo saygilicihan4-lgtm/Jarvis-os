@@ -1,0 +1,40 @@
+name: v130 Relay Hardening
+
+on:
+  push:
+    branches: [ jarvis-mobile-language-relay-v130 ]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: jarvis-mobile-language-relay-v130
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Apply hardening
+        run: node scripts/v130-hardening.js
+      - name: Verify
+        run: |
+          node --check public/index.html || true
+          node --check server.js
+          node --check worker.js
+          node mobile-tts-relay-selftest.js
+          grep -q "String(locale||'').toUpperCase()+' RELAY'" public/index.html
+          grep -q "await fetch('/api/mobile-tts/'+encodeURIComponent(cj.id)+'/cancel'" public/index.html
+      - name: Commit hardened UI
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/index.html
+          git diff --cached --check
+          git commit -m "Harden mobile relay timeout and status"
+          git push origin HEAD:jarvis-mobile-language-relay-v130
