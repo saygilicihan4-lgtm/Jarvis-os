@@ -186,13 +186,16 @@
     const negativeEntries=readNegativeTtsEvidence(storage,nowMs),negatives=new Map(negativeEntries.map(x=>[x.requestedLocale,x]));
     const added=new Set();
     const appendOption=(value,label)=>{if(added.has(value))return;const option=(list.ownerDocument||root&&root.document).createElement('option');option.value=value;option.label=label;list.appendChild(option);added.add(value)};
-    for(const [value,label] of COMMON_LOCALES){
+    const appendEvidenceAware=(value,label=value)=>{
+      if(added.has(value))return;
       const positive=positives.get(value),negative=negatives.get(value),negativeIsNewer=negative&&(!positive||negative.observedAt>=positive.verifiedAt);
       if(negativeIsNewer&&negative.state==='unsupported')appendOption(value,label+' · TTS ✕ son 1 dk · runtime desteklemiyor');
       else if(negativeIsNewer&&negative.state==='ambiguous')appendOption(value,label+' · TTS ! son 1 dk · bölge seçin');
       else if(positive)appendOption(value,label+' · TTS ✓ son 5 dk');
       else appendOption(value,label+' · TTS ? ilk kullanımda kontrol');
-    }
+    };
+    for(const [value,label] of COMMON_LOCALES)appendEvidenceAware(value,label);
+    for(const value of positives.keys())appendEvidenceAware(value,value);
     for(const negative of negativeEntries){
       if(negative.state!=='ambiguous')continue;
       for(const candidate of negative.ttsCandidates){
