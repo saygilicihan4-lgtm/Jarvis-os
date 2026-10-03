@@ -88,8 +88,13 @@ function listMock(){
 
   const recoveredStore=storage();assert(mobile.recordNegativeTtsEvidence(recoveredStore,unsupportedReply,'fr-FR',now));
   const recovered=mobile.createClient({storage:recoveredStore,now:()=>now+1000,capture:async()=> 'bonjour',request:async data=>({ok:true,state:'reply-ready',reply:'Bonjour.',locale:data.locale,ttsLocale:data.locale,provider:'edge-tts',voice:'fr-FR-DeniseNeural',localeResolution:'exact',speechEvidence:'runtime_inventory'}),play:async()=>{}});
-  const recoveredResult=await recovered.run({locale:'fr-FR'});assert.equal(recoveredResult.state,'completed');assert(recoveredResult.runtimeTtsEvidence,'successful runtime playback writes new positive evidence');assert.equal(mobile.getNegativeTtsEvidence('fr-FR',recoveredStore,now+1000),null,'successful positive evidence clears prior negative receipt');
+  const recoveredResult=await recovered.run({locale:'fr-FR'});assert.equal(recoveredResult.state,'completed');assert(recoveredResult.runtimeTtsEvidence,'successful runtime playback writes new positive evidence');assert.equal(mobile.getNegativeTtsEvidence('fr-FR',recoveredStore,now+1000),null,'successful proven positive evidence clears prior negative receipt');
   assert(mobile.getTtsEvidence('fr-FR',recoveredStore,now+1000),'positive receipt exists after recovery');
+
+  const unprovenStore=storage();assert(mobile.recordNegativeTtsEvidence(unprovenStore,unsupportedReply,'fr-FR',now));
+  const unproven=mobile.createClient({storage:unprovenStore,now:()=>now+1000,capture:async()=> 'bonjour',request:async data=>({ok:true,state:'reply-ready',reply:'Bonjour.',locale:data.locale,ttsLocale:data.locale}),play:async()=>{}});
+  const unprovenResult=await unproven.run({locale:'fr-FR'});assert.equal(unprovenResult.state,'completed');assert.equal(unprovenResult.runtimeTtsEvidence,null,'reply without runtime inventory metadata cannot create positive capability proof');
+  assert(mobile.getNegativeTtsEvidence('fr-FR',unprovenStore,now+1000),'unproven playback must not erase prior negative runtime evidence');
 
   const networkStore=storage();assert(mobile.recordTtsEvidence(networkStore,exact,'tr-TR','tr-TR',now));
   const network=mobile.createClient({storage:networkStore,now:()=>now,capture:async()=> 'merhaba',request:async()=>{throw new Error('network_down')},play:async()=>{}});
@@ -125,5 +130,5 @@ function listMock(){
   const unsupportedList=listMock();mobile.renderLocaleOptions(unsupportedList,unsupportedListStore,now);
   const fr=unsupportedList.children.find(x=>x.value==='fr-FR');assert(fr&&fr.label.includes('TTS ✕ son 1 dk')&&fr.label.includes('runtime desteklemiyor'),'fresh definitive unsupported state is distinct from unknown');
 
-  console.log('MOBILE RUNTIME CATALOG SELFTEST PASS · positive/negative TTS evidence is provenance-bound, TTL-limited, mutually clearing, and ambiguity is distinct from unsupported');
+  console.log('MOBILE RUNTIME CATALOG SELFTEST PASS · positive/negative TTS evidence is provenance-bound, TTL-limited, mutually clearing only with proof, and ambiguity is distinct from unsupported');
 })().catch(error=>{console.error(error);process.exitCode=1});
