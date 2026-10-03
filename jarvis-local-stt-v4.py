@@ -1,9 +1,11 @@
 import json
 import math
 import os
+import re
 import sys
 import threading
 import time
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
@@ -248,11 +250,36 @@ def record_utterance(max_seconds=10.0, wait_seconds=6.0):
     }
 
 
-def _decode_audio(audio, beam_size, best_of):
+def language_capabilities():
+    # Installed package != loaded model. Never infer a language inventory from
+    # a model name, browser locale or package-level list of Whisper languages.
+    if _model is None:
+        return {"source": "unavailable", "languages": [], "automatic_detection": False}
+    try:
+        raw = _model.supported_languages
+        languages = sorted(set(x for x in raw if isinstance(x, str) and re.fullmatch(r"[a-z]{2,3}", x))) if isinstance(raw, (list, tuple)) else []
+    except Exception:
+        languages = []
+    return {"source": "loaded_model_inventory", "languages": languages,
+            "automatic_detection": len(languages) > 1}
+
+
+def select_language(value):
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("invalid_stt_language")
+    value = value.strip().lower().replace("_", "-")
+    if value == "auto":
+        return None
+    if not re.fullmatch(r"[a-z]{2,3}(?:-[a-z0-9]{2,8})*", value):
+        raise ValueError("invalid_stt_language")
+    return value.split("-")[0]
+
+
+def _decode_audio(audio, beam_size, best_of, language):
     model = get_model()
     segments, info = model.transcribe(
         audio,
-        language=LANGUAGE,
+        language=language,
         beam_size=beam_size,
         best_of=best_of,
         temperature=0.0,
@@ -260,7 +287,7 @@ def _decode_audio(audio, beam_size, best_of):
         vad_parameters=dict(min_silence_duration_ms=350),
         condition_on_previous_text=False,
         word_timestamps=False,
-        hotwords=dynamic_hotwords(),
+        hotwords=dynamic_hotwords() if language == "tr" else None,
     )
     segments = list(segments)
     text = " ".join(seg.text.strip() for seg in segments if seg.text and seg.text.strip()).strip()
@@ -271,14 +298,21 @@ def _decode_audio(audio, beam_size, best_of):
     return text, info, avg_logprob, max_no_speech
 
 
-def transcribe(audio):
+def transcribe(audio, language=None):
+    selected = select_language(LANGUAGE if language is None else language)
+    get_model()
+    capabilities = language_capabilities()
+    if selected is None and not capabilities["automatic_detection"]:
+        raise ValueError("automatic_language_detection_unavailable")
+    if selected is not None and selected not in capabilities["languages"]:
+        raise ValueError("stt_language_not_in_loaded_model")
     text, info, avg_logprob, max_no_speech = _decode_audio(
-        audio, beam_size=FAST_BEAM, best_of=FAST_BEAM
+        audio, beam_size=FAST_BEAM, best_of=FAST_BEAM, language=selected
     )
     decode_mode = "fast"
     if should_retry_transcription(text, avg_logprob, max_no_speech):
         retry_text, retry_info, retry_logprob, retry_no_speech = _decode_audio(
-            audio, beam_size=RETRY_BEAM, best_of=RETRY_BEAM
+            audio, beam_size=RETRY_BEAM, best_of=RETRY_BEAM, language=selected
         )
         if retry_text:
             text = retry_text
@@ -287,9 +321,23 @@ def transcribe(audio):
             max_no_speech = retry_no_speech
         decode_mode = "retry"
 
+    detected = getattr(info, "language", selected)
+    confidence = getattr(info, "language_probability", 0.0)
+    confidence = float(confidence) if isinstance(confidence, (int, float)) and not isinstance(confidence, bool) else 0.0
+    if not math.isfinite(confidence) or not 0 <= confidence <= 1:
+        confidence = 0.0
+    # A forced-language decode can report probability=1. It is configuration,
+    # never automatic detection evidence for changing/learning a preference.
+    automatic = selected is None and detected in capabilities["languages"]
+    reliable = bool(text) and isinstance(avg_logprob, (int, float)) and math.isfinite(avg_logprob) and avg_logprob >= -0.75
+    reliable = reliable and isinstance(max_no_speech, (int, float)) and math.isfinite(max_no_speech) and max_no_speech < 0.6
     return text, {
-        "language": getattr(info, "language", LANGUAGE),
-        "language_probability": round(float(getattr(info, "language_probability", 0.0)), 3),
+        "language": detected,
+        "language_probability": round(confidence, 3),
+        "language_detection": {"mode": "automatic" if automatic else "configured", "language": detected,
+                               "confidence": confidence if automatic and reliable else 0.0,
+                               "final": True, "reliable": reliable},
+        "utterance_id": str(uuid.uuid4()),
         "decode_mode": decode_mode,
         "fast_beam": FAST_BEAM,
         "retry_beam": RETRY_BEAM,
@@ -304,7 +352,7 @@ class Handler(BaseHTTPRequestHandler):
         origin = self.headers.get("Origin", "")
         if not origin:
             return True
-        return origin == ALLOWED_ORIGIN or origin.startswith("http://127.0.0.1") or origin.startswith("http://localhost")
+        return origin == ALLOWED_ORIGIN or bool(re.fullmatch(r"http://(?:127\.0\.0\.1|localhost)(?::[0-9]+)?", origin))
 
     def _cors(self):
         origin = self.headers.get("Origin", "")
@@ -347,6 +395,7 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": True,
                 "model": MODEL_NAME,
                 "language": LANGUAGE,
+                "language_capabilities": language_capabilities(),
                 "loaded": ready,
                 "load_state": dict(_model_state),
                 "engine": "faster-whisper",
@@ -376,10 +425,16 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0") or "0")
         except Exception:
             length = 0
-        if length > 65536:
+        if length < 0 or length > 65536:
             return self._json(413, {"ok": False, "error": "too_large"})
-        if length:
-            self.rfile.read(length)
+        try:
+            options = json.loads(self.rfile.read(length)) if length else {}
+            if not isinstance(options, dict):
+                raise ValueError("invalid_options")
+            language = options.get("language", LANGUAGE)
+            select_language(language)
+        except (ValueError, TypeError):
+            return self._json(400, {"ok": False, "error": "invalid_stt_language_options"})
 
         if not _listen_lock.acquire(blocking=False):
             return self._json(409, {"ok": False, "error": "busy"})
@@ -389,7 +444,7 @@ class Handler(BaseHTTPRequestHandler):
             audio, meta = record_utterance()
             if audio is None:
                 return self._json(408, {"ok": False, "error": "no_speech", "meta": meta})
-            text, info = transcribe(audio)
+            text, info = transcribe(audio, language=language)
             if not text:
                 return self._json(422, {"ok": False, "error": "empty_transcript", "meta": meta})
             return self._json(200, {
