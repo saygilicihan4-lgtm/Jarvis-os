@@ -32,11 +32,11 @@ jobs:
           node --check jarvis-tts-locale-router.js
           node --check mobile-tts-relay-selftest.js
           node mobile-tts-relay-selftest.js
-      - name: Commit integrated v130 branch
+      - name: Commit integrated v130 code
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server.js worker.js public/index.html .github/workflows/ci.yml .github/workflows/lexicon-ci.yml
+          git add server.js worker.js public/index.html
           git diff --cached --stat
           git commit -m "Jarvis Mobile Language Relay v130"
           git push origin HEAD:jarvis-mobile-language-relay-v130
