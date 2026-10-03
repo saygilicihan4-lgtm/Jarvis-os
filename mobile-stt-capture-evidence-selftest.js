@@ -4,7 +4,7 @@ const mobile=require('./public/mobile-language-chat');
 function storage(seed={}){const m=new Map(Object.entries(seed));return{getItem:k=>m.has(k)?m.get(k):null,setItem:(k,v)=>m.set(String(k),String(v)),removeItem:k=>m.delete(k),dump:()=>Object.fromEntries(m)}}
 (async()=>{
   const now=2_000_000,store=storage();
-  const receipt=mobile.recordSttCaptureEvidence(store,'tr-TR',now);
+  const receipt=mobile.recordSttCaptureEvidence(store,'tr-TR','merhaba',now);
   assert(receipt);assert.equal(receipt.requestedLocale,'tr-TR');assert.equal(receipt.captureObserved,true);assert.equal(receipt.nonEmptyTranscript,true);
   assert.equal(receipt.transcriptStored,false);assert.equal(receipt.sttVerified,false);assert.equal(receipt.languageVerified,false);assert.equal(receipt.evidence,'browser_nonempty_transcript');
   assert.equal(receipt.expiresAt-now,mobile.STT_CAPTURE_EVIDENCE_TTL_MS);assert.equal('transcript' in receipt,false);assert.equal('text' in receipt,false);
@@ -13,11 +13,13 @@ function storage(seed={}){const m=new Map(Object.entries(seed));return{getItem:k
   assert.equal(mobile.getSttCaptureEvidence('tr-TR',store,now+mobile.STT_CAPTURE_EVIDENCE_TTL_MS+1),null,'expired receipt fails closed');
   assert.equal(store.getItem(mobile.STT_CAPTURE_EVIDENCE_KEY),null,'expired receipt is purged');
 
+  assert.equal(mobile.recordSttCaptureEvidence(storage(),'tr-TR','   ',now),null,'empty transcript cannot fabricate capture evidence');
+  assert.equal(mobile.recordSttCaptureEvidence(storage(),'../../bad','merhaba',now),null,'invalid locale is rejected');
+
   const tampered=storage({[mobile.STT_CAPTURE_EVIDENCE_KEY]:JSON.stringify([{requestedLocale:'tr-TR',capturedAt:now,expiresAt:now+123,source:'browser-speech'}])});
   assert.deepEqual(mobile.readSttCaptureEvidence(tampered,now),[],'tampered TTL is rejected');assert.equal(tampered.getItem(mobile.STT_CAPTURE_EVIDENCE_KEY),null);
   const future=storage({[mobile.STT_CAPTURE_EVIDENCE_KEY]:JSON.stringify([{requestedLocale:'tr-TR',capturedAt:now+1,expiresAt:now+1+mobile.STT_CAPTURE_EVIDENCE_TTL_MS,source:'browser-speech'}])});
   assert.deepEqual(mobile.readSttCaptureEvidence(future,now),[],'future-dated capture evidence is rejected');
-  assert.equal(mobile.recordSttCaptureEvidence(storage(),'../../bad',now),null,'invalid locale is rejected');
 
   const captureStore=storage();
   const client=mobile.createClient({storage:captureStore,now:()=>now,capture:async()=> '  merhaba dünya  ',request:async()=>{throw new Error('network_down')},play:async()=>{throw new Error('play_must_not_run')}});
