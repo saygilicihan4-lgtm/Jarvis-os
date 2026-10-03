@@ -1,0 +1,5 @@
+const lang=require('./jarvis-language-core');const VERSION='1.0';const providers=new Map();
+function registerProvider(name,{sttLocales=[],ttsLocales=[]}={}){if(!name)throw new Error('provider_name_required');providers.set(name,{stt:new Set(sttLocales.map(lang.normalizeLocale)),tts:new Set(ttsLocales.map(lang.normalizeLocale))});return true}
+function supports(name,kind,locale){const p=providers.get(name),n=lang.normalizeLocale(locale);return !!(p&&p[kind]&&p[kind].has(n))}
+function plan({locale,sttProvider,ttsProvider,fallbackLocale='en-US'}={}){const n=lang.normalizeLocale(locale)||'en-US',fb=lang.normalizeLocale(fallbackLocale)||'en-US';const sttOk=supports(sttProvider,'stt',n),ttsOk=supports(ttsProvider,'tts',n);if(sttOk&&ttsOk)return{ok:true,locale:n,sttLocale:n,ttsLocale:n,fallbackUsed:false};const fs=supports(sttProvider,'stt',fb),ft=supports(ttsProvider,'tts',fb);return{ok:false,reason:'speech_locale_not_fully_supported',locale:n,sttSupported:sttOk,ttsSupported:ttsOk,fallbackAvailable:fs&&ft,fallbackLocale:fs&&ft?fb:null,requireExplicitFallbackNotice:true}}
+function clear(){providers.clear()}module.exports={VERSION,registerProvider,supports,plan,clear};
