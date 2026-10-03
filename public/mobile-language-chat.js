@@ -69,6 +69,14 @@
       Promise.resolve().then(()=>capture(locale,signal)).then(value=>finish(resolve,value),error=>finish(reject,error instanceof Error?error:new Error(String(error||'browser_stt_failed'))));
     });
   }
+  function resolvePlaybackLocale(result,targetLocale){
+    const requested=canonicalLocale(targetLocale),declared=result&&result.ttsLocale==null?requested:canonicalLocale(result&&result.ttsLocale);
+    if(!requested||!declared)throw new Error('mobile_tts_locale_invalid');
+    if(declared===requested)return declared;
+    const uniqueBareMatch=!requested.includes('-')&&declared.split('-')[0]===requested&&result.localeResolution==='unique_runtime_language_match'&&result.speechEvidence==='runtime_inventory';
+    if(!uniqueBareMatch)throw new Error('mobile_tts_locale_evidence_mismatch');
+    return declared;
+  }
   function createClient({capture,request,play,onState=()=>{},onReply=()=>{},hint=safeLanguageHint,storage=defaultStorage(),captureTimeoutMs=DEFAULT_CAPTURE_TIMEOUT_MS}={}){
     let busy=false,pending=null,history=[],controller=null,preferredLocale=readPreference(storage),explicitLocale=canonicalLocale(stagedExplicitLocale);
     async function run({locale}={}){
@@ -99,8 +107,9 @@
         active.signal.throwIfAborted();
         if(!result||result.ok!==true||result.state!=='reply-ready')throw new Error(result?.reason||result?.error||'mobile_language_reply_unavailable');
         if(canonicalLocale(result.locale)!==targetLocale)throw new Error('mobile_reply_locale_mismatch');
-        onReply(result);onState('playing',result);
-        await play(result,active.signal);
+        const playbackLocale=resolvePlaybackLocale(result,targetLocale);
+        onReply(result);onState('playing',{...result,ttsLocale:playbackLocale});
+        await play({...result,locale:playbackLocale,conversationLocale:targetLocale,ttsLocale:playbackLocale},active.signal);
         active.signal.throwIfAborted();
         history=cleanHistory([...history,{role:'user',content:text},{role:'assistant',content:result.reply}]);
         let preferenceSaved=false;
@@ -111,7 +120,7 @@
         }else if(confirmedSwitch){
           preferenceSaved=savePreference(storage,targetLocale);if(preferenceSaved)preferredLocale=targetLocale;
         }
-        const completed={...result,state:'completed',nextLocale:targetLocale,historyCommitted:true,learning:false,automaticLearning:false,
+        const completed={...result,state:'completed',nextLocale:targetLocale,ttsLocale:playbackLocale,historyCommitted:true,learning:false,automaticLearning:false,
           preferenceSaved,preferenceLocale:preferredLocale,preferenceEvidence:preferenceSaved?preferenceEvidence:null,deviceE2eVerified:false};
         onState('completed',completed);return completed;
       }catch(error){
@@ -138,8 +147,8 @@
   }
   function requestExplicitLocale(locale){
     const normalized=canonicalLocale(locale);if(!normalized)return{ok:false,reason:'invalid_locale'};
+    if(activeClient)return activeClient.selectLocale(normalized);
     stagedExplicitLocale=normalized;
-    if(activeClient){const result=activeClient.selectLocale(normalized);if(!result.ok)return result}
     return{ok:true,locale:normalized,persisted:false,evidence:'explicit-user-selection-pending-playback'};
   }
   function installLocalePicker(doc=root&&root.document){
@@ -153,10 +162,10 @@
     button.addEventListener('click',()=>{
       const result=requestExplicitLocale(input.value);
       const status=doc.getElementById('languageChatStatus');
-      if(status)status.textContent=result.ok?'Dil isteği: '+result.locale+' · başarılı ses yanıtından sonra kaydedilecek.':'Geçerli bir dil kodu girin (örn. tr-TR, en-US).';
+      if(status)status.textContent=result.ok?'Dil isteği: '+result.locale+' · başarılı ses yanıtından sonra kaydedilecek.':result.reason==='mobile_language_busy'?'Konuşma sürerken dil değiştirilemez.':'Geçerli bir dil kodu girin (örn. tr-TR, en-US).';
     });
     wrap.append(input,button,list);chatButton.parentNode.appendChild(wrap);return true;
   }
   if(root&&root.document){const start=()=>installLocalePicker(root.document);if(root.document.readyState==='loading')root.document.addEventListener('DOMContentLoaded',start,{once:true});else setTimeout(start,0)}
-  return{PREFERENCE_KEY,DEFAULT_CAPTURE_TIMEOUT_MS,COMMON_LOCALES,canonicalLocale,safeLanguageHint,cleanHistory,readPreference,savePreference,clearPreference,captureWithTimeout,createClient,requestExplicitLocale,installLocalePicker};
+  return{PREFERENCE_KEY,DEFAULT_CAPTURE_TIMEOUT_MS,COMMON_LOCALES,canonicalLocale,safeLanguageHint,cleanHistory,readPreference,savePreference,clearPreference,captureWithTimeout,resolvePlaybackLocale,createClient,requestExplicitLocale,installLocalePicker};
 });
