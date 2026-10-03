@@ -1,5 +1,6 @@
 'use strict';
 const assert=require('assert');
+const fs=require('fs');
 const relay=require('./jarvis-mobile-tts-relay');
 const {createRouter}=require('./jarvis-tts-locale-router');
 
@@ -37,5 +38,13 @@ const {createRouter}=require('./jarvis-tts-locale-router');
   const unsupported=await router.resolve('de-DE');
   assert.strictEqual(unsupported.ok,false);assert.strictEqual(unsupported.reason,'tts_locale_not_in_runtime_inventory');
   assert.strictEqual(Object.prototype.hasOwnProperty.call(unsupported,'sttSupported'),false,'TTS routing must not assert STT support');
+
+  const server=fs.readFileSync('server.js','utf8'),worker=fs.readFileSync('worker.js','utf8'),ui=fs.readFileSync('public/index.html','utf8');
+  assert(server.includes("mobileTtsRelay.verifyResult(r,{workerId:deviceId,locale:d.locale})"),'server must bind result to claimant and locale');
+  assert(server.includes("/cancel$/i"),'server must expose cancellation for in-flight mobile TTS');
+  assert(worker.includes("mobileTtsVoiceRouter.resolve(locale)"),'worker must resolve exact locale from runtime voice inventory');
+  assert(worker.includes("JSON.stringify({id:q.id,locale:q.locale,ok:true,audio})"),'worker must echo synthesized locale');
+  assert(ui.includes("body:JSON.stringify({text:String(text||'').trim(),tone,locale})"),'phone UI must preserve requested locale');
+  assert(ui.includes("playJarvisMobileRelay(spoken,tone,lang)"),'mobile speech call must forward active language');
   console.log('mobile-tts-relay-selftest: ok');
 })().catch(err=>{console.error(err);process.exit(1)});
