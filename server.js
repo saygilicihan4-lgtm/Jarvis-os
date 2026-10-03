@@ -2,6 +2,7 @@ const http=require('http');
 const fs=require('fs');
 const path=require('path');
 const crypto=require('crypto');
+const mobileTtsRelay=require('./jarvis-mobile-tts-relay');
 const webpush=require('web-push');
 const {Pool}=require('pg');
 const {generateRegistrationOptions,verifyRegistrationResponse,generateAuthenticationOptions,verifyAuthenticationResponse}=require('@simplewebauthn/server');
@@ -822,11 +823,23 @@ const server=http.createServer((req,res)=>{
       const text=String(d.text||'').replace(/\s+/g,' ').trim().slice(0,700);
       if(!text)return json(res,400,{error:'text required'});
       if(!pcOnline())return json(res,409,{error:'PC Worker offline'});
+      const locale=mobileTtsRelay.normalizeLocale(d.locale);
+      if(!locale)return json(res,400,{error:'valid locale required'});
       const tone=['balanced','casual','playful','warm','focused','work','serious','excited','gentle'].includes(String(d.tone||''))?String(d.tone):'balanced';
       const id=crypto.randomUUID();
-      state.mobileTtsRequests.set(id,{id,text,tone,status:'queued',createdAtMs:Date.now(),claimedBy:null,audio:null,error:null});
-      return json(res,202,{ok:true,id,status:'queued'});
+      const request=mobileTtsRelay.createRequest({id,text,tone,locale});
+      state.mobileTtsRequests.set(id,request);
+      return json(res,202,{ok:true,id,status:'queued',locale:request.locale});
     });
+  }
+
+  const mobileTtsCancel=pathname.match(/^\/api\/mobile-tts\/([0-9a-f-]+)\/cancel$/i);
+  if(mobileTtsCancel&&req.method==='POST'){
+    const r=state.mobileTtsRequests.get(mobileTtsCancel[1]);
+    if(!r)return json(res,404,{error:'tts request not found'});
+    const cancelled=mobileTtsRelay.cancel(r);
+    if(!cancelled.ok)return json(res,409,{error:cancelled.reason,status:r.status});
+    return json(res,200,{ok:true,status:r.status});
   }
 
   const mobileTtsGet=pathname.match(/^\/api\/mobile-tts\/([0-9a-f-]+)$/i);
@@ -1134,8 +1147,9 @@ const server=http.createServer((req,res)=>{
     const deviceId=String(req.headers['x-jarvis-device-id']||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80)||'pc';
     const next=[...state.mobileTtsRequests.values()].find(r=>r.status==='queued');
     if(!next)return json(res,200,{ok:true,request:null});
-    next.status='claimed';next.claimedBy=deviceId;next.claimedAtMs=Date.now();
-    return json(res,200,{ok:true,request:{id:next.id,text:next.text,tone:next.tone||'balanced'}});
+    const claimed=mobileTtsRelay.claim(next,deviceId);
+    if(!claimed.ok)return json(res,409,{error:claimed.reason});
+    return json(res,200,{ok:true,request:{id:next.id,text:next.text,tone:next.tone||'balanced',locale:next.locale}});
   }
 
   if(pathname==='/api/worker/mobile-tts-result'&&req.method==='POST'){
@@ -1143,13 +1157,16 @@ const server=http.createServer((req,res)=>{
       if(err)return json(res,400,{error:'bad json'});
       const id=String(d.id||''),r=state.mobileTtsRequests.get(id);
       if(!r)return json(res,404,{error:'tts request not found'});
+      const deviceId=String(req.headers['x-jarvis-device-id']||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80)||'pc';
+      const verified=mobileTtsRelay.verifyResult(r,{workerId:deviceId,locale:d.locale});
+      if(!verified.ok)return json(res,409,{error:verified.reason,status:r.status});
       if(d.ok&&typeof d.audio==='string'&&d.audio.length){
         if(d.audio.length>900000)return json(res,413,{error:'audio too large'});
         r.status='ready';r.audio=d.audio;r.error=null;r.readyAtMs=Date.now();
       }else{
         r.status='failed';r.error=String(d.error||'tts generation failed').slice(0,240);r.readyAtMs=Date.now();
       }
-      return json(res,200,{ok:true,status:r.status});
+      return json(res,200,{ok:true,status:r.status,locale:r.locale});
     });
   }
 
