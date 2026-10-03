@@ -1,6 +1,6 @@
 'use strict';
 const assert=require('assert/strict'),fs=require('fs'),os=require('os'),path=require('path');
-const {createRuntime}=require('./jarvis-speech-session-runtime'),discovery=require('./jarvis-speech-provider-discovery'),caps=require('./jarvis-speech-capabilities'),learning=require('./jarvis-language-learning');
+const {createRuntime}=require('./jarvis-speech-session-runtime'),discovery=require('./jarvis-speech-provider-discovery'),caps=require('./jarvis-speech-capabilities'),learning=require('./jarvis-language-learning'),mobileRelay=require('./jarvis-mobile-language-relay');
 const root=fs.mkdtempSync(path.join(os.tmpdir(),'jarvis-speech-runtime-'));
 const voices=[{ShortName:'tr-TR-EmelNeural',Locale:'tr-TR',Gender:'Female'},{ShortName:'tr-TR-AhmetNeural',Locale:'tr-TR',Gender:'Male'},{ShortName:'de-DE-ConradNeural',Locale:'de-DE',Gender:'Male'}];
 const health={ok:true,loaded:true,engine:'faster-whisper',language_capabilities:{source:'loaded_model_inventory',languages:['tr','de','en'],automatic_detection:true}};
@@ -19,6 +19,26 @@ const runner=async()=>({ok:true,stdout:JSON.stringify(voices)});
 const probeVoices=async registry=>[await discovery.discoverEdgeTts({registry,runner})];
 (async()=>{
   try{
+    let relayClock=5000,relaySeq=0;
+    const relay=mobileRelay.createRelay({now:()=>relayClock,randomId:()=>('relay-'+(++relaySeq)),ttlMs:1000,maxItems:8,maxAudioChars:1024});
+    assert.equal(relay.enqueue({text:'Merhaba',locale:'not-a-locale'}).ok,false,'relay rejects invalid locale');
+    const queued=relay.enqueue({text:'  Merhaba   dünya  ',tone:'warm',locale:'tr'});
+    assert.equal(queued.ok,true);assert.equal(queued.locale,'tr-TR','relay canonicalizes locale but does not invent support');
+    const claim=relay.claim('PC-A');
+    assert.equal(claim.request.locale,'tr-TR','claimed request carries locale');
+    assert.equal(relay.complete('PC-B',{id:queued.id,claimToken:claim.request.claimToken,ok:true,locale:'tr-TR',audio:'AAA'}).reason,'result_device_mismatch','another Worker cannot complete claim');
+    assert.equal(relay.complete('PC-A',{id:queued.id,claimToken:'stale',ok:true,locale:'tr-TR',audio:'AAA'}).reason,'stale_claim_token','stale claim cannot complete');
+    assert.equal(relay.complete('PC-A',{id:queued.id,claimToken:claim.request.claimToken,ok:true,locale:'de-DE',audio:'AAA'}).reason,'result_locale_mismatch','wrong-language audio is rejected');
+    assert.equal(relay.complete('PC-A',{id:queued.id,claimToken:claim.request.claimToken,ok:true,locale:'tr-TR',audio:'A'.repeat(1025)}).reason,'audio_too_large');
+    assert.equal(relay.complete('PC-A',{id:queued.id,claimToken:claim.request.claimToken,ok:true,locale:'tr-TR',audio:'AAA'}).status,'ready');
+    assert.equal(relay.complete('PC-A',{id:queued.id,claimToken:claim.request.claimToken,ok:true,locale:'tr-TR',audio:'BBB'}).reason,'relay_request_not_claimed','duplicate result cannot overwrite terminal audio');
+    const cancelled=relay.enqueue({text:'Hallo',locale:'de'}),cancelClaim=relay.claim('PC-A');
+    assert.equal(cancelClaim.request.id,cancelled.id);assert.equal(relay.cancel(cancelled.id).status,'cancelled');
+    assert.equal(relay.complete('PC-A',{id:cancelled.id,claimToken:cancelClaim.request.claimToken,ok:true,locale:'de-DE',audio:'AAA'}).status,'cancelled','late audio after cancel is rejected');
+    const failed=relay.enqueue({text:'Hello',locale:'en'}),failClaim=relay.claim('PC-A');
+    assert.equal(relay.complete('PC-A',{id:failed.id,claimToken:failClaim.request.claimToken,ok:false,error:'provider unavailable'}).status,'failed');
+    const expiring=relay.enqueue({text:'Bonjour',locale:'fr'});assert.equal(expiring.ok,true);relayClock+=1001;assert.ok(relay.cleanup()>=1,'expired relay requests are removed');
+
     const registry=caps.createRegistry({now:()=>clock});
     await discovery.discoverEdgeTts({registry,runner});
     assert.equal(registry.select({locale:'tr'}).ok,false,'TTS inventory cannot imply STT');
@@ -76,6 +96,6 @@ const probeVoices=async registry=>[await discovery.discoverEdgeTts({registry,run
     clock+=1800001;assert.throws(()=>runtime.status(id),/expired/);
     const profile=fs.readFileSync(path.join(root,'.jarvis-memory','language-profile.json'),'utf8');
     assert.equal(profile.includes('Guten Tag'),false,'no transcripts persisted');
-    console.log('SPEECH RUNTIME SELFTEST PASS · inventory, boundary, learning, replay, isolation and expiry');
+    console.log('SPEECH RUNTIME SELFTEST PASS · inventory, boundary, learning, replay, mobile relay isolation and expiry');
   }finally{fs.rmSync(root,{recursive:true,force:true})}
 })().catch(e=>{console.error(e);process.exitCode=1});
