@@ -183,16 +183,28 @@
     if(!list)return false;
     while(list.firstChild)list.removeChild(list.firstChild);
     const positives=new Map(readTtsEvidence(storage,nowMs).map(x=>[x.requestedLocale,x]));
-    const negatives=new Map(readNegativeTtsEvidence(storage,nowMs).map(x=>[x.requestedLocale,x]));
-    for(const [value,label] of COMMON_LOCALES){
-      const option=(list.ownerDocument||root&&root.document).createElement('option');option.value=value;
-      const positive=positives.get(value),negative=negatives.get(value);
-      const negativeIsNewer=negative&&(!positive||negative.observedAt>=positive.verifiedAt);
-      if(negativeIsNewer&&negative.state==='unsupported')option.label=label+' · TTS ✕ son 1 dk · runtime desteklemiyor';
-      else if(negativeIsNewer&&negative.state==='ambiguous')option.label=label+' · TTS ! son 1 dk · bölge seçin';
-      else if(positive)option.label=label+' · TTS ✓ son 5 dk';
-      else option.label=label+' · TTS ? ilk kullanımda kontrol';
-      list.appendChild(option);
+    const negativeEntries=readNegativeTtsEvidence(storage,nowMs),negatives=new Map(negativeEntries.map(x=>[x.requestedLocale,x]));
+    const added=new Set();
+    const appendOption=(value,label)=>{if(added.has(value))return;const option=(list.ownerDocument||root&&root.document).createElement('option');option.value=value;option.label=label;list.appendChild(option);added.add(value)};
+    const appendEvidenceAware=(value,label=value)=>{
+      if(added.has(value))return;
+      const positive=positives.get(value),negative=negatives.get(value),negativeIsNewer=negative&&(!positive||negative.observedAt>=positive.verifiedAt);
+      if(negativeIsNewer&&negative.state==='unsupported')appendOption(value,label+' · TTS ✕ son 1 dk · runtime desteklemiyor');
+      else if(negativeIsNewer&&negative.state==='ambiguous')appendOption(value,label+' · TTS ! son 1 dk · bölge seçin');
+      else if(positive)appendOption(value,label+' · TTS ✓ son 5 dk');
+      else appendOption(value,label+' · TTS ? ilk kullanımda kontrol');
+    };
+    for(const [value,label] of COMMON_LOCALES)appendEvidenceAware(value,label);
+    for(const value of positives.keys())appendEvidenceAware(value,value);
+    for(const negative of negativeEntries){
+      if(negative.state!=='ambiguous')continue;
+      for(const candidate of negative.ttsCandidates){
+        if(added.has(candidate))continue;
+        const positive=positives.get(candidate),candidateNegative=negatives.get(candidate),negativeIsNewer=candidateNegative&&(!positive||candidateNegative.observedAt>=positive.verifiedAt);
+        if(negativeIsNewer&&candidateNegative.state==='unsupported')appendOption(candidate,candidate+' · TTS ✕ son 1 dk · runtime desteklemiyor');
+        else if(positive)appendOption(candidate,candidate+' · TTS ✓ son 5 dk');
+        else appendOption(candidate,candidate+' · runtime adayı · TTS ? doğrulanmadı');
+      }
     }
     return true;
   }
