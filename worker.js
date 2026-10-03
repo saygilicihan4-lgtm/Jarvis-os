@@ -2488,7 +2488,7 @@ function nativeAgentTools(){
       function:{
         name:'bluetooth_acceptance_test',
         description:'Kullanıcı açıkça Bluetooth ses donanım testini istediğinde Windows üzerinde gerçek cihaz bulma, varsayılan ses çıkışını değiştirme/doğrulama ve medya kontrolü acceptance testini çalıştır.',
-        parameters:{type:'object',properties:{deviceName:{type:'string',description:'Test edilecek Bluetooth hoparlör, radyo veya ses cihazının görünen adı.'}},required:['deviceName'],additionalProperties:false}
+        parameters:{type:'object',properties:{deviceName:{type:'string',description:'İsteğe bağlı. Test edilecek Bluetooth hoparlör, radyo veya ses cihazının görünen adı. Boşsa yalnızca tek uygun ses endpointi olduğunda otomatik seçilir.'}},additionalProperties:false}
       }
     },
     {
@@ -3074,7 +3074,6 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
     return{ok:!!result.ok,message:result.ok?('BLUETOOTH '+action.toUpperCase()+(result.output?' · '+String(result.output).slice(0,3000):'')):('Bluetooth işlemi başarısız: '+String(result.reason||'unknown'))};
   }else if(n==='bluetooth_acceptance_test'){
     const device=String(a.deviceName||'').replace(/[\r\n]/g,' ').trim().slice(0,120);
-    if(!device)return{ok:false,message:'Bluetooth acceptance testi için cihaz adı gerekli.'};
     if(process.platform!=='win32')return{ok:false,message:'Bluetooth acceptance testi gerçek Windows Worker üzerinde çalıştırılmalı.'};
     try{
       const out=childProcess.execFileSync(process.execPath,[path.join(__dirname,'bluetooth-e2e.js'),device],{cwd:__dirname,encoding:'utf8',windowsHide:true,timeout:45000,maxBuffer:1024*1024});
