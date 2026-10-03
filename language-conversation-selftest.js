@@ -63,14 +63,16 @@ const chat=createConversation({runtime,output});
     const plan={ok:true,locale:'de-DE',ttsLocale:'de-DE',cost:0,fallbackUsed:false,ttsProvider:'edge-tts',voice:'tr-TR-AhmetNeural'};
     await assert.rejects(output.render({reply:'Hi',context:{locale:'de-DE'},speech:plan}),/mismatch/);
 
-    const dutchPlan={ok:true,locale:'nl',ttsLocale:'nl-NL',localeResolution:'unique_runtime_language_match',cost:0,fallbackUsed:false,ttsProvider:'edge-tts',voice:'nl-NL-MaartenNeural'};
+    const dutchPlan={ok:true,locale:'nl',ttsLocale:'nl-NL',localeResolution:'unique_runtime_language_match',evidenceLevel:'runtime_inventory',cost:0,fallbackUsed:false,ttsProvider:'edge-tts',voice:'nl-NL-MaartenNeural'};
     const dutch=await output.render({reply:'Hallo',context:{locale:'nl'},speech:dutchPlan});
     assert.equal(dutch.locale,'nl','conversation language remains the detected bare language');
     assert.equal(dutch.ttsLocale,'nl-NL','renderer uses the unique runtime voice locale');
     await assert.rejects(output.render({reply:'Hallo',context:{locale:'nl-BE'},speech:{...dutchPlan,locale:'nl-BE'}}),/invalid_frozen_speech_plan/,
       'region-bearing conversation locale cannot use sibling runtime locale');
     await assert.rejects(output.render({reply:'Hallo',context:{locale:'nl'},speech:{...dutchPlan,localeResolution:'exact'}}),/invalid_frozen_speech_plan/,
-      'cross-locale rendering requires explicit unique runtime evidence');
+      'cross-locale rendering requires explicit unique runtime resolution');
+    await assert.rejects(output.render({reply:'Hallo',context:{locale:'nl'},speech:{...dutchPlan,evidenceLevel:null}}),/invalid_frozen_speech_plan/,
+      'cross-locale rendering requires runtime inventory evidence');
 
     const sapiOutput=createOutput({platform:'win32',runner:async(command,args)=>{
       assert.equal(command,'powershell.exe');assert.ok(args.includes('-File'));assert.ok(!args.includes('-Command'));
@@ -81,6 +83,6 @@ const chat=createConversation({runtime,output});
     }});
     const sapi=await sapiOutput.render({reply:"Hello ' ; no code",context:{locale:'de-DE'},speech:{...plan,ttsProvider:'windows-sapi',voice:'Installed German'}});
     assert.equal(sapi.mime,'audio/wav');assert.equal(sapi.ttsLocale,'de-DE');assert.ok(renderedDirs.every(dir=>!fs.existsSync(dir)));
-    console.log('LANGUAGE CONVERSATION SELFTEST PASS · simulated ASR/model/render, unique runtime TTS locale coupling, receipts, cancellation and cleanup');
+    console.log('LANGUAGE CONVERSATION SELFTEST PASS · simulated ASR/model/render, evidence-bound runtime TTS locale coupling, receipts, cancellation and cleanup');
   }finally{fs.rmSync(root,{recursive:true,force:true})}
 })().catch(error=>{fs.rmSync(root,{recursive:true,force:true});console.error(error);process.exitCode=1});
