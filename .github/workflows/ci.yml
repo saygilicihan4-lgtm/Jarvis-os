@@ -246,6 +246,8 @@ jobs:
         run: node bluetooth-auto-e2e-selftest.js
       - name: Bluetooth evidence selftest
         run: node bluetooth-evidence-selftest.js
+      - name: Core Audio resolver selftest
+        run: node coreaudio-resolver-selftest.js
       - name: Safe PC mission selftest
         run: node pc-mission-selftest.js
       - name: Workspace file engine selftest
