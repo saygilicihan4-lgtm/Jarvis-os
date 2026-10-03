@@ -250,6 +250,8 @@ jobs:
         run: node coreaudio-resolver-selftest.js
       - name: Core Audio auto target selftest
         run: node coreaudio-auto-target-selftest.js
+      - name: Bluetooth target proof selftest
+        run: node bluetooth-target-proof-selftest.js
       - name: Safe PC mission selftest
         run: node pc-mission-selftest.js
       - name: Workspace file engine selftest
