@@ -18,6 +18,21 @@ const mobile=require('./public/mobile-language-chat');
   const late=relay.createRequest({id:'q2',text:'Merhaba',locale:'tr-TR',now:()=>clock});relay.claim(late,'worker-a');relay.cancel(late);
   assert.deepEqual(relay.verifyResult(late,{workerId:'worker-a',locale:'tr-TR'}),{ok:false,reason:'request_not_claimed_or_terminal'});
 
+  let leaseClock=10_000;
+  const staleClaim=relay.createRequest({id:'q-lease',text:'Hallo',locale:'de-DE',now:()=>leaseClock});
+  assert.equal(relay.claim(staleClaim,'worker-a',{now:()=>leaseClock}).ok,true);
+  leaseClock+=relay.CLAIM_LEASE_MS;
+  assert.equal(staleClaim.status,'claimed','claim remains valid through exact lease boundary');
+  leaseClock+=1;
+  assert.equal(staleClaim.status,'failed','expired Worker claim fails closed instead of remaining stuck');
+  assert.equal(staleClaim.error,'worker_claim_expired');
+  assert.deepEqual(relay.verifyResult(staleClaim,{workerId:'worker-a',locale:'de-DE'}),{ok:false,reason:'request_not_claimed_or_terminal'},'late same-Worker result cannot revive expired claim');
+  const staleQueue=relay.createRequest({id:'q-queue',text:'Bonjour',locale:'fr-FR',now:()=>leaseClock});
+  leaseClock+=relay.QUEUE_TTL_MS+1;
+  assert.equal(staleQueue.status,'failed','abandoned queued request expires');
+  assert.equal(staleQueue.error,'request_expired');
+  assert.deepEqual(relay.claim(staleQueue,'worker-a',{now:()=>leaseClock}),{ok:false,reason:'request_not_queued'},'expired queue item cannot be claimed');
+
   let generated=null;
   const engine=createEngine({
     voiceRouter:{resolve:async locale=>locale==='de-DE'?{ok:true,voice:'de-DE-ConradNeural'}:{ok:false,reason:'tts_locale_not_in_runtime_inventory'}},
@@ -71,5 +86,5 @@ const mobile=require('./public/mobile-language-chat');
   assert(worker.includes('serviceMobileLanguage'),'worker must service the mobile language queue');
   assert(worker.includes('jarvis-mobile-language-conversation'),'worker must use locale-frozen conversation engine');
   assert(worker.includes('setInterval(()=>serviceMobileLanguage().catch(()=>{}),650)'),'mobile language relay must use conversational polling cadence');
-  console.log('MOBILE LANGUAGE CONVERSATION SELFTEST PASS · ambiguity-safe locale candidate, explicit confirmation, claimant binding, playback-gated history, no STT learning claim');
+  console.log('MOBILE LANGUAGE CONVERSATION SELFTEST PASS · ambiguity-safe locale candidate, claimant binding, lease expiry, playback-gated history, no STT learning claim');
 })().catch(error=>{console.error(error);process.exitCode=1});
