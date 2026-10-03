@@ -262,6 +262,8 @@ jobs:
         run: node speech-capability-selftest.js
       - name: Speech provider discovery selftest
         run: node speech-provider-discovery-selftest.js
+      - name: Session language detection selftest
+        run: node session-language-selftest.js
       - name: Safe PC mission selftest
         run: node pc-mission-selftest.js
       - name: Workspace file engine selftest
