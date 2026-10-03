@@ -1,5 +1,5 @@
 'use strict';
-const fs=require('fs'),vm=require('vm');
+const fs=require('fs'),path=require('path');
 function replaceOnce(text,from,to,label){
   const i=text.indexOf(from);
   if(i<0)throw new Error('missing '+label);
@@ -11,7 +11,8 @@ let source=fs.readFileSync('scripts/v131-apply.js','utf8');
 const oldPoll=`worker=once(worker,"      await serviceMobileTts();\\n      await serviceMobileBrain();","      await serviceMobileTts();\\n      await serviceMobileLanguage();\\n      await serviceMobileBrain();",'worker poll mobile language');`;
 const newPoll=`worker=once(worker,"    await serviceMobileTts();\\n    await serviceMobileBrain();","    await serviceMobileTts();\\n    await serviceMobileLanguage();\\n    await serviceMobileBrain();",'worker poll mobile language');`;
 source=replaceOnce(source,oldPoll,newPoll,'worker poll source anchor');
-vm.runInThisContext(source,{filename:'v131-apply.js'});
+const patchFile=path.resolve('scripts/v131-apply.js');
+new Function('require','module','exports','__filename','__dirname',source)(require,module,exports,patchFile,path.dirname(patchFile));
 
 let worker=fs.readFileSync('worker.js','utf8');
 worker=replaceOnce(worker,
