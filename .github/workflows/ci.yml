@@ -258,6 +258,8 @@ jobs:
         run: node language-core-selftest.js
       - name: Multilingual language learning selftest
         run: node language-learning-selftest.js
+      - name: Multilingual speech capability selftest
+        run: node speech-capability-selftest.js
       - name: Safe PC mission selftest
         run: node pc-mission-selftest.js
       - name: Workspace file engine selftest
