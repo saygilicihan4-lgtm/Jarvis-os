@@ -148,7 +148,7 @@
       if(!requestedLocale)return{ok:false,state:'invalid',reason:'locale_required'};
       busy=true;controller=new AbortController();const active=controller;
       const selectedLocale=canonicalLocale(explicitLocale);
-      let text,targetLocale=selectedLocale||preferredLocale||requestedLocale,inputSource='browser-speech',confirmedSwitch=false,preferenceEvidence=null;
+      let text,targetLocale=selectedLocale||preferredLocale||requestedLocale,inputSource='browser-speech',confirmedSwitch=false,preferenceEvidence=null,runtimeTtsNegativeReason=null;
       try{
         if(pending){
           text=pending.text;targetLocale=pending.locale;inputSource=pending.inputSource;pending=null;confirmedSwitch=true;preferenceEvidence='explicit-confirmation-plus-playback';
@@ -168,7 +168,11 @@
         onState('thinking',{locale:targetLocale,transcript:text,explicitSelection:!!selectedLocale});
         const result=await request({text,locale:targetLocale,inputSource,history:cleanHistory(history)},active.signal);
         active.signal.throwIfAborted();
-        if(!result||result.ok!==true||result.state!=='reply-ready')throw new Error(result?.reason||result?.error||'mobile_language_reply_unavailable');
+        if(!result||result.ok!==true||result.state!=='reply-ready'){
+          const reason=result?.reason||result?.error||'mobile_language_reply_unavailable';
+          if(result&&result.ok===false&&result.state==='unsupported'&&shouldInvalidateTtsEvidence(reason))runtimeTtsNegativeReason=String(reason);
+          throw new Error(reason);
+        }
         if(canonicalLocale(result.locale)!==targetLocale)throw new Error('mobile_reply_locale_mismatch');
         const playbackLocale=resolvePlaybackLocale(result,targetLocale);
         onReply(result);onState('playing',{...result,ttsLocale:playbackLocale});
@@ -192,7 +196,7 @@
       }catch(error){
         const rawMessage=String(error&&error.message||error),timedOut=rawMessage==='browser_stt_timeout';
         const cancelled=active.signal.aborted&&!timedOut,message=cancelled?'mobile_language_cancelled':rawMessage;
-        const runtimeTtsEvidenceInvalidated=!cancelled&&shouldInvalidateTtsEvidence(message)&&invalidateTtsEvidence(storage,targetLocale,Number(now()));
+        const runtimeTtsEvidenceInvalidated=!cancelled&&runtimeTtsNegativeReason===message&&invalidateTtsEvidence(storage,targetLocale,Number(now()));
         if(runtimeTtsEvidenceInvalidated&&root&&root.document)renderLocaleOptions(root.document.getElementById('jarvisMobileLocaleList'),storage,Number(now()));
         if(!cancelled)onState('error',{error:message,runtimeTtsEvidenceInvalidated});
         return{ok:false,cancelled,error:message,learning:false,preferenceSaved:false,preferenceLocale:preferredLocale,runtimeTtsVerified:false,runtimeTtsEvidenceInvalidated,sttVerified:false,deviceE2eVerified:false};
