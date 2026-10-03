@@ -1,0 +1,5 @@
+const lang=require('./jarvis-language-core');const learning=require('./jarvis-language-learning');const VERSION='1.0';
+function createSession({locale=null}={}){return{locale:lang.normalizeLocale(locale),candidate:null,candidateCount:0,lastConfidence:0}}
+function observe(session,{locale,confidence=0,root=__dirname}={}){const n=lang.normalizeLocale(locale);if(!n||confidence<0.7)return{ok:false,reason:'detection_below_session_threshold',session};if(session.candidate===n)session.candidateCount++;else{session.candidate=n;session.candidateCount=1}session.lastConfidence=confidence;if(session.candidateCount>=2)session.locale=n;if(confidence>=0.8)learning.observe(n,{confidence,root});return{ok:true,sessionLocale:session.locale,candidate:n,candidateCount:session.candidateCount,persistEligible:confidence>=0.8}}
+function resolve(session,{requested,systemLocale,root=__dirname}={}){if(requested)return learning.resolve({requested,systemLocale,root});if(session&&session.locale)return lang.resolveLanguage({detected:session.locale,systemLocale});return learning.resolve({systemLocale,root})}
+module.exports={VERSION,createSession,observe,resolve};
