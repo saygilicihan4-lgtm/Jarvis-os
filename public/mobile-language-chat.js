@@ -235,8 +235,8 @@
         await play({...result,locale:playbackLocale,conversationLocale:targetLocale,ttsLocale:playbackLocale},active.signal);
         active.signal.throwIfAborted();
         const nowMs=Number(now());
-        clearNegativeTtsEvidence(storage,targetLocale,nowMs);
         const runtimeTtsEvidence=recordTtsEvidence(storage,result,targetLocale,playbackLocale,nowMs);
+        if(runtimeTtsEvidence)clearNegativeTtsEvidence(storage,targetLocale,nowMs);
         if(root&&root.document)renderLocaleOptions(root.document.getElementById('jarvisMobileLocaleList'),storage,nowMs);
         history=cleanHistory([...history,{role:'user',content:text},{role:'assistant',content:result.reply}]);
         let preferenceSaved=false;
