@@ -1,13 +1,16 @@
 'use strict';
 const fs=require('fs'),os=require('os'),path=require('path'),cp=require('child_process');
 const {normalizeLocale}=require('./jarvis-language-core');
-const VERSION='1.0';
+const VERSION='1.1';
 function validatePlan(context,speech){
-  const locale=normalizeLocale(context?.locale);
-  if(!locale||speech?.ok!==true||speech.locale!==locale||speech.ttsLocale!==locale||speech.cost!==0||speech.fallbackUsed!==false||
+  const locale=normalizeLocale(context?.locale),ttsLocale=normalizeLocale(speech?.ttsLocale);
+  const exact=!!locale&&ttsLocale===locale;
+  const uniqueRuntimeMatch=!!locale&&!locale.includes('-')&&speech?.localeResolution==='unique_runtime_language_match'&&speech?.evidenceLevel==='runtime_inventory'&&
+    !!ttsLocale&&ttsLocale.split('-')[0]===locale&&ttsLocale!==locale;
+  if(!locale||speech?.ok!==true||speech.locale!==locale||(!exact&&!uniqueRuntimeMatch)||speech.cost!==0||speech.fallbackUsed!==false||
     !['edge-tts','windows-sapi'].includes(speech.ttsProvider)||typeof speech.voice!=='string'||!speech.voice||speech.voice.length>200)
     throw new Error('invalid_frozen_speech_plan');
-  if(speech.ttsProvider==='edge-tts'&&(!speech.voice.startsWith(locale+'-')||!/^[A-Za-z0-9-]+Neural$/.test(speech.voice)))throw new Error('voice_locale_mismatch');
+  if(speech.ttsProvider==='edge-tts'&&(!speech.voice.startsWith(ttsLocale+'-')||!/^[A-Za-z0-9-]+Neural$/.test(speech.voice)))throw new Error('voice_locale_mismatch');
   return locale;
 }
 function runFile(command,args,{signal,timeout=45000}={}){
@@ -38,7 +41,7 @@ function createOutput({brainUrl='http://127.0.0.1:11434',model='qwen3.5:2b',fetc
     return{reply:parsed.reply.replace(/\s+/g,' ').trim(),locale};
   }
   async function render({reply,context,speech,signal}){
-    const locale=validatePlan(context,speech);
+    const locale=validatePlan(context,speech),ttsLocale=normalizeLocale(speech.ttsLocale);
     if(typeof reply!=='string'||!reply.trim()||reply.length>900)throw new Error('invalid_reply_text');
     signal?.throwIfAborted();
     const directory=fs.mkdtempSync(path.join(os.tmpdir(),'jarvis-language-audio-'));
@@ -51,7 +54,7 @@ function createOutput({brainUrl='http://127.0.0.1:11434',model='qwen3.5:2b',fetc
         if(platform!=='win32')throw new Error('windows_voice_unavailable');
         output=path.join(directory,'reply.wav');mime='audio/wav';
         const input=path.join(directory,'input.json');
-        fs.writeFileSync(input,JSON.stringify({voice:speech.voice,locale,text:reply}),{encoding:'utf8',mode:0o600});
+        fs.writeFileSync(input,JSON.stringify({voice:speech.voice,locale:ttsLocale,text:reply}),{encoding:'utf8',mode:0o600});
         await runner('powershell.exe',['-NoProfile','-NonInteractive','-File',path.join(__dirname,'jarvis-language-sapi.ps1'),'-InputPath',input,'-OutputPath',output],{signal});
       }
       signal?.throwIfAborted();
@@ -61,7 +64,7 @@ function createOutput({brainUrl='http://127.0.0.1:11434',model='qwen3.5:2b',fetc
       const valid=mime==='audio/wav'?audio.toString('ascii',0,4)==='RIFF'&&audio.toString('ascii',8,12)==='WAVE':
         audio.toString('ascii',0,3)==='ID3'||(audio[0]===255&&(audio[1]&224)===224);
       if(!valid)throw new Error('invalid_voice_audio_format');
-      return{audio:audio.toString('base64'),mime,locale,voice:speech.voice,provider:speech.ttsProvider,deviceE2eVerified:false};
+      return{audio:audio.toString('base64'),mime,locale,ttsLocale,voice:speech.voice,provider:speech.ttsProvider,deviceE2eVerified:false};
     }finally{fs.rmSync(directory,{recursive:true,force:true})}
   }
   return{generate,render};

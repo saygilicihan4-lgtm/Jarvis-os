@@ -1,6 +1,6 @@
 'use strict';
 const lang=require('./jarvis-language-core');
-const VERSION='1.1';
+const VERSION='1.2';
 function createRegistry({now=Date.now}={}){
   const providers=new Map();
   function registerProvider(name,{sttLocales=[],ttsLocales=[],sttLanguages=[],voices=[],offline=false,cost=null,evidence=null}={}){
@@ -25,19 +25,34 @@ function createRegistry({now=Date.now}={}){
     const available=!!fb&&supports(sttProvider,'stt',fb)&&supports(ttsProvider,'tts',fb);
     return{ok:false,reason:'speech_locale_not_fully_supported',locale:n,sttSupported:sttOk,ttsSupported:ttsOk,fallbackAvailable:available,fallbackLocale:available?fb:null,requireExplicitFallbackNotice:true};
   }
+  function providerOrder([name]){return name==='edge-tts'?-1:name==='windows-sapi'?0:1}
   function select({locale,offlineOnly=false}={}){
     const n=lang.normalizeLocale(locale);
     if(!n)return{ok:false,reason:'invalid_locale'};
     const eligible=[...providers].filter(([,p])=>fresh(p)&&p.cost===0&&(!offlineOnly||p.offline));
     const stt=eligible.find(([name,p])=>p.evidence?.source==='loaded_model_inventory'&&supports(name,'stt',n));
-    const tts=eligible.filter(([name,p])=>p.evidence?.source==='runtime_voice_inventory'&&supports(name,'tts',n))
-      .sort(([a],[b])=>(a==='edge-tts'?-1:b==='edge-tts'?1:a.localeCompare(b)))[0];
-    if(!stt||!tts)return{ok:false,reason:'runtime_speech_provider_unavailable',locale:n,sttSupported:!!stt,ttsSupported:!!tts,textOnly:true,fallbackUsed:false,requireExplicitFallbackNotice:true};
+    const runtimeTts=eligible.filter(([,p])=>p.evidence?.source==='runtime_voice_inventory');
+    let tts=null,ttsLocale=null,localeResolution=null,ambiguity=null;
+    const exact=runtimeTts.filter(([,p])=>p.tts.has(n)).sort((a,b)=>providerOrder(a)-providerOrder(b)||a[0].localeCompare(b[0]));
+    if(exact.length){
+      tts=exact[0];ttsLocale=n;localeResolution='exact';
+    }else if(!n.includes('-')){
+      const candidates=[...new Set(runtimeTts.flatMap(([,p])=>[...p.tts].filter(x=>x.split('-')[0]===n)))].sort();
+      if(candidates.length===1){
+        ttsLocale=candidates[0];localeResolution='unique_runtime_language_match';
+        tts=runtimeTts.filter(([,p])=>p.tts.has(ttsLocale)).sort((a,b)=>providerOrder(a)-providerOrder(b)||a[0].localeCompare(b[0]))[0]||null;
+      }else if(candidates.length>1)ambiguity=candidates;
+    }
+    if(!stt||!tts){
+      const reason=stt&&ambiguity?'runtime_tts_locale_ambiguous':'runtime_speech_provider_unavailable';
+      return{ok:false,reason,locale:n,sttSupported:!!stt,ttsSupported:!!tts,textOnly:true,fallbackUsed:false,requireExplicitFallbackNotice:true,
+        ...(ambiguity?{ttsCandidates:ambiguity}:{})};
+    }
     const rank=v=>v.id==='tr-TR-AhmetNeural'?0:v.gender==='Male'?1:2;
-    const voice=tts[1].voices.filter(v=>v.locale===n).sort((a,b)=>rank(a)-rank(b)||a.id.localeCompare(b.id))[0];
-    if(!voice)return{ok:false,reason:'runtime_voice_missing',locale:n,textOnly:true};
-    return{ok:true,locale:n,sttProvider:stt[0],sttLanguage:n.split('-')[0],ttsProvider:tts[0],ttsLocale:n,voice:voice.id,
-      offline:stt[1].offline&&tts[1].offline,cost:0,fallbackUsed:false,evidenceLevel:'runtime_inventory',deviceE2eVerified:false};
+    const voice=tts[1].voices.filter(v=>v.locale===ttsLocale).sort((a,b)=>rank(a)-rank(b)||a.id.localeCompare(b.id))[0];
+    if(!voice)return{ok:false,reason:'runtime_voice_missing',locale:n,ttsLocale,textOnly:true};
+    return{ok:true,locale:n,sttProvider:stt[0],sttLanguage:n.split('-')[0],ttsProvider:tts[0],ttsLocale,voice:voice.id,
+      localeResolution,offline:stt[1].offline&&tts[1].offline,cost:0,fallbackUsed:false,evidenceLevel:'runtime_inventory',deviceE2eVerified:false};
   }
   function remove(name){return providers.delete(name)}
   function clear(){providers.clear()}
