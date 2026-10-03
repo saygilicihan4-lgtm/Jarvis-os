@@ -4,6 +4,8 @@
 })(typeof globalThis==='object'?globalThis:this,function(root){
   'use strict';
   const PREFERENCE_KEY='jarvisMobileLanguagePreferenceV1';
+  const TTS_EVIDENCE_KEY='jarvisMobileTtsEvidenceV1';
+  const TTS_EVIDENCE_TTL_MS=5*60*1000;
   const DEFAULT_CAPTURE_TIMEOUT_MS=20000;
   const COMMON_LOCALES=[
     ['tr-TR','Türkçe'],['en-US','English (US)'],['en-GB','English (UK)'],['de-DE','Deutsch'],['fr-FR','Français'],
@@ -21,9 +23,8 @@
   function safeLanguageHint(text){
     const s=String(text||'');
     // Only emit a locale candidate for scripts that are strong enough to be
-    // useful as a confirmation hint. Ambiguous script families (Latin,
-    // Cyrillic, Arabic, Han-only, Devanagari, etc.) intentionally return null.
-    // This is never persisted as language-learning evidence.
+    // useful as a confirmation hint. Ambiguous script families intentionally
+    // return null. This is never persisted as language-learning evidence.
     if(/[\u3040-\u30ff]/.test(s))return'ja-JP';
     if(/[\uac00-\ud7af]/.test(s))return'ko-KR';
     if(/[\u0370-\u03ff]/.test(s))return'el-GR';
@@ -57,6 +58,46 @@
     if(!validStorage(storage))return false;
     try{storage.removeItem(PREFERENCE_KEY);return true}catch(_){return false}
   }
+  function cleanEvidenceEntry(entry,nowMs){
+    if(!entry||typeof entry!=='object')return null;
+    const requestedLocale=canonicalLocale(entry.requestedLocale),ttsLocale=canonicalLocale(entry.ttsLocale);
+    const verifiedAt=Number(entry.verifiedAt),expiresAt=Number(entry.expiresAt);
+    const localeResolution=String(entry.localeResolution||'');
+    const provider=String(entry.provider||'').slice(0,60),voice=String(entry.voice||'').slice(0,200);
+    if(!requestedLocale||!ttsLocale||!Number.isFinite(verifiedAt)||!Number.isFinite(expiresAt))return null;
+    if(verifiedAt>nowMs+5000||expiresAt!==verifiedAt+TTS_EVIDENCE_TTL_MS||nowMs<verifiedAt||nowMs>expiresAt)return null;
+    if(provider!=='edge-tts'||!voice||!['exact','unique_runtime_language_match'].includes(localeResolution))return null;
+    if(ttsLocale!==requestedLocale){
+      if(requestedLocale.includes('-')||ttsLocale.split('-')[0]!==requestedLocale||localeResolution!=='unique_runtime_language_match')return null;
+    }else if(localeResolution!=='exact')return null;
+    return{requestedLocale,ttsLocale,provider,voice,localeResolution,verifiedAt,expiresAt,ttsVerified:true,sttVerified:false,evidence:'runtime_inventory_plus_playback',deviceE2eVerified:false};
+  }
+  function readTtsEvidence(storage=defaultStorage(),nowMs=Date.now()){
+    if(!validStorage(storage)||!Number.isFinite(nowMs))return[];
+    try{
+      const raw=JSON.parse(storage.getItem(TTS_EVIDENCE_KEY)||'[]');
+      const entries=(Array.isArray(raw)?raw:[]).map(x=>cleanEvidenceEntry(x,nowMs)).filter(Boolean).sort((a,b)=>b.verifiedAt-a.verifiedAt).slice(0,32);
+      if(entries.length)storage.setItem(TTS_EVIDENCE_KEY,JSON.stringify(entries));else storage.removeItem(TTS_EVIDENCE_KEY);
+      return entries;
+    }catch(_){try{storage.removeItem(TTS_EVIDENCE_KEY)}catch(__){}return[]}
+  }
+  function getTtsEvidence(locale,storage=defaultStorage(),nowMs=Date.now()){
+    const normalized=canonicalLocale(locale);if(!normalized)return null;
+    return readTtsEvidence(storage,nowMs).find(x=>x.requestedLocale===normalized)||null;
+  }
+  function recordTtsEvidence(storage,result,requestedLocale,playbackLocale,nowMs=Date.now()){
+    if(!validStorage(storage)||!Number.isFinite(nowMs)||!result||result.speechEvidence!=='runtime_inventory')return null;
+    const requested=canonicalLocale(requestedLocale),ttsLocale=canonicalLocale(playbackLocale),provider=String(result.provider||''),voice=String(result.voice||'');
+    const localeResolution=String(result.localeResolution||'');
+    if(!requested||!ttsLocale||provider!=='edge-tts'||!voice)return null;
+    const candidate=cleanEvidenceEntry({requestedLocale:requested,ttsLocale,provider,voice,localeResolution,verifiedAt:nowMs,expiresAt:nowMs+TTS_EVIDENCE_TTL_MS},nowMs);
+    if(!candidate)return null;
+    try{
+      const remaining=readTtsEvidence(storage,nowMs).filter(x=>x.requestedLocale!==requested);
+      storage.setItem(TTS_EVIDENCE_KEY,JSON.stringify([candidate,...remaining].slice(0,32)));
+      return candidate;
+    }catch(_){return null}
+  }
   function captureWithTimeout(capture,locale,controller,timeoutMs){
     const signal=controller.signal,limit=Number.isFinite(timeoutMs)?Math.max(5,Math.min(60000,timeoutMs)):DEFAULT_CAPTURE_TIMEOUT_MS;
     return new Promise((resolve,reject)=>{
@@ -77,7 +118,17 @@
     if(!uniqueBareMatch)throw new Error('mobile_tts_locale_evidence_mismatch');
     return declared;
   }
-  function createClient({capture,request,play,onState=()=>{},onReply=()=>{},hint=safeLanguageHint,storage=defaultStorage(),captureTimeoutMs=DEFAULT_CAPTURE_TIMEOUT_MS}={}){
+  function renderLocaleOptions(list,storage=defaultStorage(),nowMs=Date.now()){
+    if(!list)return false;
+    while(list.firstChild)list.removeChild(list.firstChild);
+    const evidence=readTtsEvidence(storage,nowMs),verified=new Set(evidence.map(x=>x.requestedLocale));
+    for(const [value,label] of COMMON_LOCALES){
+      const option=(list.ownerDocument||root&&root.document).createElement('option');option.value=value;
+      option.label=label+(verified.has(value)?' · TTS ✓ son 5 dk':' · TTS ? ilk kullanımda kontrol');list.appendChild(option);
+    }
+    return true;
+  }
+  function createClient({capture,request,play,onState=()=>{},onReply=()=>{},hint=safeLanguageHint,storage=defaultStorage(),captureTimeoutMs=DEFAULT_CAPTURE_TIMEOUT_MS,now=Date.now}={}){
     let busy=false,pending=null,history=[],controller=null,preferredLocale=readPreference(storage),explicitLocale=canonicalLocale(stagedExplicitLocale);
     async function run({locale}={}){
       if(busy)return{ok:false,state:'busy'};
@@ -111,6 +162,8 @@
         onReply(result);onState('playing',{...result,ttsLocale:playbackLocale});
         await play({...result,locale:playbackLocale,conversationLocale:targetLocale,ttsLocale:playbackLocale},active.signal);
         active.signal.throwIfAborted();
+        const runtimeTtsEvidence=recordTtsEvidence(storage,result,targetLocale,playbackLocale,Number(now()));
+        if(root&&root.document)renderLocaleOptions(root.document.getElementById('jarvisMobileLocaleList'),storage,Number(now()));
         history=cleanHistory([...history,{role:'user',content:text},{role:'assistant',content:result.reply}]);
         let preferenceSaved=false;
         if(selectedLocale){
@@ -121,13 +174,14 @@
           preferenceSaved=savePreference(storage,targetLocale);if(preferenceSaved)preferredLocale=targetLocale;
         }
         const completed={...result,state:'completed',nextLocale:targetLocale,ttsLocale:playbackLocale,historyCommitted:true,learning:false,automaticLearning:false,
-          preferenceSaved,preferenceLocale:preferredLocale,preferenceEvidence:preferenceSaved?preferenceEvidence:null,deviceE2eVerified:false};
+          preferenceSaved,preferenceLocale:preferredLocale,preferenceEvidence:preferenceSaved?preferenceEvidence:null,
+          runtimeTtsVerified:!!runtimeTtsEvidence,runtimeTtsEvidence,sttVerified:false,deviceE2eVerified:false};
         onState('completed',completed);return completed;
       }catch(error){
         const rawMessage=String(error&&error.message||error),timedOut=rawMessage==='browser_stt_timeout';
         const cancelled=active.signal.aborted&&!timedOut,message=cancelled?'mobile_language_cancelled':rawMessage;
         if(!cancelled)onState('error',{error:message});
-        return{ok:false,cancelled,error:message,learning:false,preferenceSaved:false,preferenceLocale:preferredLocale,deviceE2eVerified:false};
+        return{ok:false,cancelled,error:message,learning:false,preferenceSaved:false,preferenceLocale:preferredLocale,runtimeTtsVerified:false,sttVerified:false,deviceE2eVerified:false};
       }finally{
         if(controller===active){controller=null;busy=false;onState('idle')}
       }
@@ -138,18 +192,18 @@
       if(busy)return{ok:false,reason:'mobile_language_busy'};
       const normalized=canonicalLocale(locale);if(!normalized)return{ok:false,reason:'invalid_locale'};
       pending=null;explicitLocale=normalized;stagedExplicitLocale=normalized;
-      return{ok:true,locale:normalized,persisted:false,evidence:'explicit-user-selection-pending-playback'};
+      return{ok:true,locale:normalized,persisted:false,evidence:'explicit-user-selection-pending-playback',runtimeTtsEvidence:getTtsEvidence(normalized,storage,Number(now()))};
     }
     function forgetPreference(){preferredLocale=null;explicitLocale=null;stagedExplicitLocale=null;return clearPreference(storage)}
     const client={run,cancel,clearPending,selectLocale,forgetPreference,get busy(){return busy},get pendingLocale(){return pending?.locale||null},
-      get selectedLocale(){return explicitLocale},get preferredLocale(){return preferredLocale},get history(){return cleanHistory(history)}};
+      get selectedLocale(){return explicitLocale},get preferredLocale(){return preferredLocale},get runtimeTtsEvidence(){return readTtsEvidence(storage,Number(now()))},get history(){return cleanHistory(history)}};
     activeClient=client;return client;
   }
   function requestExplicitLocale(locale){
     const normalized=canonicalLocale(locale);if(!normalized)return{ok:false,reason:'invalid_locale'};
     if(activeClient)return activeClient.selectLocale(normalized);
     stagedExplicitLocale=normalized;
-    return{ok:true,locale:normalized,persisted:false,evidence:'explicit-user-selection-pending-playback'};
+    return{ok:true,locale:normalized,persisted:false,evidence:'explicit-user-selection-pending-playback',runtimeTtsEvidence:getTtsEvidence(normalized)};
   }
   function installLocalePicker(doc=root&&root.document){
     if(!doc||!root||!/iPhone|iPad|iPod|Android/i.test(String(root.navigator&&root.navigator.userAgent||'')))return false;
@@ -157,15 +211,19 @@
     const chatButton=doc.getElementById('languageChatBtn');if(!chatButton||!chatButton.parentNode)return false;
     const wrap=doc.createElement('span');wrap.id='jarvisMobileLocalePicker';wrap.style.cssText='display:inline-flex;gap:5px;align-items:center;margin-left:7px;vertical-align:middle';
     const input=doc.createElement('input');input.id='jarvisMobileLocaleInput';input.setAttribute('list','jarvisMobileLocaleList');input.setAttribute('aria-label','Konuşma dili BCP-47 kodu');input.placeholder='Dil: tr-TR';input.maxLength=35;input.autocapitalize='off';input.autocomplete='off';input.style.cssText='width:110px;background:#061018;color:#b9f4ff;border:1px solid rgba(101,230,255,.45);border-radius:5px;padding:6px;font-size:11px';
-    const list=doc.createElement('datalist');list.id='jarvisMobileLocaleList';for(const [value,label] of COMMON_LOCALES){const option=doc.createElement('option');option.value=value;option.label=label;list.appendChild(option)}
+    const list=doc.createElement('datalist');list.id='jarvisMobileLocaleList';renderLocaleOptions(list,defaultStorage(),Date.now());
     const button=doc.createElement('button');button.type='button';button.textContent='DİL';button.className='send';button.style.cssText='padding:6px 8px;font-size:10px';
     button.addEventListener('click',()=>{
-      const result=requestExplicitLocale(input.value);
-      const status=doc.getElementById('languageChatStatus');
-      if(status)status.textContent=result.ok?'Dil isteği: '+result.locale+' · başarılı ses yanıtından sonra kaydedilecek.':result.reason==='mobile_language_busy'?'Konuşma sürerken dil değiştirilemez.':'Geçerli bir dil kodu girin (örn. tr-TR, en-US).';
+      const result=requestExplicitLocale(input.value),status=doc.getElementById('languageChatStatus');
+      if(!status)return;
+      if(!result.ok){status.textContent=result.reason==='mobile_language_busy'?'Konuşma sürerken dil değiştirilemez.':'Geçerli bir dil kodu girin (örn. tr-TR, en-US).';return}
+      status.textContent=result.runtimeTtsEvidence?
+        'Dil isteği: '+result.locale+' · TTS son 5 dk içinde runtime + playback ile doğrulandı; STT tarayıcıya bağlı.':
+        'Dil isteği: '+result.locale+' · TTS ilk başarılı yanıtta runtime kontrol edilecek; STT tarayıcıya bağlı.';
     });
     wrap.append(input,button,list);chatButton.parentNode.appendChild(wrap);return true;
   }
   if(root&&root.document){const start=()=>installLocalePicker(root.document);if(root.document.readyState==='loading')root.document.addEventListener('DOMContentLoaded',start,{once:true});else setTimeout(start,0)}
-  return{PREFERENCE_KEY,DEFAULT_CAPTURE_TIMEOUT_MS,COMMON_LOCALES,canonicalLocale,safeLanguageHint,cleanHistory,readPreference,savePreference,clearPreference,captureWithTimeout,resolvePlaybackLocale,createClient,requestExplicitLocale,installLocalePicker};
+  return{PREFERENCE_KEY,TTS_EVIDENCE_KEY,TTS_EVIDENCE_TTL_MS,DEFAULT_CAPTURE_TIMEOUT_MS,COMMON_LOCALES,canonicalLocale,safeLanguageHint,cleanHistory,readPreference,savePreference,clearPreference,
+    cleanEvidenceEntry,readTtsEvidence,getTtsEvidence,recordTtsEvidence,captureWithTimeout,resolvePlaybackLocale,renderLocaleOptions,createClient,requestExplicitLocale,installLocalePicker};
 });
