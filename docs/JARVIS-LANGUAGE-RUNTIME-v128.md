@@ -75,6 +75,10 @@ STT port. Only one capture runs at once. An active response prevents a new
 capture. Sessions expire after 30 minutes of inactivity and have bounded
 capacity; start a new session after 128 captures. Profiles are currently
 workspace-scoped for a single user, not multi-tenant cloud profiles.
+Provider utterance IDs are also deduplicated across sessions. After 4096
+observations the runtime requires a restart rather than evicting replay
+evidence. A reliable detection without speech coverage blocks `begin`; it
+cannot silently reuse the previous language's voice.
 
 Updater and one-click installation include all language-runtime dependencies.
 The legacy worker can still start before those optional modules are installed;

@@ -53,6 +53,12 @@ const probeVoices=async registry=>[await discovery.discoverEdgeTts({registry,run
     assert.equal(runtime.create({}).context.locale,'de-DE','new session restores preference');
     runtime.resetLearned();repeat=true;
     await assert.rejects(runtime.listen(id),/duplicate/);repeat=false;
+    const replaySession=runtime.create({}).sessionId;repeat=true;
+    await assert.rejects(runtime.listen(replaySession),/duplicate/,'new session cannot replay a provider observation');repeat=false;
+    language='ja';const unsupported=await runtime.listen(id);
+    assert.equal(unsupported.speech.ok,false,'unsupported detection is visible to the caller');
+    assert.equal(runtime.begin(id).ok,false,'unsupported detected language cannot silently use previous locale');
+    assert.equal(runtime.status(id).activeTurn,false);language='de';
     mode='configured';await runtime.listen(id);turn=runtime.begin(id);
     assert.equal(runtime.complete(id,{turnId:turn.turnId,successful:true}).learning,false,'forced language probability cannot learn');
     mode='automatic';confidence=NaN;await runtime.listen(id);turn=runtime.begin(id);
