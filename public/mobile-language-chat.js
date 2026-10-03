@@ -5,6 +5,13 @@
   'use strict';
   const PREFERENCE_KEY='jarvisMobileLanguagePreferenceV1';
   const DEFAULT_CAPTURE_TIMEOUT_MS=20000;
+  const COMMON_LOCALES=[
+    ['tr-TR','Türkçe'],['en-US','English (US)'],['en-GB','English (UK)'],['de-DE','Deutsch'],['fr-FR','Français'],
+    ['es-ES','Español'],['it-IT','Italiano'],['pt-BR','Português (Brasil)'],['pt-PT','Português (Portugal)'],['nl-NL','Nederlands'],
+    ['pl-PL','Polski'],['ru-RU','Русский'],['uk-UA','Українська'],['ar-SA','العربية'],['hi-IN','हिन्दी'],
+    ['ja-JP','日本語'],['ko-KR','한국어'],['zh-CN','中文 (简体)'],['zh-TW','中文 (繁體)'],['id-ID','Bahasa Indonesia']
+  ];
+  let activeClient=null,stagedExplicitLocale=null;
   function canonicalLocale(value){
     if(typeof value!=='string')return null;
     const input=value.trim().replace(/_/g,'-');
@@ -62,58 +69,103 @@
       Promise.resolve().then(()=>capture(locale,signal)).then(value=>finish(resolve,value),error=>finish(reject,error instanceof Error?error:new Error(String(error||'browser_stt_failed'))));
     });
   }
+  function resolvePlaybackLocale(result,targetLocale){
+    const requested=canonicalLocale(targetLocale),declared=result&&result.ttsLocale==null?requested:canonicalLocale(result&&result.ttsLocale);
+    if(!requested||!declared)throw new Error('mobile_tts_locale_invalid');
+    if(declared===requested)return declared;
+    const uniqueBareMatch=!requested.includes('-')&&declared.split('-')[0]===requested&&result.localeResolution==='unique_runtime_language_match'&&result.speechEvidence==='runtime_inventory';
+    if(!uniqueBareMatch)throw new Error('mobile_tts_locale_evidence_mismatch');
+    return declared;
+  }
   function createClient({capture,request,play,onState=()=>{},onReply=()=>{},hint=safeLanguageHint,storage=defaultStorage(),captureTimeoutMs=DEFAULT_CAPTURE_TIMEOUT_MS}={}){
-    let busy=false,pending=null,history=[],controller=null,preferredLocale=readPreference(storage);
+    let busy=false,pending=null,history=[],controller=null,preferredLocale=readPreference(storage),explicitLocale=canonicalLocale(stagedExplicitLocale);
     async function run({locale}={}){
       if(busy)return{ok:false,state:'busy'};
       const requestedLocale=canonicalLocale(locale);
       if(!requestedLocale)return{ok:false,state:'invalid',reason:'locale_required'};
       busy=true;controller=new AbortController();const active=controller;
-      let text,targetLocale=preferredLocale||requestedLocale,inputSource='browser-speech',confirmedSwitch=false;
+      const selectedLocale=canonicalLocale(explicitLocale);
+      let text,targetLocale=selectedLocale||preferredLocale||requestedLocale,inputSource='browser-speech',confirmedSwitch=false,preferenceEvidence=null;
       try{
         if(pending){
-          text=pending.text;targetLocale=pending.locale;inputSource=pending.inputSource;pending=null;confirmedSwitch=true;
+          text=pending.text;targetLocale=pending.locale;inputSource=pending.inputSource;pending=null;confirmedSwitch=true;preferenceEvidence='explicit-confirmation-plus-playback';
           onState('language-confirmed',{locale:targetLocale,transcript:text,explicit:true});
         }else{
-          onState('listening',{locale:targetLocale,preferenceUsed:!!preferredLocale});
+          onState('listening',{locale:targetLocale,preferenceUsed:!!preferredLocale,explicitSelection:!!selectedLocale});
           text=String(await captureWithTimeout(capture,targetLocale,active,captureTimeoutMs)||'').replace(/\s+/g,' ').trim().slice(0,1800);
           active.signal.throwIfAborted();
           if(!text)throw new Error('empty_transcript');
           const candidate=canonicalLocale(hint(text,targetLocale));
-          if(candidate&&candidate!==targetLocale){
+          if(!selectedLocale&&candidate&&candidate!==targetLocale){
             pending={text,locale:candidate,inputSource};
             const out={ok:true,state:'confirm-language',locale:candidate,transcript:text,learning:false,preferenceSaved:false,deviceE2eVerified:false};
             onState('confirm-language',out);return out;
           }
         }
-        onState('thinking',{locale:targetLocale,transcript:text});
+        onState('thinking',{locale:targetLocale,transcript:text,explicitSelection:!!selectedLocale});
         const result=await request({text,locale:targetLocale,inputSource,history:cleanHistory(history)},active.signal);
         active.signal.throwIfAborted();
         if(!result||result.ok!==true||result.state!=='reply-ready')throw new Error(result?.reason||result?.error||'mobile_language_reply_unavailable');
         if(canonicalLocale(result.locale)!==targetLocale)throw new Error('mobile_reply_locale_mismatch');
-        onReply(result);onState('playing',result);
-        await play(result,active.signal);
+        const playbackLocale=resolvePlaybackLocale(result,targetLocale);
+        onReply(result);onState('playing',{...result,ttsLocale:playbackLocale});
+        await play({...result,locale:playbackLocale,conversationLocale:targetLocale,ttsLocale:playbackLocale},active.signal);
         active.signal.throwIfAborted();
         history=cleanHistory([...history,{role:'user',content:text},{role:'assistant',content:result.reply}]);
         let preferenceSaved=false;
-        if(confirmedSwitch){preferenceSaved=savePreference(storage,targetLocale);if(preferenceSaved)preferredLocale=targetLocale}
-        const completed={...result,state:'completed',nextLocale:targetLocale,historyCommitted:true,learning:false,automaticLearning:false,
-          preferenceSaved,preferenceLocale:preferredLocale,preferenceEvidence:preferenceSaved?'explicit-confirmation-plus-playback':null,deviceE2eVerified:false};
+        if(selectedLocale){
+          preferenceSaved=savePreference(storage,targetLocale);
+          if(preferenceSaved){preferredLocale=targetLocale;explicitLocale=null;if(stagedExplicitLocale===targetLocale)stagedExplicitLocale=null}
+          preferenceEvidence=preferenceSaved?'explicit-picker-plus-playback':null;
+        }else if(confirmedSwitch){
+          preferenceSaved=savePreference(storage,targetLocale);if(preferenceSaved)preferredLocale=targetLocale;
+        }
+        const completed={...result,state:'completed',nextLocale:targetLocale,ttsLocale:playbackLocale,historyCommitted:true,learning:false,automaticLearning:false,
+          preferenceSaved,preferenceLocale:preferredLocale,preferenceEvidence:preferenceSaved?preferenceEvidence:null,deviceE2eVerified:false};
         onState('completed',completed);return completed;
       }catch(error){
         const rawMessage=String(error&&error.message||error),timedOut=rawMessage==='browser_stt_timeout';
         const cancelled=active.signal.aborted&&!timedOut,message=cancelled?'mobile_language_cancelled':rawMessage;
         if(!cancelled)onState('error',{error:message});
-        return{ok:false,cancelled,error:message,learning:false,preferenceSaved:false,deviceE2eVerified:false};
+        return{ok:false,cancelled,error:message,learning:false,preferenceSaved:false,preferenceLocale:preferredLocale,deviceE2eVerified:false};
       }finally{
         if(controller===active){controller=null;busy=false;onState('idle')}
       }
     }
     function cancel(){controller?.abort();pending=null;return{ok:true,cancelled:true,pendingCleared:true}}
     function clearPending(){pending=null}
-    function forgetPreference(){preferredLocale=null;return clearPreference(storage)}
-    return{run,cancel,clearPending,forgetPreference,get busy(){return busy},get pendingLocale(){return pending?.locale||null},
-      get preferredLocale(){return preferredLocale},get history(){return cleanHistory(history)}};
+    function selectLocale(locale){
+      if(busy)return{ok:false,reason:'mobile_language_busy'};
+      const normalized=canonicalLocale(locale);if(!normalized)return{ok:false,reason:'invalid_locale'};
+      pending=null;explicitLocale=normalized;stagedExplicitLocale=normalized;
+      return{ok:true,locale:normalized,persisted:false,evidence:'explicit-user-selection-pending-playback'};
+    }
+    function forgetPreference(){preferredLocale=null;explicitLocale=null;stagedExplicitLocale=null;return clearPreference(storage)}
+    const client={run,cancel,clearPending,selectLocale,forgetPreference,get busy(){return busy},get pendingLocale(){return pending?.locale||null},
+      get selectedLocale(){return explicitLocale},get preferredLocale(){return preferredLocale},get history(){return cleanHistory(history)}};
+    activeClient=client;return client;
   }
-  return{PREFERENCE_KEY,DEFAULT_CAPTURE_TIMEOUT_MS,canonicalLocale,safeLanguageHint,cleanHistory,readPreference,savePreference,clearPreference,captureWithTimeout,createClient};
+  function requestExplicitLocale(locale){
+    const normalized=canonicalLocale(locale);if(!normalized)return{ok:false,reason:'invalid_locale'};
+    if(activeClient)return activeClient.selectLocale(normalized);
+    stagedExplicitLocale=normalized;
+    return{ok:true,locale:normalized,persisted:false,evidence:'explicit-user-selection-pending-playback'};
+  }
+  function installLocalePicker(doc=root&&root.document){
+    if(!doc||!root||!/iPhone|iPad|iPod|Android/i.test(String(root.navigator&&root.navigator.userAgent||'')))return false;
+    if(doc.getElementById('jarvisMobileLocalePicker'))return true;
+    const chatButton=doc.getElementById('languageChatBtn');if(!chatButton||!chatButton.parentNode)return false;
+    const wrap=doc.createElement('span');wrap.id='jarvisMobileLocalePicker';wrap.style.cssText='display:inline-flex;gap:5px;align-items:center;margin-left:7px;vertical-align:middle';
+    const input=doc.createElement('input');input.id='jarvisMobileLocaleInput';input.setAttribute('list','jarvisMobileLocaleList');input.setAttribute('aria-label','Konuşma dili BCP-47 kodu');input.placeholder='Dil: tr-TR';input.maxLength=35;input.autocapitalize='off';input.autocomplete='off';input.style.cssText='width:110px;background:#061018;color:#b9f4ff;border:1px solid rgba(101,230,255,.45);border-radius:5px;padding:6px;font-size:11px';
+    const list=doc.createElement('datalist');list.id='jarvisMobileLocaleList';for(const [value,label] of COMMON_LOCALES){const option=doc.createElement('option');option.value=value;option.label=label;list.appendChild(option)}
+    const button=doc.createElement('button');button.type='button';button.textContent='DİL';button.className='send';button.style.cssText='padding:6px 8px;font-size:10px';
+    button.addEventListener('click',()=>{
+      const result=requestExplicitLocale(input.value);
+      const status=doc.getElementById('languageChatStatus');
+      if(status)status.textContent=result.ok?'Dil isteği: '+result.locale+' · başarılı ses yanıtından sonra kaydedilecek.':result.reason==='mobile_language_busy'?'Konuşma sürerken dil değiştirilemez.':'Geçerli bir dil kodu girin (örn. tr-TR, en-US).';
+    });
+    wrap.append(input,button,list);chatButton.parentNode.appendChild(wrap);return true;
+  }
+  if(root&&root.document){const start=()=>installLocalePicker(root.document);if(root.document.readyState==='loading')root.document.addEventListener('DOMContentLoaded',start,{once:true});else setTimeout(start,0)}
+  return{PREFERENCE_KEY,DEFAULT_CAPTURE_TIMEOUT_MS,COMMON_LOCALES,canonicalLocale,safeLanguageHint,cleanHistory,readPreference,savePreference,clearPreference,captureWithTimeout,resolvePlaybackLocale,createClient,requestExplicitLocale,installLocalePicker};
 });

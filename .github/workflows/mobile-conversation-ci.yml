@@ -19,13 +19,18 @@ jobs:
           node --check worker.js
           node --check jarvis-mobile-language-relay.js
           node --check jarvis-mobile-language-conversation.js
+          node --check jarvis-tts-locale-router.js
           node --check public/mobile-language-chat.js
           node --check mobile-language-conversation-selftest.js
           node --check mobile-capture-lifecycle-selftest.js
+          node --check mobile-explicit-locale-selftest.js
+          node --check mobile-runtime-locale-selftest.js
       - name: Mobile multilingual conversation safety
         run: |
           node mobile-language-conversation-selftest.js
           node mobile-capture-lifecycle-selftest.js
+          node mobile-explicit-locale-selftest.js
+          node mobile-runtime-locale-selftest.js
           node mobile-tts-relay-selftest.js
           node language-conversation-selftest.js
           node language-chat-ui-selftest.js
