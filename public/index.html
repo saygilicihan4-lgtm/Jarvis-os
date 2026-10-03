@@ -142,6 +142,7 @@
 </div>
 
 <script src="/language-chat.js"></script>
+<script src="/mobile-language-chat.js"></script>
 <script>
 let KEY='';
 localStorage.removeItem('jarvis_token');
@@ -149,6 +150,8 @@ let recognition=null;
 let listening=false;
 let privacyMode=false;
 let languageChatClient=null;
+let mobileLanguageChatClient=null;
+let mobileLanguageCapture=null;
 let languageChatStarting=false;
 let desktopWakeWordEnabled=!/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 let wakeWordConversationUntil=0;
@@ -957,6 +960,7 @@ if(SpeechRecognition){
   recognition.onstart=()=>setVoiceMode(true);
   recognition.onend=()=>{
     setVoiceMode(false);
+    if(mobileLanguageCapture){const slot=mobileLanguageCapture;mobileLanguageCapture=null;slot.reject(new Error('browser_stt_no_final_result'));return}
     if(bargeInMode){
       setTimeout(async()=>{
         const state=await localTtsState();
@@ -973,6 +977,7 @@ if(SpeechRecognition){
   recognition.onerror=e=>{
     setVoiceMode(false);
     const err=String(e.error||'ERROR');
+    if(mobileLanguageCapture){const slot=mobileLanguageCapture;mobileLanguageCapture=null;slot.reject(new Error('browser_stt_'+err.toLowerCase()));return}
     if(/not-allowed|service-not-allowed/i.test(err))desktopWakeWordEnabled=false;
     voiceState.textContent='VOICE: '+err.toUpperCase();
     if(bargeInMode&&!/not-allowed|service-not-allowed/i.test(err)){
@@ -985,6 +990,7 @@ if(SpeechRecognition){
     const choice=chooseRecognitionCandidate(e);
     const captured=String(choice.text||'').trim();
     if(e.results[e.results.length-1].isFinal){
+      if(mobileLanguageCapture){const slot=mobileLanguageCapture;mobileLanguageCapture=null;slot.resolve(captured);return}
       if(bargeInMode){
         if(isLikelyJarvisEcho(captured)){
           if(window.consoleStatus)consoleStatus.textContent='JARVIS · SELF-ECHO IGNORED · '+captured.slice(0,90);
@@ -1074,6 +1080,7 @@ async function api(url,options={}){
 
 function setAuthenticated(ok){
   if(!ok)languageChatClient?.cancel();
+  if(!ok)mobileLanguageChatClient?.cancel();
   authDot.className='dot '+(ok?'online':'');
   authState.textContent=ok?'AUTHORIZED':'LOCKED';
   consoleStatus.textContent=ok?'SECURE CHANNEL ACTIVE':'SECURE CHANNEL LOCKED';
@@ -1398,6 +1405,7 @@ async function scanTextLocal(){
 function enterPrivacyMode(){
   privacyMode=true;
   languageChatClient?.cancel();
+  mobileLanguageChatClient?.cancel();
   voiceConversationActive=false;
   bargeInMode=false;
   clearTimeout(conversationFollowupTimer);
@@ -2836,12 +2844,83 @@ function playLanguageConversationAudio(result,signal){
     try{Promise.resolve(audio.play()).catch(error=>finish(error))}catch(error){finish(error)}
   });
 }
+function captureMobileLanguageTranscript(locale,signal){
+  if(!recognition)return Promise.reject(new Error('browser_stt_unsupported'));
+  if(mobileLanguageCapture)return Promise.reject(new Error('browser_stt_busy'));
+  return new Promise((resolve,reject)=>{
+    let settled=false;
+    const finish=(fn,value)=>{if(settled)return;settled=true;if(mobileLanguageCapture===slot)mobileLanguageCapture=null;signal?.removeEventListener('abort',onAbort);fn(value)};
+    const slot={resolve:value=>finish(resolve,value),reject:error=>finish(reject,error instanceof Error?error:new Error(String(error||'browser_stt_failed')))};
+    const onAbort=()=>{try{recognition.abort()}catch(_){};slot.reject(new Error('mobile_language_cancelled'))};
+    mobileLanguageCapture=slot;signal?.addEventListener('abort',onAbort,{once:true});
+    try{recognition.lang=locale;recognition.start()}catch(e){slot.reject(e)}
+  });
+}
+function waitMobileLanguagePoll(signal,ms=450){
+  return new Promise((resolve,reject)=>{
+    let settled=false;
+    const finish=(fn,value)=>{if(settled)return;settled=true;clearTimeout(timer);signal?.removeEventListener('abort',onAbort);fn(value)};
+    const onAbort=()=>finish(reject,new Error('mobile_language_cancelled'));
+    const timer=setTimeout(()=>finish(resolve),ms);
+    signal?.addEventListener('abort',onAbort,{once:true});
+    if(signal?.aborted)onAbort();
+  });
+}
+async function mobileLanguageConversationRequest(data,signal){
+  let id='',finished=false;
+  try{
+    const created=await api('/api/mobile-language',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(data),signal});
+    id=String(created.id||'');if(!id)throw new Error('mobile_language_queue_failed');
+    const deadline=Date.now()+60000;
+    while(Date.now()<deadline){
+      signal?.throwIfAborted();
+      await waitMobileLanguagePoll(signal,450);
+      const state=await api('/api/mobile-language/'+encodeURIComponent(id),{cache:'no-store',signal});
+      if(state.status==='ready'&&state.result){finished=true;return state.result}
+      if(state.status==='failed'||state.status==='cancelled')throw new Error(state.error||('mobile_language_'+state.status));
+    }
+    throw new Error('mobile_language_timeout');
+  }finally{
+    if(id&&!finished)fetch('/api/mobile-language/'+encodeURIComponent(id)+'/cancel',{method:'POST',credentials:'same-origin'}).catch(()=>{});
+  }
+}
+async function playMobileLanguageReply(result,signal){
+  const abort=()=>{
+    if(activeMobileTtsRequestId){const id=activeMobileTtsRequestId;activeMobileTtsRequestId='';fetch('/api/mobile-tts/'+encodeURIComponent(id)+'/cancel',{method:'POST',credentials:'same-origin'}).catch(()=>{})}
+    if(mobileJarvisPlayer){try{mobileJarvisPlayer.pause();mobileJarvisPlayer.onended?.()}catch(_){}}
+  };
+  signal?.addEventListener('abort',abort,{once:true});
+  try{signal?.throwIfAborted();await playJarvisMobileRelay(result.reply,'balanced',result.locale);signal?.throwIfAborted()}
+  finally{signal?.removeEventListener('abort',abort)}
+}
+async function runMobileLanguageChat(){
+  if(!recognition){languageChatStatus.textContent='Telefon tarayıcısında konuşma tanıma desteği doğrulanmadı.';return}
+  if(!window.JarvisMobileLanguageChat){languageChatStatus.textContent='Mobil çok dilli sohbet modülü yüklenemedi.';return}
+  if(!mobileLanguageChatClient)mobileLanguageChatClient=JarvisMobileLanguageChat.createClient({
+    capture:captureMobileLanguageTranscript,request:mobileLanguageConversationRequest,play:playMobileLanguageReply,
+    onState:(state,detail={})=>{
+      languageChatBtn.textContent=(state==='idle'||state==='confirm-language')?'ÇOK DİLLİ SOHBET':'DUR';
+      if(state==='listening')languageChatStatus.textContent='Telefon mikrofonu · '+(LANGUAGE_NAMES[activeLanguage.split('-')[0]]||activeLanguage)+' dinleniyor.';
+      else if(state==='confirm-language')languageChatStatus.textContent='Dil değişimi adayı: '+(LANGUAGE_NAMES[String(detail.locale||'').split('-')[0]]||detail.locale)+'. Onaylamak için düğmeye tekrar dokunun.';
+      else if(state==='language-confirmed')languageChatStatus.textContent='Dil değişimi açıkça onaylandı · '+detail.locale;
+      else if(state==='thinking')languageChatStatus.textContent='PC yerel model yanıt hazırlıyor · giriş dili öğrenilmiyor.';
+      else if(state==='playing')languageChatStatus.textContent='Yanıt telefonda locale-doğrulanmış TTS ile oynatılıyor.';
+      else if(state==='completed'){activeLanguage=detail.nextLocale||detail.locale||activeLanguage;recognition.lang=activeLanguage;languageChatStatus.textContent='Mobil çok dilli tur tamamlandı · dil öğrenme kapalı.'}
+      else if(state==='error')languageChatStatus.textContent='Mobil çok dilli sohbet tamamlanamadı: '+detail.error;
+    },
+    onReply:result=>{coreSubtitle.textContent=result.reply;consoleStatus.textContent='MOBILE LANGUAGE CHAT · '+result.locale+' · NO STT LEARNING';rememberJarvisSpeechEcho(result.reply)}
+  });
+  if(mobileLanguageChatClient.busy){mobileLanguageChatClient.cancel();return}
+  primeMobileSpeech();
+  await mobileLanguageChatClient.run({locale:activeLanguage});
+}
 async function runLanguageChat(){
   if(languageChatClient?.busy){await languageChatClient.cancel();return}
   if(languageChatStarting)return;
   if(privacyMode||document.hidden||!loginOverlay.classList.contains('hidden'))return;
-  if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis()){
-    languageChatStatus.textContent='Bu sohbet yolu şu anda Windows PC içindir.';return;
+  if(isMobileJarvis()){await runMobileLanguageChat();return}
+  if(!/Windows/i.test(navigator.userAgent)){
+    languageChatStatus.textContent='Yerel konuşma oturumu şu anda Windows PC içindir.';return;
   }
   if(!languageChatClient)languageChatClient=JarvisLanguageChat.createClient({
     request:languageConversationRequest,play:playLanguageConversationAudio,
@@ -2869,11 +2948,14 @@ async function runLanguageChat(){
     await languageChatClient.run();
   }finally{languageChatStarting=false;localSttListening=false;desktopWakeWordEnabled=wakeWasEnabled;if(!privacyMode&&!document.hidden)scheduleDesktopWakeWord(700)}
 }
-if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis()){
-  languageChatBtn.disabled=true;languageChatStatus.textContent='Çok dilli sohbet: Windows PC';
+if(!/Windows/i.test(navigator.userAgent)&&!isMobileJarvis()){
+  languageChatBtn.disabled=true;languageChatStatus.textContent='Çok dilli sohbet: Windows PC veya desteklenen telefon tarayıcısı';
+}else if(isMobileJarvis()){
+  languageChatBtn.disabled=false;
+  languageChatStatus.textContent=SpeechRecognition?'Çok dilli sohbet: telefon hazır · STT öğrenme kapalı':'Çok dilli sohbet: tarayıcı konuşma tanıma desteği doğrulanmadı';
 }
-document.addEventListener('visibilitychange',()=>{if(document.hidden)languageChatClient?.cancel()});
-window.addEventListener('pagehide',()=>languageChatClient?.cancel());
+document.addEventListener('visibilitychange',()=>{if(document.hidden)languageChatClient?.cancel();if(document.hidden)mobileLanguageChatClient?.cancel()});
+window.addEventListener('pagehide',()=>{languageChatClient?.cancel();mobileLanguageChatClient?.cancel()});
 bootstrapSession();
 setInterval(()=>{if(!loginOverlay.classList.contains('hidden'))return;load().catch(()=>setAuthenticated(false))},2500);
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));

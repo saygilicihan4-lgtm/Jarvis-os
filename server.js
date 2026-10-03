@@ -3,6 +3,7 @@ const fs=require('fs');
 const path=require('path');
 const crypto=require('crypto');
 const mobileTtsRelay=require('./jarvis-mobile-tts-relay');
+const mobileLanguageRelay=require('./jarvis-mobile-language-relay');
 const webpush=require('web-push');
 const {Pool}=require('pg');
 const {generateRegistrationOptions,verifyRegistrationResponse,generateAuthenticationOptions,verifyAuthenticationResponse}=require('@simplewebauthn/server');
@@ -83,6 +84,7 @@ const state={
   reminders:[],
   webauthnChallenges:{registration:new Map(),authentication:new Map()},
   mobileTtsRequests:new Map(),
+  mobileLanguageRequests:new Map(),
   mobileBrainRequests:new Map(),
   brainHistory:[],
   stateRevision:0,
@@ -851,6 +853,37 @@ const server=http.createServer((req,res)=>{
     return json(res,200,{ok:true,status:r.status});
   }
 
+  if(pathname==='/api/mobile-language'&&req.method==='POST'){
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      if(!pcOnline())return json(res,409,{error:'PC Worker offline'});
+      let request;
+      try{request=mobileLanguageRelay.createRequest({id:crypto.randomUUID(),text:d.text,locale:d.locale,inputSource:d.inputSource,history:d.history})}
+      catch(e){return json(res,400,{error:String(e.message||e)})}
+      const terminal=[...state.mobileLanguageRequests.entries()].filter(([,r])=>['ready','failed','cancelled'].includes(r.status)).sort((a,b)=>Number(a[1].createdAtMs||0)-Number(b[1].createdAtMs||0));
+      while(state.mobileLanguageRequests.size>=128&&terminal.length)state.mobileLanguageRequests.delete(terminal.shift()[0]);
+      if(state.mobileLanguageRequests.size>=128)return json(res,429,{error:'mobile language queue full'});
+      state.mobileLanguageRequests.set(request.id,request);
+      return json(res,202,{ok:true,id:request.id,status:request.status,locale:request.locale,learning:false});
+    });
+  }
+  const mobileLanguageCancel=pathname.match(/^\/api\/mobile-language\/([0-9a-f-]+)\/cancel$/i);
+  if(mobileLanguageCancel&&req.method==='POST'){
+    const r=state.mobileLanguageRequests.get(mobileLanguageCancel[1]);
+    if(!r)return json(res,404,{error:'mobile language request not found'});
+    const cancelled=mobileLanguageRelay.cancel(r);
+    if(!cancelled.ok)return json(res,409,{error:cancelled.reason,status:r.status});
+    return json(res,200,{ok:true,status:r.status,learning:false});
+  }
+  const mobileLanguageGet=pathname.match(/^\/api\/mobile-language\/([0-9a-f-]+)$/i);
+  if(mobileLanguageGet&&req.method==='GET'){
+    const r=state.mobileLanguageRequests.get(mobileLanguageGet[1]);
+    if(!r)return json(res,404,{error:'mobile language request not found'});
+    if(r.status==='ready')return json(res,200,{ok:true,status:'ready',result:r.result,learning:false});
+    if(r.status==='failed')return json(res,200,{ok:false,status:'failed',error:r.error||'mobile language failed',learning:false});
+    return json(res,200,{ok:true,status:r.status,learning:false});
+  }
+
   if(pathname==='/api/mobile-brain'&&req.method==='POST'){
     return readJson(req,(err,d)=>{
       if(err)return json(res,400,{error:'bad json'});
@@ -1167,6 +1200,33 @@ const server=http.createServer((req,res)=>{
         r.status='failed';r.error=String(d.error||'tts generation failed').slice(0,240);r.readyAtMs=Date.now();
       }
       return json(res,200,{ok:true,status:r.status,locale:r.locale});
+    });
+  }
+
+  if(pathname==='/api/worker/mobile-language-next'&&req.method==='GET'){
+    const deviceId=String(req.headers['x-jarvis-device-id']||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80)||'pc';
+    const next=[...state.mobileLanguageRequests.values()].find(r=>r.status==='queued');
+    if(!next)return json(res,200,{ok:true,request:null});
+    const claimed=mobileLanguageRelay.claim(next,deviceId);
+    if(!claimed.ok)return json(res,409,{error:claimed.reason});
+    return json(res,200,{ok:true,request:{id:next.id,text:next.text,locale:next.locale,inputSource:next.inputSource,history:next.history}});
+  }
+  if(pathname==='/api/worker/mobile-language-result'&&req.method==='POST'){
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      const r=state.mobileLanguageRequests.get(String(d.id||''));
+      if(!r)return json(res,404,{error:'mobile language request not found'});
+      const deviceId=String(req.headers['x-jarvis-device-id']||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80)||'pc';
+      const verified=mobileLanguageRelay.verifyResult(r,{workerId:deviceId,locale:d.locale});
+      if(!verified.ok)return json(res,409,{error:verified.reason,status:r.status});
+      if(d.ok&&d.result&&typeof d.result==='object'&&d.result.ok===true&&d.result.locale===r.locale&&d.result.state==='reply-ready'){
+        const reply=String(d.result.reply||'').replace(/\s+/g,' ').trim().slice(0,900);
+        if(!reply)return json(res,400,{error:'valid reply required'});
+        r.status='ready';r.result={...d.result,reply,locale:r.locale,learning:false,deviceE2eVerified:false};r.error=null;r.readyAtMs=Date.now();
+      }else{
+        r.status='failed';r.result=null;r.error=String(d.error||d.result?.reason||'mobile language generation failed').slice(0,240);r.readyAtMs=Date.now();
+      }
+      return json(res,200,{ok:true,status:r.status,locale:r.locale,learning:false});
     });
   }
 
