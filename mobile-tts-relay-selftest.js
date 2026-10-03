@@ -46,5 +46,8 @@ const {createRouter}=require('./jarvis-tts-locale-router');
   assert(worker.includes("JSON.stringify({id:q.id,locale:q.locale,ok:true,audio})"),'worker must echo synthesized locale');
   assert(ui.includes("body:JSON.stringify({text:String(text||'').trim(),tone,locale})"),'phone UI must preserve requested locale');
   assert(ui.includes("playJarvisMobileRelay(spoken,tone,lang)"),'mobile speech call must forward active language');
+  assert(ui.includes("await fetch('/api/mobile-tts/'+encodeURIComponent(cj.id)+'/cancel'"),'phone UI must cancel a timed-out relay before fallback');
+  assert(ui.includes("String(locale||'').toUpperCase()+' RELAY'"),'phone UI must report the active locale without inventing a fixed voice');
+  assert(!ui.includes("VOICE: AHMETNEURAL RELAY"),'phone UI must not label non-Turkish relay audio as AhmetNeural');
   console.log('mobile-tts-relay-selftest: ok');
 })().catch(err=>{console.error(err);process.exit(1)});
