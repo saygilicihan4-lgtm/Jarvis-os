@@ -149,8 +149,8 @@
   }
   function recordNegativeTtsEvidence(storage,result,requestedLocale,nowMs=Date.now()){
     if(!validStorage(storage)||!Number.isFinite(nowMs)||!result||result.ok!==false||result.state!=='unsupported')return null;
-    const requested=canonicalLocale(requestedLocale),reason=String(result.reason||result.error||'');
-    if(!requested||!shouldInvalidateTtsEvidence(reason))return null;
+    const requested=canonicalLocale(requestedLocale),resultLocale=canonicalLocale(result.locale),reason=String(result.reason||result.error||'');
+    if(!requested||resultLocale!==requested||!shouldInvalidateTtsEvidence(reason))return null;
     const candidate=cleanNegativeEvidenceEntry({requestedLocale:requested,reason,ttsCandidates:result.ttsCandidates,observedAt:nowMs,expiresAt:nowMs+TTS_NEGATIVE_EVIDENCE_TTL_MS},nowMs);
     if(!candidate)return null;
     try{
@@ -226,7 +226,7 @@
         active.signal.throwIfAborted();
         if(!result||result.ok!==true||result.state!=='reply-ready'){
           const reason=result?.reason||result?.error||'mobile_language_reply_unavailable';
-          if(result&&result.ok===false&&result.state==='unsupported'&&shouldInvalidateTtsEvidence(reason))runtimeTtsNegativeResult=result;
+          if(result&&result.ok===false&&result.state==='unsupported'&&canonicalLocale(result.locale)===targetLocale&&shouldInvalidateTtsEvidence(reason))runtimeTtsNegativeResult=result;
           throw new Error(reason);
         }
         if(canonicalLocale(result.locale)!==targetLocale)throw new Error('mobile_reply_locale_mismatch');
