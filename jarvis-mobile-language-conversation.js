@@ -13,16 +13,20 @@ function createEngine({output=createOutput(),voiceRouter=createRouter()}={}){
     if(!['browser-speech','typed'].includes(String(inputSource||'')))return{ok:false,state:'invalid',reason:'input_source_not_allowed',deviceE2eVerified:false};
     const voice=await voiceRouter.resolve(normalized);
     if(!voice.ok)return{ok:false,state:'unsupported',reason:voice.reason,locale:normalized,...(voice.ttsCandidates?{ttsCandidates:voice.ttsCandidates}:{}),deviceE2eVerified:false};
-    const ttsLocale=lang.normalizeLocale(voice.ttsLocale||voice.locale);
+    const ttsLocale=lang.normalizeLocale(voice.ttsLocale||voice.locale||normalized);
     if(!ttsLocale)return{ok:false,state:'unsupported',reason:'invalid_runtime_tts_locale',locale:normalized,deviceE2eVerified:false};
-    const localeResolution=voice.localeResolution||'exact';
+    const localeResolution=voice.localeResolution||(ttsLocale===normalized?'exact':null);
+    const evidenceLevel=voice.evidenceLevel||'runtime_inventory';
+    const crossLocale=ttsLocale!==normalized;
+    if(!localeResolution||(crossLocale&&(normalized.includes('-')||ttsLocale.split('-')[0]!==normalized||localeResolution!=='unique_runtime_language_match'||evidenceLevel!=='runtime_inventory')))
+      return{ok:false,state:'unsupported',reason:'runtime_tts_locale_evidence_mismatch',locale:normalized,deviceE2eVerified:false};
     const speech={ok:true,locale:normalized,sttLocale:null,ttsLocale,cost:0,fallbackUsed:false,ttsProvider:'edge-tts',voice:voice.voice,
-      localeResolution,evidenceLevel:voice.evidenceLevel||'runtime_inventory'};
+      localeResolution,evidenceLevel};
     const context={locale:normalized,language:normalized.split('-')[0],source:'mobile_client_requested',sessionOnly:true};
     const generated=await output.generate({text:clean,context,speech,history:relay.sanitizeHistory(history),signal:options.signal});
     if(generated.locale!==normalized)throw new Error('reply_locale_mismatch');
     return{ok:true,state:'reply-ready',reply:generated.reply,locale:normalized,ttsLocale,localeResolution,voice:voice.voice,provider:'edge-tts',inputSource:String(inputSource),
-      learning:false,languageEvidence:'client-requested-locale',speechEvidence:voice.evidenceLevel||'runtime_inventory',deviceE2eVerified:false};
+      learning:false,languageEvidence:'client-requested-locale',speechEvidence:evidenceLevel,deviceE2eVerified:false};
   }
   return{turn};
 }
