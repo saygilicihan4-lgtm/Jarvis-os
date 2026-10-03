@@ -4,6 +4,10 @@ const fs=require('fs');
 const relay=require('./jarvis-mobile-language-relay');
 const {createEngine}=require('./jarvis-mobile-language-conversation');
 const mobile=require('./public/mobile-language-chat');
+function memoryStorage(seed={}){
+  const map=new Map(Object.entries(seed));
+  return{getItem:key=>map.has(key)?map.get(key):null,setItem:(key,value)=>map.set(String(key),String(value)),removeItem:key=>map.delete(key),dump:()=>Object.fromEntries(map)};
+}
 
 (async()=>{
   let clock=1000;
@@ -57,18 +61,48 @@ const mobile=require('./public/mobile-language-chat');
   assert.equal(mobile.safeLanguageHint('สวัสดี'),'th-TH');
   assert.equal(mobile.safeLanguageHint('Բարեւ'),'hy-AM');
   assert.equal(mobile.safeLanguageHint('გამარჯობა'),'ka-GE');
+  assert.equal(mobile.canonicalLocale('de_de'),'de-DE');
+  const corrupt=memoryStorage({[mobile.PREFERENCE_KEY]:'../../bad'});
+  assert.equal(mobile.readPreference(corrupt),null);assert.equal(corrupt.getItem(mobile.PREFERENCE_KEY),null,'corrupt preference is removed');
 
   let captures=0,calls=[],plays=0,states=[];
+  const preferenceStore=memoryStorage();
   const client=mobile.createClient({
+    storage:preferenceStore,
     capture:async()=>{captures++;return'こんにちは'},
     request:async(data)=>{calls.push(data);return{ok:true,state:'reply-ready',reply:'こんにちは',locale:data.locale,learning:false}},
     play:async()=>{plays++},onState:(state,detail)=>states.push({state,detail})
   });
   const first=await client.run({locale:'tr-TR'});
   assert.equal(first.state,'confirm-language');assert.equal(first.locale,'ja-JP');assert.equal(calls.length,0,'candidate mismatch must not silently send or switch');assert.equal(plays,0);
+  assert.equal(preferenceStore.getItem(mobile.PREFERENCE_KEY),null,'candidate alone must never persist a preference');
   const second=await client.run({locale:'tr-TR'});
   assert.equal(second.state,'completed');assert.equal(second.nextLocale,'ja-JP');assert.equal(captures,1,'explicit second tap reuses held transcript');assert.equal(calls.length,1);assert.equal(calls[0].locale,'ja-JP');
   assert.equal(calls[0].inputSource,'browser-speech');assert.equal(client.history.length,2);assert.equal(second.learning,false);
+  assert.equal(second.preferenceSaved,true);assert.equal(second.preferenceEvidence,'explicit-confirmation-plus-playback');assert.equal(client.preferredLocale,'ja-JP');
+  assert.equal(preferenceStore.getItem(mobile.PREFERENCE_KEY),'ja-JP','only successful explicit switch persists');
+  assert.equal(JSON.stringify(preferenceStore.dump()).includes('こんにちは'),false,'preference storage must not contain transcript or reply');
+
+  let resumedCaptureLocale=null;
+  const resumed=mobile.createClient({storage:preferenceStore,capture:async locale=>{resumedCaptureLocale=locale;return'こんにちは'},
+    request:async data=>({ok:true,state:'reply-ready',reply:'こんにちは',locale:data.locale}),play:async()=>{}});
+  const resumedResult=await resumed.run({locale:'tr-TR'});
+  assert.equal(resumedCaptureLocale,'ja-JP','stored explicit preference becomes the next mobile capture locale');
+  assert.equal(resumedResult.nextLocale,'ja-JP');assert.equal(resumedResult.preferenceSaved,false,'using a stored preference is not new learning evidence');
+
+  const failedStore=memoryStorage();let failCapture=0;
+  const failedSwitch=mobile.createClient({storage:failedStore,capture:async()=>{failCapture++;return'こんにちは'},
+    request:async data=>({ok:true,state:'reply-ready',reply:'こんにちは',locale:data.locale}),play:async()=>{throw new Error('autoplay_blocked')}});
+  assert.equal((await failedSwitch.run({locale:'tr-TR'})).state,'confirm-language');
+  const failedSwitchResult=await failedSwitch.run({locale:'tr-TR'});
+  assert.equal(failedSwitchResult.ok,false);assert.equal(failedStore.getItem(mobile.PREFERENCE_KEY),null,'unplayed explicit switch must not persist');
+
+  const cancelStore=memoryStorage();let cancelCaptures=0;
+  const privacyClient=mobile.createClient({storage:cancelStore,capture:async()=>{cancelCaptures++;return'こんにちは'},request:async data=>({ok:true,state:'reply-ready',reply:'こんにちは',locale:data.locale}),play:async()=>{}});
+  assert.equal((await privacyClient.run({locale:'tr-TR'})).state,'confirm-language');assert.equal(privacyClient.pendingLocale,'ja-JP');
+  assert.equal(privacyClient.cancel().pendingCleared,true);assert.equal(privacyClient.pendingLocale,null,'privacy/auth cancellation clears held transcript candidate');
+  assert.equal((await privacyClient.run({locale:'tr-TR'})).state,'confirm-language');assert.equal(cancelCaptures,2,'after privacy cancellation the old transcript cannot be reused');
+  assert.equal(cancelStore.getItem(mobile.PREFERENCE_KEY),null);
 
   const failed=mobile.createClient({capture:async()=> 'Merhaba',request:async data=>({ok:true,state:'reply-ready',reply:'Merhaba',locale:data.locale}),play:async()=>{throw new Error('autoplay_blocked')}});
   const failedResult=await failed.run({locale:'tr-TR'});
@@ -86,5 +120,5 @@ const mobile=require('./public/mobile-language-chat');
   assert(worker.includes('serviceMobileLanguage'),'worker must service the mobile language queue');
   assert(worker.includes('jarvis-mobile-language-conversation'),'worker must use locale-frozen conversation engine');
   assert(worker.includes('setInterval(()=>serviceMobileLanguage().catch(()=>{}),650)'),'mobile language relay must use conversational polling cadence');
-  console.log('MOBILE LANGUAGE CONVERSATION SELFTEST PASS · ambiguity-safe locale candidate, claimant binding, lease expiry, playback-gated history, no STT learning claim');
+  console.log('MOBILE LANGUAGE CONVERSATION SELFTEST PASS · explicit playback-gated preference, privacy-safe pending clear, ambiguity-safe locale, claimant lease, no STT learning claim');
 })().catch(error=>{console.error(error);process.exitCode=1});
