@@ -19,6 +19,17 @@ async function waitFor(fn,maxMs=250){const end=Date.now()+maxMs;while(Date.now()
   const captureRun=duringCapture.run({locale:'tr-TR'});assert(await waitFor(()=>captureStarted));duringCapture.cancel();const captureResult=await captureRun;
   assert.equal(captureResult.cancelled,true);assert.equal(captureResult.error,'mobile_language_cancelled');assert.equal(captureAbort,true);
 
+  const requestTimeoutStore=storage();let requestTimeoutAbort=false;
+  const timedRequest=mobile.createClient({storage:requestTimeoutStore(),requestTimeoutMs:12,
+    capture:async()=> 'こんにちは',
+    request:(_data,signal)=>new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>{requestTimeoutAbort=true;reject(new Error('fetch_abort_noise'))},{once:true})),
+    play:async()=>{throw new Error('play_must_not_run')}});
+  const requestCandidate=await timedRequest.run({locale:'tr-TR'});assert.equal(requestCandidate.state,'confirm-language');assert.equal(timedRequest.pendingLocale,'ja-JP');
+  const requestTimeoutResult=await timedRequest.run({locale:'tr-TR'});
+  assert.equal(requestTimeoutResult.cancelled,false);assert.equal(requestTimeoutResult.error,'mobile_language_request_timeout');assert.equal(requestTimeoutAbort,true);
+  assert.equal(timedRequest.busy,false);assert.equal(timedRequest.history.length,0,'timed-out request cannot commit conversation history');
+  assert.equal(requestTimeoutStore.getItem(mobile.PREFERENCE_KEY),null,'explicit language confirmation without successful request + playback cannot persist preference');
+
   let requestStarted=false,requestAbort=false;
   const duringRequest=mobile.createClient({storage:storage(),capture:async()=> 'Merhaba',
     request:(_data,signal)=>new Promise((_resolve,reject)=>{requestStarted=true;signal.addEventListener('abort',()=>{requestAbort=true;reject(new Error('fetch_abort_noise'))},{once:true})}),play:async()=>{}});
@@ -32,5 +43,5 @@ async function waitFor(fn,maxMs=250){const end=Date.now()+maxMs;while(Date.now()
   const playbackRun=duringPlayback.run({locale:'tr-TR'});assert(await waitFor(()=>playbackStarted));duringPlayback.cancel();const playbackResult=await playbackRun;
   assert.equal(playbackResult.cancelled,true);assert.equal(playbackResult.error,'mobile_language_cancelled');assert.equal(playbackAbort,true);assert.equal(duringPlayback.history.length,0,'cancelled playback must not commit history');
 
-  console.log('MOBILE CAPTURE LIFECYCLE SELFTEST PASS · timeout + capture/request/playback cancellation are fail-closed and normalized');
+  console.log('MOBILE CAPTURE LIFECYCLE SELFTEST PASS · capture/request deadlines + capture/request/playback cancellation are fail-closed and normalized');
 })().catch(error=>{console.error(error);process.exitCode=1});
