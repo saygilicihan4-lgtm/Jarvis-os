@@ -21,6 +21,13 @@
     if(!Array.isArray(value))return[];
     return value.slice(-8).filter(x=>x&&['user','assistant'].includes(x.role)&&typeof x.content==='string'&&x.content.trim()).map(x=>({role:x.role,content:x.content.replace(/\s+/g,' ').trim().slice(0,1800)}));
   }
+  function selectInitialLocale({current='tr-TR',preference,sessionLocked=false}={}){
+    if(sessionLocked||!preference||preference.ok!==true||preference.available!==true||preference.usable!==true)return current;
+    if(!['explicit','learned'].includes(String(preference.source||'')))return current;
+    if(preference.phoneSttVerified!==false||preference.learningOnPhone!==false)return current;
+    const locale=String(preference.locale||'').trim();
+    return /^[a-z]{2,3}(?:-[A-Z]{2})?$/.test(locale)?locale:current;
+  }
   function createClient({capture,request,play,onState=()=>{},onReply=()=>{},hint=safeLanguageHint}={}){
     let busy=false,pending=null,history=[],controller=null;
     async function run({locale}={}){
@@ -66,5 +73,5 @@
     function clearPending(){pending=null}
     return{run,cancel,clearPending,get busy(){return busy},get pendingLocale(){return pending?.locale||null},get history(){return cleanHistory(history)}};
   }
-  return{safeLanguageHint,cleanHistory,createClient};
+  return{safeLanguageHint,cleanHistory,selectInitialLocale,createClient};
 });
