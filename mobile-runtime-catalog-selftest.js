@@ -32,6 +32,7 @@ function listMock(){
   assert(unsupportedEvidence);assert.equal(unsupportedEvidence.state,'unsupported');assert.equal(unsupportedEvidence.ttsVerified,false);assert.equal(unsupportedEvidence.sttVerified,false);
   assert.equal(unsupportedEvidence.evidence,'unsupported_runtime_response');assert.equal(unsupportedEvidence.expiresAt-now,mobile.TTS_NEGATIVE_EVIDENCE_TTL_MS);
   assert.deepEqual(unsupportedEvidence.ttsCandidates,[]);assert.equal('transcript' in unsupportedEvidence,false);assert.equal('reply' in unsupportedEvidence,false);
+  assert.equal(mobile.recordNegativeTtsEvidence(storage(),{...unsupportedReply,locale:'de-DE'},'fr-FR',now),null,'negative evidence response locale must match requested locale');
   assert(mobile.getNegativeTtsEvidence('fr-FR',negativeStore,now+mobile.TTS_NEGATIVE_EVIDENCE_TTL_MS),'negative evidence remains valid through exact TTL boundary');
   assert.equal(mobile.getNegativeTtsEvidence('fr-FR',negativeStore,now+mobile.TTS_NEGATIVE_EVIDENCE_TTL_MS+1),null,'negative evidence expires after one minute');
   assert.equal(negativeStore.getItem(mobile.TTS_NEGATIVE_EVIDENCE_KEY),null,'expired negative evidence should be purged');
@@ -78,6 +79,11 @@ function listMock(){
   assert.equal(rejectedResult.ok,false);assert.equal(rejectedResult.error,'tts_locale_not_in_runtime_inventory');assert.equal(rejectedResult.runtimeTtsEvidenceInvalidated,true);
   assert.equal(mobile.getTtsEvidence('tr-TR',rejectedStore,now),null,'unsupported runtime response must remove stale positive receipt');
   assert.equal(rejectedResult.runtimeTtsNegativeEvidence.state,'unsupported');assert(mobile.getNegativeTtsEvidence('tr-TR',rejectedStore,now),'definitive unsupported response creates short-lived negative receipt');
+
+  const wrongLocaleStore=storage();assert(mobile.recordTtsEvidence(wrongLocaleStore,exact,'tr-TR','tr-TR',now));
+  const wrongLocale=mobile.createClient({storage:wrongLocaleStore,now:()=>now,capture:async()=> 'merhaba',request:async()=>({ok:false,state:'unsupported',reason:'tts_locale_not_in_runtime_inventory',locale:'de-DE'}),play:async()=>{}});
+  const wrongLocaleResult=await wrongLocale.run({locale:'tr-TR'});
+  assert.equal(wrongLocaleResult.runtimeTtsEvidenceInvalidated,false);assert.equal(wrongLocaleResult.runtimeTtsNegativeEvidence,null);assert(mobile.getTtsEvidence('tr-TR',wrongLocaleStore,now),'unsupported response for another locale must not revoke requested locale evidence');
 
   const ambiguousStore=storage();assert(mobile.recordTtsEvidence(ambiguousStore,bare,'nl','nl-NL',now));
   const ambiguous=mobile.createClient({storage:ambiguousStore,now:()=>now,capture:async()=> 'hallo',request:async data=>({ok:false,state:'unsupported',reason:'runtime_tts_locale_ambiguous',locale:data.locale,ttsCandidates:['nl-NL','nl-BE']}),play:async()=>{}});
@@ -126,9 +132,9 @@ function listMock(){
   const verifiedList=listMock();mobile.renderLocaleOptions(verifiedList,successStore,now);
   const tr=verifiedList.children.find(x=>x.value==='tr-TR');assert(tr&&tr.label.includes('TTS ✓ son 5 dk'),'fresh positive receipt may be shown as recently verified');
   const en=verifiedList.children.find(x=>x.value==='en-US');assert(en&&en.label.includes('TTS ?'),'unverified locale stays unknown');
-  const unsupportedListStore=storage();assert(mobile.recordNegativeTtsEvidence(unsupportedListStore,{ok:false,state:'unsupported',reason:'tts_locale_not_in_runtime_inventory'},'fr-FR',now));
+  const unsupportedListStore=storage();assert(mobile.recordNegativeTtsEvidence(unsupportedListStore,{ok:false,state:'unsupported',reason:'tts_locale_not_in_runtime_inventory',locale:'fr-FR'},'fr-FR',now));
   const unsupportedList=listMock();mobile.renderLocaleOptions(unsupportedList,unsupportedListStore,now);
   const fr=unsupportedList.children.find(x=>x.value==='fr-FR');assert(fr&&fr.label.includes('TTS ✕ son 1 dk')&&fr.label.includes('runtime desteklemiyor'),'fresh definitive unsupported state is distinct from unknown');
 
-  console.log('MOBILE RUNTIME CATALOG SELFTEST PASS · positive/negative TTS evidence is provenance-bound, TTL-limited, mutually clearing only with proof, and ambiguity is distinct from unsupported');
+  console.log('MOBILE RUNTIME CATALOG SELFTEST PASS · positive/negative TTS evidence is provenance-bound, locale-bound, TTL-limited, mutually clearing only with proof, and ambiguity is distinct from unsupported');
 })().catch(error=>{console.error(error);process.exitCode=1});
