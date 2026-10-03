@@ -3,7 +3,7 @@ const lang=require('./jarvis-language-core');
 const {createOutput}=require('./jarvis-language-turn-output');
 const {createRouter}=require('./jarvis-tts-locale-router');
 const relay=require('./jarvis-mobile-language-relay');
-const VERSION='1.0';
+const VERSION='1.1';
 
 function createEngine({output=createOutput(),voiceRouter=createRouter()}={}){
   async function turn({text,locale,inputSource='browser-speech',history=[]}={},options={}){
@@ -12,12 +12,17 @@ function createEngine({output=createOutput(),voiceRouter=createRouter()}={}){
     if(!clean)return{ok:false,state:'invalid',reason:'text_required',deviceE2eVerified:false};
     if(!['browser-speech','typed'].includes(String(inputSource||'')))return{ok:false,state:'invalid',reason:'input_source_not_allowed',deviceE2eVerified:false};
     const voice=await voiceRouter.resolve(normalized);
-    if(!voice.ok)return{ok:false,state:'unsupported',reason:voice.reason,locale:normalized,deviceE2eVerified:false};
-    const speech={ok:true,locale:normalized,sttLocale:null,ttsLocale:normalized,cost:0,fallbackUsed:false,ttsProvider:'edge-tts',voice:voice.voice};
+    if(!voice.ok)return{ok:false,state:'unsupported',reason:voice.reason,locale:normalized,...(voice.ttsCandidates?{ttsCandidates:voice.ttsCandidates}:{}),deviceE2eVerified:false};
+    const ttsLocale=lang.normalizeLocale(voice.ttsLocale||voice.locale);
+    if(!ttsLocale)return{ok:false,state:'unsupported',reason:'invalid_runtime_tts_locale',locale:normalized,deviceE2eVerified:false};
+    const localeResolution=voice.localeResolution||'exact';
+    const speech={ok:true,locale:normalized,sttLocale:null,ttsLocale,cost:0,fallbackUsed:false,ttsProvider:'edge-tts',voice:voice.voice,
+      localeResolution,evidenceLevel:voice.evidenceLevel||'runtime_inventory'};
     const context={locale:normalized,language:normalized.split('-')[0],source:'mobile_client_requested',sessionOnly:true};
     const generated=await output.generate({text:clean,context,speech,history:relay.sanitizeHistory(history),signal:options.signal});
     if(generated.locale!==normalized)throw new Error('reply_locale_mismatch');
-    return{ok:true,state:'reply-ready',reply:generated.reply,locale:normalized,voice:voice.voice,provider:'edge-tts',inputSource:String(inputSource),learning:false,languageEvidence:'client-requested-locale',deviceE2eVerified:false};
+    return{ok:true,state:'reply-ready',reply:generated.reply,locale:normalized,ttsLocale,localeResolution,voice:voice.voice,provider:'edge-tts',inputSource:String(inputSource),
+      learning:false,languageEvidence:'client-requested-locale',speechEvidence:voice.evidenceLevel||'runtime_inventory',deviceE2eVerified:false};
   }
   return{turn};
 }
