@@ -238,6 +238,8 @@ jobs:
         run: node coreaudio-verify-selftest.js
       - name: Bluetooth E2E contract selftest
         run: node bluetooth-e2e-selftest.js
+      - name: Bluetooth native acceptance selftest
+        run: node bluetooth-native-acceptance-selftest.js
       - name: Safe PC mission selftest
         run: node pc-mission-selftest.js
       - name: Workspace file engine selftest
