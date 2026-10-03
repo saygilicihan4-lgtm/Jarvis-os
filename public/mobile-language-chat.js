@@ -4,6 +4,7 @@
 })(typeof globalThis==='object'?globalThis:this,function(root){
   'use strict';
   const PREFERENCE_KEY='jarvisMobileLanguagePreferenceV1';
+  const DEFAULT_CAPTURE_TIMEOUT_MS=20000;
   function canonicalLocale(value){
     if(typeof value!=='string')return null;
     const input=value.trim().replace(/_/g,'-');
@@ -49,7 +50,19 @@
     if(!validStorage(storage))return false;
     try{storage.removeItem(PREFERENCE_KEY);return true}catch(_){return false}
   }
-  function createClient({capture,request,play,onState=()=>{},onReply=()=>{},hint=safeLanguageHint,storage=defaultStorage()}={}){
+  function captureWithTimeout(capture,locale,controller,timeoutMs){
+    const signal=controller.signal,limit=Number.isFinite(timeoutMs)?Math.max(5,Math.min(60000,timeoutMs)):DEFAULT_CAPTURE_TIMEOUT_MS;
+    return new Promise((resolve,reject)=>{
+      let settled=false,timedOut=false;
+      const finish=(fn,value)=>{if(settled)return;settled=true;clearTimeout(timer);signal.removeEventListener('abort',onAbort);fn(value)};
+      const onAbort=()=>finish(reject,new Error(timedOut?'browser_stt_timeout':'mobile_language_cancelled'));
+      const timer=setTimeout(()=>{if(settled)return;timedOut=true;controller.abort()},limit);
+      signal.addEventListener('abort',onAbort,{once:true});
+      if(signal.aborted){onAbort();return}
+      Promise.resolve().then(()=>capture(locale,signal)).then(value=>finish(resolve,value),error=>finish(reject,error instanceof Error?error:new Error(String(error||'browser_stt_failed'))));
+    });
+  }
+  function createClient({capture,request,play,onState=()=>{},onReply=()=>{},hint=safeLanguageHint,storage=defaultStorage(),captureTimeoutMs=DEFAULT_CAPTURE_TIMEOUT_MS}={}){
     let busy=false,pending=null,history=[],controller=null,preferredLocale=readPreference(storage);
     async function run({locale}={}){
       if(busy)return{ok:false,state:'busy'};
@@ -63,7 +76,7 @@
           onState('language-confirmed',{locale:targetLocale,transcript:text,explicit:true});
         }else{
           onState('listening',{locale:targetLocale,preferenceUsed:!!preferredLocale});
-          text=String(await capture(targetLocale,active.signal)||'').replace(/\s+/g,' ').trim().slice(0,1800);
+          text=String(await captureWithTimeout(capture,targetLocale,active,captureTimeoutMs)||'').replace(/\s+/g,' ').trim().slice(0,1800);
           active.signal.throwIfAborted();
           if(!text)throw new Error('empty_transcript');
           const candidate=canonicalLocale(hint(text,targetLocale));
@@ -88,8 +101,10 @@
           preferenceSaved,preferenceLocale:preferredLocale,preferenceEvidence:preferenceSaved?'explicit-confirmation-plus-playback':null,deviceE2eVerified:false};
         onState('completed',completed);return completed;
       }catch(error){
-        if(!active.signal.aborted)onState('error',{error:String(error.message||error)});
-        return{ok:false,cancelled:active.signal.aborted,error:String(error.message||error),learning:false,preferenceSaved:false,deviceE2eVerified:false};
+        const rawMessage=String(error&&error.message||error),timedOut=rawMessage==='browser_stt_timeout';
+        const cancelled=active.signal.aborted&&!timedOut,message=cancelled?'mobile_language_cancelled':rawMessage;
+        if(!cancelled)onState('error',{error:message});
+        return{ok:false,cancelled,error:message,learning:false,preferenceSaved:false,deviceE2eVerified:false};
       }finally{
         if(controller===active){controller=null;busy=false;onState('idle')}
       }
@@ -100,5 +115,5 @@
     return{run,cancel,clearPending,forgetPreference,get busy(){return busy},get pendingLocale(){return pending?.locale||null},
       get preferredLocale(){return preferredLocale},get history(){return cleanHistory(history)}};
   }
-  return{PREFERENCE_KEY,canonicalLocale,safeLanguageHint,cleanHistory,readPreference,savePreference,clearPreference,createClient};
+  return{PREFERENCE_KEY,DEFAULT_CAPTURE_TIMEOUT_MS,canonicalLocale,safeLanguageHint,cleanHistory,readPreference,savePreference,clearPreference,captureWithTimeout,createClient};
 });

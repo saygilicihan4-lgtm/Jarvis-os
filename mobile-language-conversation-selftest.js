@@ -104,6 +104,23 @@ function memoryStorage(seed={}){
   assert.equal((await privacyClient.run({locale:'tr-TR'})).state,'confirm-language');assert.equal(cancelCaptures,2,'after privacy cancellation the old transcript cannot be reused');
   assert.equal(cancelStore.getItem(mobile.PREFERENCE_KEY),null);
 
+  let captureAborted=false,timeoutStates=[];
+  const timeoutClient=mobile.createClient({storage:memoryStorage(),captureTimeoutMs:15,
+    capture:(_locale,signal)=>new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>{captureAborted=true;reject(new Error('capture_aborted'))},{once:true})),
+    request:async()=>{throw new Error('request_must_not_run')},play:async()=>{},onState:(state,detail)=>timeoutStates.push({state,detail})
+  });
+  const timeoutResult=await timeoutClient.run({locale:'tr-TR'});
+  assert.equal(timeoutResult.ok,false);assert.equal(timeoutResult.cancelled,false);assert.equal(timeoutResult.error,'browser_stt_timeout');
+  assert.equal(captureAborted,true,'capture timeout must abort underlying browser speech recognition');assert.equal(timeoutClient.busy,false);assert.equal(timeoutClient.history.length,0);
+  assert(timeoutStates.some(x=>x.state==='error'&&x.detail.error==='browser_stt_timeout'),'capture timeout must surface a truthful error state');
+
+  let manualAbortSeen=false;
+  const cancelClient=mobile.createClient({storage:memoryStorage(),captureTimeoutMs:1000,
+    capture:(_locale,signal)=>new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>{manualAbortSeen=true;reject(new Error('capture_aborted'))},{once:true})),
+    request:async()=>{throw new Error('request_must_not_run')},play:async()=>{}});
+  const running=cancelClient.run({locale:'tr-TR'});await new Promise(r=>setTimeout(r,5));cancelClient.cancel();const manualResult=await running;
+  assert.equal(manualResult.cancelled,true);assert.equal(manualResult.error,'mobile_language_cancelled');assert.equal(manualAbortSeen,true,'manual cancellation must abort capture immediately');
+
   const failed=mobile.createClient({capture:async()=> 'Merhaba',request:async data=>({ok:true,state:'reply-ready',reply:'Merhaba',locale:data.locale}),play:async()=>{throw new Error('autoplay_blocked')}});
   const failedResult=await failed.run({locale:'tr-TR'});
   assert.equal(failedResult.ok,false);assert.equal(failed.history.length,0,'unplayed mobile reply cannot enter conversation history');
@@ -120,5 +137,5 @@ function memoryStorage(seed={}){
   assert(worker.includes('serviceMobileLanguage'),'worker must service the mobile language queue');
   assert(worker.includes('jarvis-mobile-language-conversation'),'worker must use locale-frozen conversation engine');
   assert(worker.includes('setInterval(()=>serviceMobileLanguage().catch(()=>{}),650)'),'mobile language relay must use conversational polling cadence');
-  console.log('MOBILE LANGUAGE CONVERSATION SELFTEST PASS · explicit playback-gated preference, privacy-safe pending clear, ambiguity-safe locale, claimant lease, no STT learning claim');
+  console.log('MOBILE LANGUAGE CONVERSATION SELFTEST PASS · explicit playback-gated preference, capture timeout, privacy-safe pending clear, ambiguity-safe locale, claimant lease, no STT learning claim');
 })().catch(error=>{console.error(error);process.exitCode=1});
