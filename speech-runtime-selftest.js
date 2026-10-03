@@ -19,6 +19,21 @@ const runner=async()=>({ok:true,stdout:JSON.stringify(voices)});
 const probeVoices=async registry=>[await discovery.discoverEdgeTts({registry,runner})];
 (async()=>{
   try{
+    const runtimeLocaleRegistry=caps.createRegistry({now:()=>clock});
+    runtimeLocaleRegistry.registerProvider('faster-whisper',{sttLanguages:['nl'],offline:true,cost:0,evidence:{source:'loaded_model_inventory'}});
+    runtimeLocaleRegistry.registerProvider('edge-tts',{ttsLocales:['nl-NL'],voices:[{id:'nl-NL-MaartenNeural',locale:'nl-NL',gender:'Male'}],cost:0,evidence:{source:'runtime_voice_inventory'}});
+    assert.equal(runtimeLocaleRegistry.supports('edge-tts','tts','nl'),false,'bare language is not falsely reported as an exact TTS locale');
+    let nlPlan=runtimeLocaleRegistry.select({locale:'nl'});
+    assert.equal(nlPlan.ok,true);assert.equal(nlPlan.locale,'nl');assert.equal(nlPlan.ttsLocale,'nl-NL');
+    assert.equal(nlPlan.localeResolution,'unique_runtime_language_match');assert.equal(nlPlan.evidenceLevel,'runtime_inventory');assert.equal(nlPlan.voice,'nl-NL-MaartenNeural');
+    assert.equal(runtimeLocaleRegistry.select({locale:'nl-BE'}).ok,false,'explicit region cannot silently use a sibling runtime locale');
+    runtimeLocaleRegistry.registerProvider('windows-sapi',{ttsLocales:['nl-BE'],voices:[{id:'Belgian Dutch',locale:'nl-BE',gender:'Male'}],offline:true,cost:0,evidence:{source:'runtime_voice_inventory'}});
+    const ambiguous=runtimeLocaleRegistry.select({locale:'nl'});
+    assert.equal(ambiguous.ok,false);assert.equal(ambiguous.reason,'runtime_tts_locale_ambiguous');
+    assert.deepEqual(ambiguous.ttsCandidates,['nl-BE','nl-NL'],'multiple regions across different runtime providers require explicit disambiguation');
+    const exactBelgian=runtimeLocaleRegistry.select({locale:'nl-BE'});
+    assert.equal(exactBelgian.ok,true);assert.equal(exactBelgian.ttsLocale,'nl-BE');assert.equal(exactBelgian.localeResolution,'exact');assert.equal(exactBelgian.ttsProvider,'windows-sapi');
+
     const registry=caps.createRegistry({now:()=>clock});
     await discovery.discoverEdgeTts({registry,runner});
     assert.equal(registry.select({locale:'tr'}).ok,false,'TTS inventory cannot imply STT');
@@ -28,7 +43,7 @@ const probeVoices=async registry=>[await discovery.discoverEdgeTts({registry,run
     assert.equal(registry.select({locale:'de-AT'}).ok,false,'no silent regional TTS fallback');
     assert.equal(registry.select({locale:'ja'}).ok,false,'no fabricated locales');
     await discovery.discoverSystemTts({registry,platform:'win32',runner:async()=>({ok:true,stdout:JSON.stringify([
-      {Name:'Offline German',Culture:'de-DE',Gender:'Male',Enabled:true},{Name:'Disabled Turkish',Culture:'tr-TR',Enabled:false}])})});
+      {Name:'Offline German',Culture:'de-DE',Gender:'Male',Enabled:true},{Name:'Disabled Turkish',Culture:'tr-TR',Gender:'Male',Enabled:false}])})});
     assert.equal(registry.select({locale:'de',offlineOnly:true}).voice,'Offline German');
     clock+=300001;assert.equal(registry.select({locale:'de'}).ok,false,'expired evidence is unusable');
     await discovery.discoverEdgeTts({registry,runner});discovery.registerLocalStt(health,{registry});
@@ -76,6 +91,6 @@ const probeVoices=async registry=>[await discovery.discoverEdgeTts({registry,run
     clock+=1800001;assert.throws(()=>runtime.status(id),/expired/);
     const profile=fs.readFileSync(path.join(root,'.jarvis-memory','language-profile.json'),'utf8');
     assert.equal(profile.includes('Guten Tag'),false,'no transcripts persisted');
-    console.log('SPEECH RUNTIME SELFTEST PASS · inventory, boundary, learning, replay, isolation and expiry');
+    console.log('SPEECH RUNTIME SELFTEST PASS · global runtime-locale uniqueness, regional ambiguity, inventory, learning, replay, isolation and expiry');
   }finally{fs.rmSync(root,{recursive:true,force:true})}
 })().catch(e=>{console.error(e);process.exitCode=1});
