@@ -63,11 +63,13 @@ function storage(seed={}){const m=new Map(Object.entries(seed));return{getItem:k
 
   let busyAbort=false;
   const busyClient=mobile.createClient({storage:storage(),capture:(_locale,signal)=>new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>{busyAbort=true;reject(new Error('capture_aborted'))},{once:true})),request:async()=>{throw new Error('request_must_not_run')},play:async()=>{}});
+  assert.equal(busyClient.selectedLocale,'nl-BE','prior failed explicit selection remains session-only for retry');
   const busyRun=busyClient.run({locale:'tr-TR'});await new Promise(r=>setTimeout(r,5));
   const busySelection=mobile.requestExplicitLocale('de-DE');assert.deepEqual(busySelection,{ok:false,reason:'mobile_language_busy'});
   busyClient.cancel();await busyRun;assert.equal(busyAbort,true);
   const fresh=mobile.createClient({storage:storage(),capture:async()=>'',request:async()=>({}),play:async()=>{}});
-  assert.equal(fresh.selectedLocale,null,'failed busy selection must not leak into a later client');
+  assert.equal(fresh.selectedLocale,'nl-BE','failed busy selection must preserve the prior staged locale rather than leaking de-DE');
+  assert.notEqual(fresh.selectedLocale,'de-DE');fresh.forgetPreference();
 
   assert.deepEqual(client.selectLocale('../../bad'),{ok:false,reason:'invalid_locale'});
   assert(mobile.COMMON_LOCALES.some(([locale])=>locale==='tr-TR'));assert(mobile.COMMON_LOCALES.some(([locale])=>locale==='en-US'));
