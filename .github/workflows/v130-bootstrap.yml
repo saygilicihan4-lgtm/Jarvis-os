@@ -21,7 +21,9 @@ jobs:
         with:
           node-version: '20'
       - name: Apply deterministic v130 integration patch
-        run: node scripts/v130-apply.js
+        run: |
+          node scripts/v130-apply.js
+          git restore --source=HEAD -- scripts/v130-apply.js .github/workflows/v130-bootstrap.yml
       - name: Verify syntax and relay invariants before commit
         run: |
           node --check server.js
@@ -34,7 +36,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git diff --cached --check
+          git add server.js worker.js public/index.html .github/workflows/ci.yml .github/workflows/lexicon-ci.yml
+          git diff --cached --stat
           git commit -m "Jarvis Mobile Language Relay v130"
           git push origin HEAD:jarvis-mobile-language-relay-v130
