@@ -1,6 +1,6 @@
 const childProcess=require('child_process');
 const path=require('path');
-const VERSION='1.7';
+const VERSION='1.8';
 function ps(script){
   if(process.platform!=='win32')return{ok:false,reason:'windows_required'};
   try{return{ok:true,output:childProcess.execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',script],{encoding:'utf8',windowsHide:true,timeout:12000,maxBuffer:1024*1024}).trim()}}catch(e){return{ok:false,reason:'powershell_failed',error:String(e.message||e).slice(0,300)}}
@@ -17,10 +17,14 @@ function chooseAudioDevice(output){
 }
 function autoAudioDevice(){
   const listed=coreAudioEndpoints();if(!listed.ok)return listed;
+  const pnp=pairedAudioDevices();if(!pnp.ok)return pnp;
+  let pv=[];try{const x=JSON.parse(pnp.output||'[]');pv=Array.isArray(x)?x:[x]}catch{return{ok:false,reason:'bluetooth_pnp_parse_failed'}}
+  const names=pv.filter(x=>x&&x.FriendlyName&&String(x.Status||'').toLowerCase()==='ok').map(x=>String(x.FriendlyName).toLowerCase());
   const active=listed.endpoints.filter(x=>x&&x.Id&&x.Name&&Number(x.State)===1);
-  if(active.length===1)return{ok:true,device:{FriendlyName:active[0].Name,Id:active[0].Id,State:active[0].State},source:'coreaudio'};
-  if(!active.length)return{ok:false,reason:'audio_device_not_found',source:'coreaudio'};
-  return{ok:false,reason:'multiple_audio_devices',candidates:active.slice(0,10),source:'coreaudio'};
+  const matched=active.filter(x=>names.some(n=>n.includes(String(x.Name).toLowerCase())||String(x.Name).toLowerCase().includes(n)));
+  if(matched.length===1)return{ok:true,device:{FriendlyName:matched[0].Name,Id:matched[0].Id,State:matched[0].State},source:'coreaudio+pnp'};
+  if(!matched.length)return{ok:false,reason:'bluetooth_audio_endpoint_not_proven',candidates:active.slice(0,10),source:'coreaudio+pnp'};
+  return{ok:false,reason:'multiple_bluetooth_audio_endpoints',candidates:matched.slice(0,10),source:'coreaudio+pnp'};
 }
 function findAudioDevice(name){
   const wanted=normalizeName(name); if(!wanted)return{ok:false,reason:'device_name_required'};
