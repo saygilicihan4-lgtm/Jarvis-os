@@ -26,6 +26,7 @@ jobs:
           node --check mobile-explicit-locale-selftest.js
           node --check mobile-runtime-locale-selftest.js
           node --check mobile-runtime-catalog-selftest.js
+          node --check mobile-ambiguity-candidates-selftest.js
       - name: Mobile multilingual conversation safety
         run: |
           node mobile-language-conversation-selftest.js
@@ -33,6 +34,7 @@ jobs:
           node mobile-explicit-locale-selftest.js
           node mobile-runtime-locale-selftest.js
           node mobile-runtime-catalog-selftest.js
+          node mobile-ambiguity-candidates-selftest.js
           node mobile-tts-relay-selftest.js
           node language-conversation-selftest.js
           node language-chat-ui-selftest.js
