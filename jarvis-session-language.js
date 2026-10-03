@@ -1,0 +1,5 @@
+const lang=require('./jarvis-language-core');const learning=require('./jarvis-language-learning');const VERSION='1.0';
+function create({requested,systemLocale,root}={}){const base=learning.resolve({requested,systemLocale,root});return{version:1,locale:base.locale,source:base.source,switches:0,lastDetection:null}}
+function applyDetection(session,{locale,confidence=0}={}){const n=lang.normalizeLocale(locale);session.lastDetection={locale:n,confidence};if(!n||confidence<0.85)return{ok:false,reason:'detection_below_session_threshold',session};if(n===session.locale)return{ok:true,changed:false,session};session.locale=n;session.source='session_detection';session.switches=(session.switches||0)+1;return{ok:true,changed:true,session}}
+function speechContext(session){return{locale:session.locale,language:String(session.locale||'en-US').split('-')[0],source:session.source,sessionOnly:true}}
+module.exports={VERSION,create,applyDetection,speechContext};
