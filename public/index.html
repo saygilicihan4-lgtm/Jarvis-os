@@ -1567,7 +1567,7 @@ async function playJarvisMobileRelay(text,tone='balanced',locale=activeLanguage)
         a.volume=1;
         document.body.classList.add('speaking');
         await a.play();
-        if(window.voiceState)voiceState.textContent='VOICE: AHMETNEURAL RELAY';
+        if(window.voiceState)voiceState.textContent='VOICE: '+String(locale||'').toUpperCase()+' RELAY';
         await new Promise(resolve=>{
           const done=()=>{a.onended=null;a.onerror=null;resolve()};
           a.onended=done;
@@ -1581,6 +1581,8 @@ async function playJarvisMobileRelay(text,tone='balanced',locale=activeLanguage)
       return true;
     }
   }
+  if(activeMobileTtsRequestId===cj.id)activeMobileTtsRequestId='';
+  await fetch('/api/mobile-tts/'+encodeURIComponent(cj.id)+'/cancel',{method:'POST',credentials:'same-origin'}).catch(()=>null);
   throw new Error('mobile tts timeout');
 }
 function speak(text,lang=activeLanguage,tone='balanced'){
