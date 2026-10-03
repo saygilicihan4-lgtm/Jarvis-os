@@ -1,0 +1,24 @@
+name: Jarvis Mobile Relay CI
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  mobile-relay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Syntax
+        run: |
+          node --check server.js
+          node --check worker.js
+          node --check jarvis-mobile-tts-relay.js
+          node --check jarvis-tts-locale-router.js
+          node --check mobile-tts-relay-selftest.js
+      - name: Locale-bound relay safety
+        run: node mobile-tts-relay-selftest.js
