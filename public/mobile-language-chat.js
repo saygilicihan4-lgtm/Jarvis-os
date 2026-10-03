@@ -5,7 +5,9 @@
   'use strict';
   const PREFERENCE_KEY='jarvisMobileLanguagePreferenceV1';
   const TTS_EVIDENCE_KEY='jarvisMobileTtsEvidenceV1';
+  const TTS_NEGATIVE_EVIDENCE_KEY='jarvisMobileTtsNegativeEvidenceV1';
   const TTS_EVIDENCE_TTL_MS=5*60*1000;
+  const TTS_NEGATIVE_EVIDENCE_TTL_MS=60*1000;
   const DEFAULT_CAPTURE_TIMEOUT_MS=20000;
   const RUNTIME_TTS_INVALIDATION_REASONS=new Set(['tts_locale_not_in_runtime_inventory','runtime_tts_locale_ambiguous']);
   const COMMON_LOCALES=[
@@ -23,9 +25,6 @@
   }
   function safeLanguageHint(text){
     const s=String(text||'');
-    // Only emit a locale candidate for scripts that are strong enough to be
-    // useful as a confirmation hint. Ambiguous script families intentionally
-    // return null. This is never persisted as language-learning evidence.
     if(/[\u3040-\u30ff]/.test(s))return'ja-JP';
     if(/[\uac00-\ud7af]/.test(s))return'ko-KR';
     if(/[\u0370-\u03ff]/.test(s))return'el-GR';
@@ -66,7 +65,7 @@
     const localeResolution=String(entry.localeResolution||'');
     const provider=String(entry.provider||'').slice(0,60),voice=String(entry.voice||'').slice(0,200);
     if(!requestedLocale||!ttsLocale||!Number.isFinite(verifiedAt)||!Number.isFinite(expiresAt))return null;
-    if(verifiedAt>nowMs+5000||expiresAt!==verifiedAt+TTS_EVIDENCE_TTL_MS||nowMs<verifiedAt||nowMs>expiresAt)return null;
+    if(verifiedAt>nowMs||expiresAt!==verifiedAt+TTS_EVIDENCE_TTL_MS||nowMs<verifiedAt||nowMs>expiresAt)return null;
     if(provider!=='edge-tts'||!voice||!['exact','unique_runtime_language_match'].includes(localeResolution))return null;
     if(ttsLocale!==requestedLocale){
       if(requestedLocale.includes('-')||ttsLocale.split('-')[0]!==requestedLocale||localeResolution!=='unique_runtime_language_match')return null;
@@ -110,6 +109,56 @@
     }catch(_){return false}
   }
   function shouldInvalidateTtsEvidence(reason){return RUNTIME_TTS_INVALIDATION_REASONS.has(String(reason||''))}
+  function cleanNegativeEvidenceEntry(entry,nowMs){
+    if(!entry||typeof entry!=='object')return null;
+    const requestedLocale=canonicalLocale(entry.requestedLocale),reason=String(entry.reason||'');
+    const observedAt=Number(entry.observedAt),expiresAt=Number(entry.expiresAt);
+    if(!requestedLocale||!shouldInvalidateTtsEvidence(reason)||!Number.isFinite(observedAt)||!Number.isFinite(expiresAt))return null;
+    if(observedAt>nowMs||expiresAt!==observedAt+TTS_NEGATIVE_EVIDENCE_TTL_MS||nowMs<observedAt||nowMs>expiresAt)return null;
+    let state='unsupported',ttsCandidates=[];
+    if(reason==='runtime_tts_locale_ambiguous'){
+      if(requestedLocale.includes('-'))return null;
+      ttsCandidates=[...new Set((Array.isArray(entry.ttsCandidates)?entry.ttsCandidates:[]).map(canonicalLocale).filter(Boolean).filter(x=>x.split('-')[0]===requestedLocale))].sort().slice(0,8);
+      if(ttsCandidates.length<2)return null;
+      state='ambiguous';
+    }
+    return{requestedLocale,reason,state,ttsCandidates,observedAt,expiresAt,ttsVerified:false,sttVerified:false,evidence:'unsupported_runtime_response',deviceE2eVerified:false};
+  }
+  function readNegativeTtsEvidence(storage=defaultStorage(),nowMs=Date.now()){
+    if(!validStorage(storage)||!Number.isFinite(nowMs))return[];
+    try{
+      const raw=JSON.parse(storage.getItem(TTS_NEGATIVE_EVIDENCE_KEY)||'[]');
+      const entries=(Array.isArray(raw)?raw:[]).map(x=>cleanNegativeEvidenceEntry(x,nowMs)).filter(Boolean).sort((a,b)=>b.observedAt-a.observedAt).slice(0,32);
+      if(entries.length)storage.setItem(TTS_NEGATIVE_EVIDENCE_KEY,JSON.stringify(entries));else storage.removeItem(TTS_NEGATIVE_EVIDENCE_KEY);
+      return entries;
+    }catch(_){try{storage.removeItem(TTS_NEGATIVE_EVIDENCE_KEY)}catch(__){}return[]}
+  }
+  function getNegativeTtsEvidence(locale,storage=defaultStorage(),nowMs=Date.now()){
+    const normalized=canonicalLocale(locale);if(!normalized)return null;
+    return readNegativeTtsEvidence(storage,nowMs).find(x=>x.requestedLocale===normalized)||null;
+  }
+  function clearNegativeTtsEvidence(storage,locale,nowMs=Date.now()){
+    const normalized=canonicalLocale(locale);
+    if(!validStorage(storage)||!normalized||!Number.isFinite(nowMs))return false;
+    try{
+      const entries=readNegativeTtsEvidence(storage,nowMs),remaining=entries.filter(x=>x.requestedLocale!==normalized);
+      if(remaining.length===entries.length)return false;
+      if(remaining.length)storage.setItem(TTS_NEGATIVE_EVIDENCE_KEY,JSON.stringify(remaining));else storage.removeItem(TTS_NEGATIVE_EVIDENCE_KEY);
+      return true;
+    }catch(_){return false}
+  }
+  function recordNegativeTtsEvidence(storage,result,requestedLocale,nowMs=Date.now()){
+    if(!validStorage(storage)||!Number.isFinite(nowMs)||!result||result.ok!==false||result.state!=='unsupported')return null;
+    const requested=canonicalLocale(requestedLocale),reason=String(result.reason||result.error||'');
+    if(!requested||!shouldInvalidateTtsEvidence(reason))return null;
+    const candidate=cleanNegativeEvidenceEntry({requestedLocale:requested,reason,ttsCandidates:result.ttsCandidates,observedAt:nowMs,expiresAt:nowMs+TTS_NEGATIVE_EVIDENCE_TTL_MS},nowMs);
+    if(!candidate)return null;
+    try{
+      const remaining=readNegativeTtsEvidence(storage,nowMs).filter(x=>x.requestedLocale!==requested);
+      storage.setItem(TTS_NEGATIVE_EVIDENCE_KEY,JSON.stringify([candidate,...remaining].slice(0,32)));
+      return candidate;
+    }catch(_){return null}
+  }
   function captureWithTimeout(capture,locale,controller,timeoutMs){
     const signal=controller.signal,limit=Number.isFinite(timeoutMs)?Math.max(5,Math.min(60000,timeoutMs)):DEFAULT_CAPTURE_TIMEOUT_MS;
     return new Promise((resolve,reject)=>{
@@ -133,10 +182,17 @@
   function renderLocaleOptions(list,storage=defaultStorage(),nowMs=Date.now()){
     if(!list)return false;
     while(list.firstChild)list.removeChild(list.firstChild);
-    const evidence=readTtsEvidence(storage,nowMs),verified=new Set(evidence.map(x=>x.requestedLocale));
+    const positives=new Map(readTtsEvidence(storage,nowMs).map(x=>[x.requestedLocale,x]));
+    const negatives=new Map(readNegativeTtsEvidence(storage,nowMs).map(x=>[x.requestedLocale,x]));
     for(const [value,label] of COMMON_LOCALES){
       const option=(list.ownerDocument||root&&root.document).createElement('option');option.value=value;
-      option.label=label+(verified.has(value)?' · TTS ✓ son 5 dk':' · TTS ? ilk kullanımda kontrol');list.appendChild(option);
+      const positive=positives.get(value),negative=negatives.get(value);
+      const negativeIsNewer=negative&&(!positive||negative.observedAt>=positive.verifiedAt);
+      if(negativeIsNewer&&negative.state==='unsupported')option.label=label+' · TTS ✕ son 1 dk · runtime desteklemiyor';
+      else if(negativeIsNewer&&negative.state==='ambiguous')option.label=label+' · TTS ! son 1 dk · bölge seçin';
+      else if(positive)option.label=label+' · TTS ✓ son 5 dk';
+      else option.label=label+' · TTS ? ilk kullanımda kontrol';
+      list.appendChild(option);
     }
     return true;
   }
@@ -148,7 +204,7 @@
       if(!requestedLocale)return{ok:false,state:'invalid',reason:'locale_required'};
       busy=true;controller=new AbortController();const active=controller;
       const selectedLocale=canonicalLocale(explicitLocale);
-      let text,targetLocale=selectedLocale||preferredLocale||requestedLocale,inputSource='browser-speech',confirmedSwitch=false,preferenceEvidence=null,runtimeTtsNegativeReason=null;
+      let text,targetLocale=selectedLocale||preferredLocale||requestedLocale,inputSource='browser-speech',confirmedSwitch=false,preferenceEvidence=null,runtimeTtsNegativeResult=null;
       try{
         if(pending){
           text=pending.text;targetLocale=pending.locale;inputSource=pending.inputSource;pending=null;confirmedSwitch=true;preferenceEvidence='explicit-confirmation-plus-playback';
@@ -170,7 +226,7 @@
         active.signal.throwIfAborted();
         if(!result||result.ok!==true||result.state!=='reply-ready'){
           const reason=result?.reason||result?.error||'mobile_language_reply_unavailable';
-          if(result&&result.ok===false&&result.state==='unsupported'&&shouldInvalidateTtsEvidence(reason))runtimeTtsNegativeReason=String(reason);
+          if(result&&result.ok===false&&result.state==='unsupported'&&shouldInvalidateTtsEvidence(reason))runtimeTtsNegativeResult=result;
           throw new Error(reason);
         }
         if(canonicalLocale(result.locale)!==targetLocale)throw new Error('mobile_reply_locale_mismatch');
@@ -178,8 +234,10 @@
         onReply(result);onState('playing',{...result,ttsLocale:playbackLocale});
         await play({...result,locale:playbackLocale,conversationLocale:targetLocale,ttsLocale:playbackLocale},active.signal);
         active.signal.throwIfAborted();
-        const runtimeTtsEvidence=recordTtsEvidence(storage,result,targetLocale,playbackLocale,Number(now()));
-        if(root&&root.document)renderLocaleOptions(root.document.getElementById('jarvisMobileLocaleList'),storage,Number(now()));
+        const nowMs=Number(now());
+        clearNegativeTtsEvidence(storage,targetLocale,nowMs);
+        const runtimeTtsEvidence=recordTtsEvidence(storage,result,targetLocale,playbackLocale,nowMs);
+        if(root&&root.document)renderLocaleOptions(root.document.getElementById('jarvisMobileLocaleList'),storage,nowMs);
         history=cleanHistory([...history,{role:'user',content:text},{role:'assistant',content:result.reply}]);
         let preferenceSaved=false;
         if(selectedLocale){
@@ -191,15 +249,18 @@
         }
         const completed={...result,state:'completed',nextLocale:targetLocale,ttsLocale:playbackLocale,historyCommitted:true,learning:false,automaticLearning:false,
           preferenceSaved,preferenceLocale:preferredLocale,preferenceEvidence:preferenceSaved?preferenceEvidence:null,
-          runtimeTtsVerified:!!runtimeTtsEvidence,runtimeTtsEvidence,sttVerified:false,deviceE2eVerified:false};
+          runtimeTtsVerified:!!runtimeTtsEvidence,runtimeTtsEvidence,runtimeTtsNegativeEvidence:null,sttVerified:false,deviceE2eVerified:false};
         onState('completed',completed);return completed;
       }catch(error){
         const rawMessage=String(error&&error.message||error),timedOut=rawMessage==='browser_stt_timeout';
         const cancelled=active.signal.aborted&&!timedOut,message=cancelled?'mobile_language_cancelled':rawMessage;
-        const runtimeTtsEvidenceInvalidated=!cancelled&&runtimeTtsNegativeReason===message&&invalidateTtsEvidence(storage,targetLocale,Number(now()));
-        if(runtimeTtsEvidenceInvalidated&&root&&root.document)renderLocaleOptions(root.document.getElementById('jarvisMobileLocaleList'),storage,Number(now()));
-        if(!cancelled)onState('error',{error:message,runtimeTtsEvidenceInvalidated});
-        return{ok:false,cancelled,error:message,learning:false,preferenceSaved:false,preferenceLocale:preferredLocale,runtimeTtsVerified:false,runtimeTtsEvidenceInvalidated,sttVerified:false,deviceE2eVerified:false};
+        const nowMs=Number(now());
+        const provenanceMatches=!cancelled&&runtimeTtsNegativeResult&&String(runtimeTtsNegativeResult.reason||runtimeTtsNegativeResult.error||'')===message;
+        const runtimeTtsEvidenceInvalidated=!!(provenanceMatches&&invalidateTtsEvidence(storage,targetLocale,nowMs));
+        const runtimeTtsNegativeEvidence=provenanceMatches?recordNegativeTtsEvidence(storage,runtimeTtsNegativeResult,targetLocale,nowMs):null;
+        if((runtimeTtsEvidenceInvalidated||runtimeTtsNegativeEvidence)&&root&&root.document)renderLocaleOptions(root.document.getElementById('jarvisMobileLocaleList'),storage,nowMs);
+        if(!cancelled)onState('error',{error:message,runtimeTtsEvidenceInvalidated,runtimeTtsNegativeEvidence});
+        return{ok:false,cancelled,error:message,learning:false,preferenceSaved:false,preferenceLocale:preferredLocale,runtimeTtsVerified:false,runtimeTtsEvidenceInvalidated,runtimeTtsNegativeEvidence,sttVerified:false,deviceE2eVerified:false};
       }finally{
         if(controller===active){controller=null;busy=false;onState('idle')}
       }
@@ -210,18 +271,19 @@
       if(busy)return{ok:false,reason:'mobile_language_busy'};
       const normalized=canonicalLocale(locale);if(!normalized)return{ok:false,reason:'invalid_locale'};
       pending=null;explicitLocale=normalized;stagedExplicitLocale=normalized;
-      return{ok:true,locale:normalized,persisted:false,evidence:'explicit-user-selection-pending-playback',runtimeTtsEvidence:getTtsEvidence(normalized,storage,Number(now()))};
+      const nowMs=Number(now());
+      return{ok:true,locale:normalized,persisted:false,evidence:'explicit-user-selection-pending-playback',runtimeTtsEvidence:getTtsEvidence(normalized,storage,nowMs),runtimeTtsNegativeEvidence:getNegativeTtsEvidence(normalized,storage,nowMs)};
     }
     function forgetPreference(){preferredLocale=null;explicitLocale=null;stagedExplicitLocale=null;return clearPreference(storage)}
     const client={run,cancel,clearPending,selectLocale,forgetPreference,get busy(){return busy},get pendingLocale(){return pending?.locale||null},
-      get selectedLocale(){return explicitLocale},get preferredLocale(){return preferredLocale},get runtimeTtsEvidence(){return readTtsEvidence(storage,Number(now()))},get history(){return cleanHistory(history)}};
+      get selectedLocale(){return explicitLocale},get preferredLocale(){return preferredLocale},get runtimeTtsEvidence(){return readTtsEvidence(storage,Number(now()))},get runtimeTtsNegativeEvidence(){return readNegativeTtsEvidence(storage,Number(now()))},get history(){return cleanHistory(history)}};
     activeClient=client;return client;
   }
   function requestExplicitLocale(locale){
     const normalized=canonicalLocale(locale);if(!normalized)return{ok:false,reason:'invalid_locale'};
     if(activeClient)return activeClient.selectLocale(normalized);
     stagedExplicitLocale=normalized;
-    return{ok:true,locale:normalized,persisted:false,evidence:'explicit-user-selection-pending-playback',runtimeTtsEvidence:getTtsEvidence(normalized)};
+    return{ok:true,locale:normalized,persisted:false,evidence:'explicit-user-selection-pending-playback',runtimeTtsEvidence:getTtsEvidence(normalized),runtimeTtsNegativeEvidence:getNegativeTtsEvidence(normalized)};
   }
   function installLocalePicker(doc=root&&root.document){
     if(!doc||!root||!/iPhone|iPad|iPod|Android/i.test(String(root.navigator&&root.navigator.userAgent||'')))return false;
@@ -235,13 +297,18 @@
       const result=requestExplicitLocale(input.value),status=doc.getElementById('languageChatStatus');
       if(!status)return;
       if(!result.ok){status.textContent=result.reason==='mobile_language_busy'?'Konuşma sürerken dil değiştirilemez.':'Geçerli bir dil kodu girin (örn. tr-TR, en-US).';return}
-      status.textContent=result.runtimeTtsEvidence?
-        'Dil isteği: '+result.locale+' · TTS son 5 dk içinde runtime + playback ile doğrulandı; STT tarayıcıya bağlı.':
-        'Dil isteği: '+result.locale+' · TTS ilk başarılı yanıtta runtime kontrol edilecek; STT tarayıcıya bağlı.';
+      const negative=result.runtimeTtsNegativeEvidence;
+      if(result.runtimeTtsEvidence){status.textContent='Dil isteği: '+result.locale+' · TTS son 5 dk içinde runtime + playback ile doğrulandı; STT tarayıcıya bağlı.';return}
+      if(negative&&negative.state==='unsupported'){status.textContent='Dil isteği: '+result.locale+' · TTS son 1 dk içinde runtime tarafından desteklenmedi; daha sonra yeniden denenebilir.';return}
+      if(negative&&negative.state==='ambiguous'){
+        const choices=negative.ttsCandidates.length?' ('+negative.ttsCandidates.join(', ')+')':'';
+        status.textContent='Dil isteği: '+result.locale+' · TTS bölgesi belirsiz; bölge kodu seçin'+choices+'.';return;
+      }
+      status.textContent='Dil isteği: '+result.locale+' · TTS ilk başarılı yanıtta runtime kontrol edilecek; STT tarayıcıya bağlı.';
     });
     wrap.append(input,button,list);chatButton.parentNode.appendChild(wrap);return true;
   }
   if(root&&root.document){const start=()=>installLocalePicker(root.document);if(root.document.readyState==='loading')root.document.addEventListener('DOMContentLoaded',start,{once:true});else setTimeout(start,0)}
-  return{PREFERENCE_KEY,TTS_EVIDENCE_KEY,TTS_EVIDENCE_TTL_MS,DEFAULT_CAPTURE_TIMEOUT_MS,COMMON_LOCALES,RUNTIME_TTS_INVALIDATION_REASONS,canonicalLocale,safeLanguageHint,cleanHistory,readPreference,savePreference,clearPreference,
-    cleanEvidenceEntry,readTtsEvidence,getTtsEvidence,recordTtsEvidence,invalidateTtsEvidence,shouldInvalidateTtsEvidence,captureWithTimeout,resolvePlaybackLocale,renderLocaleOptions,createClient,requestExplicitLocale,installLocalePicker};
+  return{PREFERENCE_KEY,TTS_EVIDENCE_KEY,TTS_NEGATIVE_EVIDENCE_KEY,TTS_EVIDENCE_TTL_MS,TTS_NEGATIVE_EVIDENCE_TTL_MS,DEFAULT_CAPTURE_TIMEOUT_MS,COMMON_LOCALES,RUNTIME_TTS_INVALIDATION_REASONS,canonicalLocale,safeLanguageHint,cleanHistory,readPreference,savePreference,clearPreference,
+    cleanEvidenceEntry,readTtsEvidence,getTtsEvidence,recordTtsEvidence,invalidateTtsEvidence,shouldInvalidateTtsEvidence,cleanNegativeEvidenceEntry,readNegativeTtsEvidence,getNegativeTtsEvidence,recordNegativeTtsEvidence,clearNegativeTtsEvidence,captureWithTimeout,resolvePlaybackLocale,renderLocaleOptions,createClient,requestExplicitLocale,installLocalePicker};
 });
