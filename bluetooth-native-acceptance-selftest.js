@@ -1,0 +1,1 @@
+const assert=require('assert'),fs=require('fs');const s=fs.readFileSync('./worker.js','utf8');assert.ok(s.includes("name:'bluetooth_acceptance_test'"));assert.ok(s.includes("bluetooth-e2e.js"));assert.ok(s.includes("process.platform!=='win32'"));assert.ok(s.includes("'bluetooth_native_acceptance_v1'"));console.log('BLUETOOTH NATIVE ACCEPTANCE SELFTEST PASS');
