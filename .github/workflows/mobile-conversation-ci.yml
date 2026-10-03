@@ -22,10 +22,12 @@ jobs:
           node --check public/mobile-language-chat.js
           node --check mobile-language-conversation-selftest.js
           node --check mobile-capture-lifecycle-selftest.js
+          node --check mobile-explicit-locale-selftest.js
       - name: Mobile multilingual conversation safety
         run: |
           node mobile-language-conversation-selftest.js
           node mobile-capture-lifecycle-selftest.js
+          node mobile-explicit-locale-selftest.js
           node mobile-tts-relay-selftest.js
           node language-conversation-selftest.js
           node language-chat-ui-selftest.js
