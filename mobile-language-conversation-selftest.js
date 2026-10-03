@@ -25,8 +25,8 @@ const mobile=require('./public/mobile-language-chat');
   });
   const reply=await engine.turn({text:'Guten Tag',locale:'de-DE',inputSource:'browser-speech',history:[{role:'assistant',content:'Hallo'}]});
   assert.equal(reply.ok,true);assert.equal(reply.state,'reply-ready');assert.equal(reply.locale,'de-DE');assert.equal(reply.voice,'de-DE-ConradNeural');
-  assert.equal(reply.learning,false);assert.equal(reply.languageEvidence,'explicit-mobile-locale');assert.equal(reply.deviceE2eVerified,false);
-  assert.equal(generated.context.source,'mobile_explicit');assert.equal(generated.speech.ttsLocale,'de-DE');assert.equal(generated.speech.sttLocale,null);
+  assert.equal(reply.learning,false);assert.equal(reply.languageEvidence,'client-requested-locale');assert.equal(reply.deviceE2eVerified,false);
+  assert.equal(generated.context.source,'mobile_client_requested');assert.equal(generated.context.sessionOnly,true);assert.equal(generated.speech.ttsLocale,'de-DE');assert.equal(generated.speech.sttLocale,null);
   assert.equal(typeof generated.signal,'undefined');
   const unsupported=await engine.turn({text:'Bonjour',locale:'fr-FR',inputSource:'browser-speech'});
   assert.equal(unsupported.ok,false);assert.equal(unsupported.reason,'tts_locale_not_in_runtime_inventory');
@@ -45,14 +45,13 @@ const mobile=require('./public/mobile-language-chat');
     request:async(data)=>{calls.push(data);return{ok:true,state:'reply-ready',reply:'Здравствуйте',locale:data.locale,learning:false}},
     play:async()=>{plays++},onState:(state,detail)=>states.push({state,detail})
   });
-  let first=await client.run({locale:'tr-TR'});
+  const first=await client.run({locale:'tr-TR'});
   assert.equal(first.state,'confirm-language');assert.equal(first.locale,'ru-RU');assert.equal(calls.length,0,'heuristic mismatch must not silently send or switch');assert.equal(plays,0);
-  let second=await client.run({locale:'tr-TR'});
+  const second=await client.run({locale:'tr-TR'});
   assert.equal(second.state,'completed');assert.equal(second.nextLocale,'ru-RU');assert.equal(captures,1,'explicit second tap reuses held transcript');assert.equal(calls.length,1);assert.equal(calls[0].locale,'ru-RU');
   assert.equal(calls[0].inputSource,'browser-speech');assert.equal(client.history.length,2);assert.equal(second.learning,false);
 
-  let failingCalls=[];
-  const failed=mobile.createClient({capture:async()=> 'Merhaba',request:async data=>{failingCalls.push(data);return{ok:true,state:'reply-ready',reply:'Merhaba',locale:data.locale}},play:async()=>{throw new Error('autoplay_blocked')}});
+  const failed=mobile.createClient({capture:async()=> 'Merhaba',request:async data=>({ok:true,state:'reply-ready',reply:'Merhaba',locale:data.locale}),play:async()=>{throw new Error('autoplay_blocked')}});
   const failedResult=await failed.run({locale:'tr-TR'});
   assert.equal(failedResult.ok,false);assert.equal(failed.history.length,0,'unplayed mobile reply cannot enter conversation history');
 
@@ -60,9 +59,13 @@ const mobile=require('./public/mobile-language-chat');
   assert(html.includes('/mobile-language-chat.js'),'mobile client script must be loaded');
   assert(html.includes('JarvisMobileLanguageChat.createClient'),'mobile UI must use safe conversation client');
   assert(html.includes('mobileLanguageCapture'),'phone speech result must have an isolated capture path');
+  assert(html.includes("if(isMobileJarvis()){await runMobileLanguageChat();return}"),'mobile multilingual button must route to mobile client');
+  assert(html.includes('mobileLanguageChatClient?.cancel()'),'privacy/background/auth paths must be able to cancel mobile conversation');
+  assert(!html.includes("if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis()){\n  languageChatBtn.disabled=true"),'mobile multilingual button must not retain old PC-only disable gate');
   assert(server.includes('/api/mobile-language'),'cloud server must expose mobile language queue');
   assert(server.includes('mobileLanguageRelay.verifyResult'),'server must bind result to claimant and locale');
   assert(worker.includes('serviceMobileLanguage'),'worker must service the mobile language queue');
   assert(worker.includes('jarvis-mobile-language-conversation'),'worker must use locale-frozen conversation engine');
-  console.log('MOBILE LANGUAGE CONVERSATION SELFTEST PASS · explicit locale, confirmation gate, claimant binding, playback-gated history, no STT learning claim');
+  assert(worker.includes('setInterval(()=>serviceMobileLanguage().catch(()=>{}),650)'),'mobile language relay must use conversational polling cadence');
+  console.log('MOBILE LANGUAGE CONVERSATION SELFTEST PASS · client-requested locale, confirmation gate, claimant binding, playback-gated history, no STT learning claim');
 })().catch(error=>{console.error(error);process.exitCode=1});
