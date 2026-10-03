@@ -181,9 +181,9 @@
     const normalized=canonicalLocale(locale);if(!normalized)return null;
     return readSttCaptureEvidence(storage,nowMs).find(x=>x.requestedLocale===normalized)||null;
   }
-  function recordSttCaptureEvidence(storage,requestedLocale,nowMs=Date.now()){
-    const requested=canonicalLocale(requestedLocale);
-    if(!validStorage(storage)||!requested||!Number.isFinite(nowMs))return null;
+  function recordSttCaptureEvidence(storage,requestedLocale,transcript,nowMs=Date.now()){
+    const requested=canonicalLocale(requestedLocale),observed=String(transcript||'').replace(/\s+/g,' ').trim();
+    if(!validStorage(storage)||!requested||!observed||!Number.isFinite(nowMs))return null;
     const candidate=cleanSttCaptureEvidenceEntry({requestedLocale:requested,source:'browser-speech',capturedAt:nowMs,expiresAt:nowMs+STT_CAPTURE_EVIDENCE_TTL_MS},nowMs);
     if(!candidate)return null;
     try{
@@ -259,7 +259,7 @@
           text=String(await captureWithTimeout(capture,targetLocale,active,captureTimeoutMs)||'').replace(/\s+/g,' ').trim().slice(0,1800);
           active.signal.throwIfAborted();
           if(!text)throw new Error('empty_transcript');
-          sttCaptureEvidence=recordSttCaptureEvidence(storage,targetLocale,Number(now()));
+          sttCaptureEvidence=recordSttCaptureEvidence(storage,targetLocale,text,Number(now()));
           const candidate=canonicalLocale(hint(text,targetLocale));
           if(!selectedLocale&&candidate&&candidate!==targetLocale){
             pending={text,locale:candidate,inputSource};
