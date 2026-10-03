@@ -5,6 +5,7 @@
   'use strict';
   const PREFERENCE_KEY='jarvisMobileLanguagePreferenceV1';
   const DEFAULT_CAPTURE_TIMEOUT_MS=20000;
+  const DEFAULT_REQUEST_TIMEOUT_MS=65000;
   function canonicalLocale(value){
     if(typeof value!=='string')return null;
     const input=value.trim().replace(/_/g,'-');
@@ -62,7 +63,19 @@
       Promise.resolve().then(()=>capture(locale,signal)).then(value=>finish(resolve,value),error=>finish(reject,error instanceof Error?error:new Error(String(error||'browser_stt_failed'))));
     });
   }
-  function createClient({capture,request,play,onState=()=>{},onReply=()=>{},hint=safeLanguageHint,storage=defaultStorage(),captureTimeoutMs=DEFAULT_CAPTURE_TIMEOUT_MS}={}){
+  function requestWithTimeout(request,data,controller,timeoutMs){
+    const signal=controller.signal,limit=Number.isFinite(timeoutMs)?Math.max(5,Math.min(120000,timeoutMs)):DEFAULT_REQUEST_TIMEOUT_MS;
+    return new Promise((resolve,reject)=>{
+      let settled=false,timedOut=false;
+      const finish=(fn,value)=>{if(settled)return;settled=true;clearTimeout(timer);signal.removeEventListener('abort',onAbort);fn(value)};
+      const onAbort=()=>finish(reject,new Error(timedOut?'mobile_language_request_timeout':'mobile_language_cancelled'));
+      const timer=setTimeout(()=>{if(settled)return;timedOut=true;controller.abort()},limit);
+      signal.addEventListener('abort',onAbort,{once:true});
+      if(signal.aborted){onAbort();return}
+      Promise.resolve().then(()=>request(data,signal)).then(value=>finish(resolve,value),error=>finish(reject,error instanceof Error?error:new Error(String(error||'mobile_language_request_failed'))));
+    });
+  }
+  function createClient({capture,request,play,onState=()=>{},onReply=()=>{},hint=safeLanguageHint,storage=defaultStorage(),captureTimeoutMs=DEFAULT_CAPTURE_TIMEOUT_MS,requestTimeoutMs=DEFAULT_REQUEST_TIMEOUT_MS}={}){
     let busy=false,pending=null,history=[],controller=null,preferredLocale=readPreference(storage);
     async function run({locale}={}){
       if(busy)return{ok:false,state:'busy'};
@@ -87,7 +100,7 @@
           }
         }
         onState('thinking',{locale:targetLocale,transcript:text});
-        const result=await request({text,locale:targetLocale,inputSource,history:cleanHistory(history)},active.signal);
+        const result=await requestWithTimeout(request,{text,locale:targetLocale,inputSource,history:cleanHistory(history)},active,requestTimeoutMs);
         active.signal.throwIfAborted();
         if(!result||result.ok!==true||result.state!=='reply-ready')throw new Error(result?.reason||result?.error||'mobile_language_reply_unavailable');
         if(canonicalLocale(result.locale)!==targetLocale)throw new Error('mobile_reply_locale_mismatch');
@@ -101,7 +114,7 @@
           preferenceSaved,preferenceLocale:preferredLocale,preferenceEvidence:preferenceSaved?'explicit-confirmation-plus-playback':null,deviceE2eVerified:false};
         onState('completed',completed);return completed;
       }catch(error){
-        const rawMessage=String(error&&error.message||error),timedOut=rawMessage==='browser_stt_timeout';
+        const rawMessage=String(error&&error.message||error),timedOut=rawMessage==='browser_stt_timeout'||rawMessage==='mobile_language_request_timeout';
         const cancelled=active.signal.aborted&&!timedOut,message=cancelled?'mobile_language_cancelled':rawMessage;
         if(!cancelled)onState('error',{error:message});
         return{ok:false,cancelled,error:message,learning:false,preferenceSaved:false,deviceE2eVerified:false};
@@ -115,5 +128,5 @@
     return{run,cancel,clearPending,forgetPreference,get busy(){return busy},get pendingLocale(){return pending?.locale||null},
       get preferredLocale(){return preferredLocale},get history(){return cleanHistory(history)}};
   }
-  return{PREFERENCE_KEY,DEFAULT_CAPTURE_TIMEOUT_MS,canonicalLocale,safeLanguageHint,cleanHistory,readPreference,savePreference,clearPreference,captureWithTimeout,createClient};
+  return{PREFERENCE_KEY,DEFAULT_CAPTURE_TIMEOUT_MS,DEFAULT_REQUEST_TIMEOUT_MS,canonicalLocale,safeLanguageHint,cleanHistory,readPreference,savePreference,clearPreference,captureWithTimeout,requestWithTimeout,createClient};
 });
