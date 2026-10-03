@@ -5,14 +5,16 @@
   'use strict';
   function safeLanguageHint(text){
     const s=String(text||'');
-    if(/[ğĞıİşŞöÖüÜ]/.test(s))return'tr-TR';
-    if(/[а-яё]/i.test(s))return'ru-RU';
-    if(/[\u0600-\u06ff]/.test(s))return'ar-SA';
+    // Only emit a locale candidate for scripts that are strong enough to be
+    // useful as a confirmation hint. Ambiguous script families (Latin,
+    // Cyrillic, Arabic, Han-only, Devanagari, etc.) intentionally return null.
+    // This is never persisted as language-learning evidence.
     if(/[\u3040-\u30ff]/.test(s))return'ja-JP';
     if(/[\uac00-\ud7af]/.test(s))return'ko-KR';
-    if(/[ßẞ]/.test(s))return'de-DE';
-    if(/[ñÑ¿¡]/.test(s))return'es-ES';
-    if(/[ãÃõÕ]/.test(s))return'pt-BR';
+    if(/[\u0370-\u03ff]/.test(s))return'el-GR';
+    if(/[\u0e00-\u0e7f]/.test(s))return'th-TH';
+    if(/[\u0530-\u058f]/.test(s))return'hy-AM';
+    if(/[\u10a0-\u10ff]/.test(s))return'ka-GE';
     return null;
   }
   function cleanHistory(value){
