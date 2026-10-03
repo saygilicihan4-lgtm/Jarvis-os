@@ -41,7 +41,9 @@ function listMock(){
 
   assert.equal(mobile.shouldInvalidateTtsEvidence('tts_locale_not_in_runtime_inventory'),true);
   assert.equal(mobile.shouldInvalidateTtsEvidence('runtime_tts_locale_ambiguous'),true);
-  assert.equal(mobile.shouldInvalidateTtsEvidence('runtime_voice_missing'),true);
+  assert.equal(mobile.shouldInvalidateTtsEvidence('runtime_voice_missing'),false);
+  assert.equal(mobile.shouldInvalidateTtsEvidence('runtime_voice_inventory_unavailable'),false);
+  assert.equal(mobile.shouldInvalidateTtsEvidence('runtime_voice_inventory_invalid'),false);
   assert.equal(mobile.shouldInvalidateTtsEvidence('network_down'),false);
   assert.equal(mobile.shouldInvalidateTtsEvidence('autoplay_blocked'),false);
   assert.equal(mobile.shouldInvalidateTtsEvidence('mobile_language_cancelled'),false);
@@ -62,6 +64,11 @@ function listMock(){
   const networkResult=await network.run({locale:'tr-TR'});
   assert.equal(networkResult.runtimeTtsEvidenceInvalidated,false);assert(mobile.getTtsEvidence('tr-TR',networkStore,now),'temporary network failure must not prove TTS capability disappeared');
 
+  const inventoryStore=storage();assert(mobile.recordTtsEvidence(inventoryStore,exact,'tr-TR','tr-TR',now));
+  const inventory=mobile.createClient({storage:inventoryStore,now:()=>now,capture:async()=> 'merhaba',request:async data=>({ok:false,state:'unsupported',reason:'runtime_voice_inventory_unavailable',locale:data.locale}),play:async()=>{}});
+  const inventoryResult=await inventory.run({locale:'tr-TR'});
+  assert.equal(inventoryResult.runtimeTtsEvidenceInvalidated,false);assert(mobile.getTtsEvidence('tr-TR',inventoryStore,now),'temporary inventory probe failure must not revoke prior positive capability evidence');
+
   const autoplayStore=storage();assert(mobile.recordTtsEvidence(autoplayStore,exact,'tr-TR','tr-TR',now));
   const autoplay=mobile.createClient({storage:autoplayStore,now:()=>now,capture:async()=> 'merhaba',request:async data=>({ok:true,state:'reply-ready',reply:'Merhaba.',locale:data.locale,ttsLocale:data.locale,provider:'edge-tts',voice:'tr-TR-AhmetNeural',localeResolution:'exact',speechEvidence:'runtime_inventory'}),play:async()=>{throw new Error('autoplay_blocked')}});
   const autoplayResult=await autoplay.run({locale:'tr-TR'});
@@ -78,5 +85,5 @@ function listMock(){
   const tr=verifiedList.children.find(x=>x.value==='tr-TR');assert(tr&&tr.label.includes('TTS ✓ son 5 dk'),'fresh runtime+playback receipt may be shown as recently verified');
   const en=verifiedList.children.find(x=>x.value==='en-US');assert(en&&en.label.includes('TTS ?'),'unverified locale stays unknown');
 
-  console.log('MOBILE RUNTIME CATALOG SELFTEST PASS · positive TTS evidence is playback-gated, expires, rejects tampering, and is revoked immediately only by explicit runtime TTS rejection');
+  console.log('MOBILE RUNTIME CATALOG SELFTEST PASS · positive TTS evidence is playback-gated, expires, rejects tampering, and is revoked only by definitive runtime locale negatives');
 })().catch(error=>{console.error(error);process.exitCode=1});
