@@ -4,6 +4,7 @@ const os=require('os');
 const crypto=require('crypto');
 const childProcess=require('child_process');
 const http=require('http');
+const mobileTtsVoiceRouter=require('./jarvis-tts-locale-router').createRouter();
 let speechSessionRuntime=null;
 function getSpeechSessionRuntime(){
   if(!speechSessionRuntime)speechSessionRuntime=require('./jarvis-speech-session-runtime').createRuntime({root:WORKSPACE,sttPort:LOCAL_STT_PORT});
@@ -758,16 +759,18 @@ async function speakJarvisNow(text,tone='balanced',generation=ttsGeneration){
     }
   }
 }
-async function renderJarvisMp3Base64(text,tone='balanced'){
+async function renderJarvisMp3Base64(text,tone='balanced',locale='tr-TR'){
   if(!TTS_ENABLED)throw new Error('local TTS disabled');
   const clean=prepareJarvisSpeechText(text,tone).slice(0,700);
   if(!clean)throw new Error('text required');
   const profile=ttsProfileForTone(tone,clean);
+  const voiceMatch=await mobileTtsVoiceRouter.resolve(locale);
+  if(!voiceMatch.ok)throw new Error(voiceMatch.reason+(voiceMatch.locale?':'+voiceMatch.locale:''));
   const mp3=path.join(os.tmpdir(),'jarvis-mobile-tts-'+process.pid+'-'+Date.now()+'-'+crypto.randomBytes(3).toString('hex')+'.mp3');
   try{
     await runHidden('py',[
       '-m','edge_tts',
-      '--voice',TTS_VOICE,
+      '--voice',voiceMatch.voice,
       '--rate='+profile.rate,
       '--pitch='+profile.pitch,
       '--volume='+shiftTtsNumber(MOBILE_TTS_VOLUME,readVoicePreferences().volumeOffset,'%',0,80,true),
@@ -8714,18 +8717,18 @@ async function serviceMobileTts(){
     if(!r||!r.request)return false;
     const q=r.request;
     try{
-      const audio=await renderJarvisMp3Base64(q.text,q.tone||'balanced');
+      const audio=await renderJarvisMp3Base64(q.text,q.tone||'balanced',q.locale);
       await api('/api/worker/mobile-tts-result',{
         method:'POST',
         headers:{'content-type':'application/json'},
-        body:JSON.stringify({id:q.id,ok:true,audio})
+        body:JSON.stringify({id:q.id,locale:q.locale,ok:true,audio})
       });
       console.log('[JARVIS] MOBILE TTS READY: '+q.id+' tone='+(q.tone||'balanced'));
     }catch(e){
       await api('/api/worker/mobile-tts-result',{
         method:'POST',
         headers:{'content-type':'application/json'},
-        body:JSON.stringify({id:q.id,ok:false,error:String(e.message||e)})
+        body:JSON.stringify({id:q.id,locale:q.locale,ok:false,error:String(e.message||e)})
       }).catch(()=>{});
       console.error('[JARVIS] MOBILE TTS:',e.message);
     }

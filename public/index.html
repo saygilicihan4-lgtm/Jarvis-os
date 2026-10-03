@@ -1525,19 +1525,25 @@ function primeMobileSpeech(){
     mobileSpeechPrimed=true;
   }catch(e){}
 }
-async function playJarvisMobileRelay(text,tone='balanced'){
+let activeMobileTtsRequestId='';
+async function playJarvisMobileRelay(text,tone='balanced',locale=activeLanguage){
   // iOS lowers media playback when a live microphone/WebAudio capture session
   // is active. Phone clap detection is unnecessary because double-clap wake
   // already runs on the PC Worker, so release any legacy mobile clap stream.
   releaseMobileClapAudioSession();
+  if(activeMobileTtsRequestId){
+    const stale=activeMobileTtsRequestId;activeMobileTtsRequestId='';
+    fetch('/api/mobile-tts/'+encodeURIComponent(stale)+'/cancel',{method:'POST',credentials:'same-origin'}).catch(()=>{});
+  }
   const create=await fetch('/api/mobile-tts',{
     method:'POST',
     headers:{'content-type':'application/json'},
     credentials:'same-origin',
-    body:JSON.stringify({text:String(text||'').trim(),tone})
+    body:JSON.stringify({text:String(text||'').trim(),tone,locale})
   });
   const cj=await create.json().catch(()=>({}));
   if(!create.ok||!cj.id)throw new Error(cj.error||'mobile tts unavailable');
+  activeMobileTtsRequestId=cj.id;
 
   const deadline=Date.now()+18000;
   while(Date.now()<deadline){
@@ -1545,8 +1551,10 @@ async function playJarvisMobileRelay(text,tone='balanced'){
     const rr=await fetch('/api/mobile-tts/'+encodeURIComponent(cj.id),{credentials:'same-origin',cache:'no-store'});
     const j=await rr.json().catch(()=>({}));
     if(!rr.ok)throw new Error(j.error||'mobile tts status failed');
-    if(j.status==='failed')throw new Error(j.error||'mobile tts failed');
+    if(j.status==='cancelled'){if(activeMobileTtsRequestId===cj.id)activeMobileTtsRequestId='';throw new Error('mobile tts cancelled')}
+    if(j.status==='failed'){if(activeMobileTtsRequestId===cj.id)activeMobileTtsRequestId='';throw new Error(j.error||'mobile tts failed')}
     if(j.status==='ready'&&j.audio){
+      if(activeMobileTtsRequestId===cj.id)activeMobileTtsRequestId='';
       const bin=atob(j.audio);
       const bytes=new Uint8Array(bin.length);
       for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
@@ -1580,7 +1588,7 @@ function speak(text,lang=activeLanguage,tone='balanced'){
   const spoken=String(text).trim();
   if(!spoken)return;
   if(isMobileJarvis()){
-    playJarvisMobileRelay(spoken,tone).catch(err=>{
+    playJarvisMobileRelay(spoken,tone,lang).catch(err=>{
       if(window.voiceState)voiceState.textContent='VOICE: JARVIS RELAY FALLBACK';
       consoleStatus.textContent='MOBILE JARVIS VOICE FALLBACK · '+String(err&&err.message||err).slice(0,80);
       browserSpeak(spoken,lang);
