@@ -127,6 +127,10 @@
     <span id="consoleStatus">SECURE CHANNEL LOCKED</span>
     <span id="voiceState">VOICE MODULE: CHECKING</span><span id="clapState"> · DOUBLE CLAP: OFF</span><span id="cameraState"> · CAMERA: OFF</span><span id="visionState"> · VISION: LOCAL ONLY</span>
   </div>
+  <div style="margin-top:8px">
+    <button id="languageChatBtn" class="send" onclick="runLanguageChat()" title="Windows PC üzerinde deneysel çok dilli sohbet; bilgisayar işlemleri için normal komut alanını kullanın.">ÇOK DİLLİ SOHBET</button>
+    <span id="languageChatStatus" role="status" style="font-size:10px;margin-left:8px">PC · Deneysel sohbet</span>
+  </div>
   <div id="cameraPanel" hidden style="margin-top:8px;text-align:center">
     <video id="cameraPreview" autoplay playsinline muted style="width:min(100%,480px);max-height:280px;object-fit:cover;border:1px solid rgba(101,230,255,.45);border-radius:8px;background:#000"></video>
     <canvas id="captureCanvas" hidden></canvas>
@@ -137,12 +141,15 @@
   </div>
 </div>
 
+<script src="/language-chat.js"></script>
 <script>
 let KEY='';
 localStorage.removeItem('jarvis_token');
 let recognition=null;
 let listening=false;
 let privacyMode=false;
+let languageChatClient=null;
+let languageChatStarting=false;
 let desktopWakeWordEnabled=!/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 let wakeWordConversationUntil=0;
 let wakeWordAwaitingCommand=false;
@@ -672,6 +679,7 @@ async function refreshInterruptionResumeHint(){
   }catch(_){return null}
 }
 async function stopJarvisSpeech(reason='voice-interrupt',{listenAfter=true}={}){
+  if(languageChatClient?.busy)await languageChatClient.cancel();
   bargeInMode=false;
   clearTimeout(bargeInRestartTimer);
   if(currentChatStreamController){
@@ -1065,6 +1073,7 @@ async function api(url,options={}){
 }
 
 function setAuthenticated(ok){
+  if(!ok)languageChatClient?.cancel();
   authDot.className='dot '+(ok?'online':'');
   authState.textContent=ok?'AUTHORIZED':'LOCKED';
   consoleStatus.textContent=ok?'SECURE CHANNEL ACTIVE':'SECURE CHANNEL LOCKED';
@@ -1388,6 +1397,7 @@ async function scanTextLocal(){
 }
 function enterPrivacyMode(){
   privacyMode=true;
+  languageChatClient?.cancel();
   voiceConversationActive=false;
   bargeInMode=false;
   clearTimeout(conversationFollowupTimer);
@@ -2477,6 +2487,7 @@ async function askJarvisBrain(message){
   }
 }
 async function send(){
+  if(languageChatClient?.busy)await languageChatClient.cancel();
   primeMobileSpeech();
   const command=cmd.value.trim();
   if(!command)return;
@@ -2787,6 +2798,72 @@ async function bootstrapSession(){
     ?'TELEFON GÜVENİLİR WI-FI DIŞINDA · PASSKEY YOKSA 8 HANELİ KURTARMA KODU'
     :'GÜVENİLİR AĞ BULUNAMADI · PASSKEY YOKSA 8 HANELİ KURTARMA KODU';
 }
+async function languageConversationRequest(data,signal){
+  const response=await fetch('http://127.0.0.1:8765/language-conversation',{
+    method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(data),signal:signal||AbortSignal.timeout(4000)
+  });
+  const result=await response.json();
+  if(!response.ok)throw new Error(result.reason||result.error||'speech_language_unavailable');
+  return result;
+}
+function playLanguageConversationAudio(result,signal){
+  return new Promise((resolve,reject)=>{
+    if(!['audio/mpeg','audio/wav'].includes(result.mime)||typeof result.audio!=='string'||result.audio.length>6000000)return reject(new Error('invalid_voice_audio'));
+    signal.throwIfAborted();
+    const bytes=Uint8Array.from(atob(result.audio),x=>x.charCodeAt(0));
+    const url=URL.createObjectURL(new Blob([bytes],{type:result.mime})),audio=new Audio(url);
+    audio.preload='auto';let finished=false;
+    const finish=error=>{
+      if(finished)return;finished=true;clearTimeout(timer);signal.removeEventListener('abort',abort);
+      audio.onended=null;audio.onerror=null;audio.pause();audio.src='';URL.revokeObjectURL(url);
+      document.body.classList.remove('speaking');error?reject(error):resolve();
+    };
+    const abort=()=>finish(new Error('playback_cancelled'));
+    const timer=setTimeout(()=>finish(new Error('playback_timeout')),115000);
+    signal.addEventListener('abort',abort,{once:true});
+    audio.onended=()=>finish();audio.onerror=()=>finish(new Error('playback_failed'));
+    document.body.classList.add('speaking');
+    try{Promise.resolve(audio.play()).catch(error=>finish(error))}catch(error){finish(error)}
+  });
+}
+async function runLanguageChat(){
+  if(languageChatClient?.busy){await languageChatClient.cancel();return}
+  if(languageChatStarting)return;
+  if(privacyMode||document.hidden||!loginOverlay.classList.contains('hidden'))return;
+  if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis()){
+    languageChatStatus.textContent='Bu sohbet yolu şu anda Windows PC içindir.';return;
+  }
+  if(!languageChatClient)languageChatClient=JarvisLanguageChat.createClient({
+    request:languageConversationRequest,play:playLanguageConversationAudio,
+    onState:(state,detail={})=>{
+      languageChatBtn.textContent=state==='idle'?'ÇOK DİLLİ SOHBET':'DUR';
+      voiceBtn.disabled=state!=='idle';
+      if(privacyMode||document.hidden)return;
+      if(state==='preparing')languageChatStatus.textContent='Ses desteği kontrol ediliyor; konuşmanızı bekliyor…';
+      else if(state==='playing')languageChatStatus.textContent=detail.locale+' · '+detail.voice;
+      else if(state==='confirm-language')languageChatStatus.textContent='Dil henüz kesinleşmedi. Düğmeye basıp bir cümle daha söyleyin.';
+      else if(state==='completed')languageChatStatus.textContent='Yanıt sona erdi. Yeni cümle için düğmeye basın.';
+      else if(state==='error')languageChatStatus.textContent='Sesli sohbet tamamlanamadı: '+detail.error;
+    },
+    onReply:result=>{coreSubtitle.textContent=result.reply;consoleStatus.textContent='DUYULAN: '+result.transcript;rememberJarvisSpeechEcho(result.reply)}
+  });
+  languageChatStarting=true;
+  const wakeWasEnabled=desktopWakeWordEnabled;
+  desktopWakeWordEnabled=false;localSttListening=true;voiceConversationActive=false;
+  clearTimeout(wakeWordRestartTimer);clearTimeout(conversationFollowupTimer);clearTimeout(bargeInRestartTimer);
+  try{
+    try{recognition?.abort()}catch(_){}
+    await stopJarvisSpeech('language-conversation-start',{listenAfter:false});
+    voiceConversationActive=false;
+    if(privacyMode||document.hidden||!loginOverlay.classList.contains('hidden'))return;
+    await languageChatClient.run();
+  }finally{languageChatStarting=false;localSttListening=false;desktopWakeWordEnabled=wakeWasEnabled;if(!privacyMode&&!document.hidden)scheduleDesktopWakeWord(700)}
+}
+if(!/Windows/i.test(navigator.userAgent)||isMobileJarvis()){
+  languageChatBtn.disabled=true;languageChatStatus.textContent='Çok dilli sohbet: Windows PC';
+}
+document.addEventListener('visibilitychange',()=>{if(document.hidden)languageChatClient?.cancel()});
+window.addEventListener('pagehide',()=>languageChatClient?.cancel());
 bootstrapSession();
 setInterval(()=>{if(!loginOverlay.classList.contains('hidden'))return;load().catch(()=>setAuthenticated(false))},2500);
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));

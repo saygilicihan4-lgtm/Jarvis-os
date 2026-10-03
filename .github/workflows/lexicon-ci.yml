@@ -44,3 +44,11 @@ jobs:
         run: python stt-language-selftest.py
       - name: Language session Worker HTTP integration
         run: node language-session-worker-selftest.js
+      - name: Language conversation output and playback receipts
+        run: node language-conversation-selftest.js
+      - name: Multilingual conversation UI lifecycle
+        run: node language-chat-ui-selftest.js
+      - name: Locale-bound SAPI renderer syntax
+        shell: pwsh
+        run: |
+          [scriptblock]::Create((Get-Content ./jarvis-language-sapi.ps1 -Raw)) | Out-Null

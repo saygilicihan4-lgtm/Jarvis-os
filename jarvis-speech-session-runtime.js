@@ -37,19 +37,24 @@ function createRuntime({root=__dirname,systemLocale='tr-TR',sttPort=8768,fetchIm
     })();
     try{return await probing}finally{probing=null}
   }
-  async function listen(id){
+  async function listen(id,{signal}={}){
     const row=get(id);
     if(listening||row.busy||row.session.activeTurn)throw new Error('language_turn_busy');
     listening=true;row.busy=true;row.evidence=null;row.captured=false;row.blockedSpeech=null;
+    const captureController=new AbortController(),abort=()=>captureController.abort();
+    const timeout=setTimeout(abort,20000);
+    if(signal?.aborted)abort();else signal?.addEventListener('abort',abort,{once:true});
     try{
       const stt=await discovery.discoverLocalStt({port:sttPort,registry,fetchImpl});
       const explicit=row.session.requested||learning.load(root).explicitLocale;
       if(!stt.ok||(!explicit&&!stt.automaticDetection))throw new Error('automatic_language_detection_unavailable');
       if(explicit&&!registry.supports('faster-whisper','stt',explicit))throw new Error('stt_language_not_in_loaded_model');
+      captureController.signal.throwIfAborted();
       const response=await fetchImpl('http://127.0.0.1:'+sttPort+'/listen',{
-        method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({language:explicit||'auto'}),signal:AbortSignal.timeout(20000)
+        method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({language:explicit||'auto'}),signal:captureController.signal
       });
       const result=await response.json();
+      captureController.signal.throwIfAborted();
       if(!response.ok||result.ok!==true||result.engine!=='faster-whisper'||typeof result.text!=='string'||!result.text.trim())throw new Error('stt_capture_failed');
       const evidence=result.meta?.language_detection,utteranceId=result.meta?.utterance_id;
       if(typeof utteranceId!=='string'||utteranceId.length<1||utteranceId.length>128||seenUtterances.has(utteranceId))throw new Error('duplicate_or_missing_utterance');
@@ -69,7 +74,7 @@ function createRuntime({root=__dirname,systemLocale='tr-TR',sttPort=8768,fetchIm
       return{ok:true,text:result.text.trim().slice(0,6000),decision,...status(id)};
     }catch(error){
       sessions.resetCandidate(row.session);learning.clearCandidate(root);throw error;
-    }finally{listening=false;row.busy=false;row.updatedAt=now()}
+    }finally{clearTimeout(timeout);signal?.removeEventListener('abort',abort);listening=false;row.busy=false;row.updatedAt=now()}
   }
   function begin(id){
     const row=get(id);
@@ -103,6 +108,11 @@ function createRuntime({root=__dirname,systemLocale='tr-TR',sttPort=8768,fetchIm
   }
   function setPreference(locale){return{ok:true,profile:learning.setExplicit(locale,root)}}
   function resetLearned(){return{ok:true,profile:learning.resetLearned(root)}}
-  return{create,status,probe,listen,begin,complete,setPreference,resetLearned};
+  function discardCapture(id,{resetCandidate=false}={}){
+    const row=get(id);row.captured=false;row.evidence=null;
+    if(resetCandidate)sessions.resetCandidate(row.session);
+    learning.clearCandidate(root);return{ok:true};
+  }
+  return{create,status,probe,listen,begin,complete,setPreference,resetLearned,discardCapture};
 }
 module.exports={VERSION,createRuntime};

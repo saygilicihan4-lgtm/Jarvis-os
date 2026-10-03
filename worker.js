@@ -9,6 +9,14 @@ function getSpeechSessionRuntime(){
   if(!speechSessionRuntime)speechSessionRuntime=require('./jarvis-speech-session-runtime').createRuntime({root:WORKSPACE,sttPort:LOCAL_STT_PORT});
   return speechSessionRuntime;
 }
+let languageConversation=null;
+function getLanguageConversation(){
+  if(!languageConversation){
+    const output=require('./jarvis-language-turn-output').createOutput({brainUrl:LOCAL_BRAIN_URL,model:LOCAL_BRAIN_MODEL});
+    languageConversation=require('./jarvis-language-conversation').createConversation({runtime:getSpeechSessionRuntime(),output});
+  }
+  return languageConversation;
+}
 let creatorEngine=null;
 try{creatorEngine=require('./jarvis-creator-engine')}catch(_){}
 let creatorWebMedia=null;
@@ -4067,6 +4075,35 @@ function startLocalTtsBridge(){
     res.setHeader('Access-Control-Allow-Headers','content-type');
     res.setHeader('Access-Control-Allow-Methods','GET,POST,OPTIONS');
     if(req.method==='OPTIONS'){res.writeHead(204);return res.end()}
+    if(req.method==='POST'&&req.url==='/language-conversation'){
+      let body='',tooLarge=false;
+      req.on('data',chunk=>{body+=chunk;if(body.length>16384){tooLarge=true;req.destroy()}});
+      req.on('end',async()=>{
+        if(tooLarge)return;
+        const controller=new AbortController();let conversation=null,sessionId=null;
+        const cancel=()=>{if(!res.writableEnded){controller.abort();if(conversation&&sessionId)try{conversation.cancel(sessionId)}catch(_){}}};
+        res.on('close',cancel);
+        try{
+          const d=JSON.parse(body||'{}');conversation=getLanguageConversation();sessionId=d.sessionId;
+          let result;
+          switch(d.action){
+            case 'create':result=conversation.create({requested:d.requested});break;
+            case 'turn':result=await conversation.turn(sessionId,{signal:controller.signal});break;
+            case 'acknowledge':result=conversation.acknowledge(sessionId,{receipt:d.receipt,played:d.played});break;
+            case 'cancel':result=conversation.cancel(sessionId);break;
+            default:throw new Error('unknown_language_conversation_action');
+          }
+          if(res.destroyed||res.writableEnded)return;
+          res.writeHead(result.ok?200:422,{'content-type':'application/json','cache-control':'no-store'});
+          res.end(JSON.stringify(result));
+        }catch(error){
+          if(res.destroyed||res.writableEnded)return;
+          res.writeHead(422,{'content-type':'application/json','cache-control':'no-store'});
+          res.end(JSON.stringify({ok:false,error:String(error.message||error).slice(0,160)}));
+        }finally{res.removeListener('close',cancel)}
+      });
+      return;
+    }
     // Experimental local integration API. Existing desktop/mobile speech paths
     // are unchanged until the response-language and synthesis wiring is verified.
     if(req.method==='POST'&&req.url==='/language-session'){
