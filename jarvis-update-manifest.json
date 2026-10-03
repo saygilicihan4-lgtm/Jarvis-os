@@ -92,6 +92,42 @@
       "signature": "UPDATER_VERSION='5.0'",
       "kind": "powershell-next",
       "min_bytes": 7000
+    },
+    {
+      "path": "jarvis-language-core.js",
+      "signature": "module.exports=",
+      "kind": "node",
+      "min_bytes": 400
+    },
+    {
+      "path": "jarvis-language-learning.js",
+      "signature": "module.exports=",
+      "kind": "node",
+      "min_bytes": 400
+    },
+    {
+      "path": "jarvis-speech-capabilities.js",
+      "signature": "module.exports=",
+      "kind": "node",
+      "min_bytes": 400
+    },
+    {
+      "path": "jarvis-speech-provider-discovery.js",
+      "signature": "module.exports=",
+      "kind": "node",
+      "min_bytes": 400
+    },
+    {
+      "path": "jarvis-session-language.js",
+      "signature": "module.exports=",
+      "kind": "node",
+      "min_bytes": 400
+    },
+    {
+      "path": "jarvis-speech-session-runtime.js",
+      "signature": "module.exports=",
+      "kind": "node",
+      "min_bytes": 400
     }
   ]
 }

@@ -1,0 +1,45 @@
+'use strict';
+const assert=require('assert/strict'),fs=require('fs'),os=require('os'),path=require('path');
+const lang=require('./jarvis-language-core'),learning=require('./jarvis-language-learning'),sessions=require('./jarvis-session-language');
+const root=fs.mkdtempSync(path.join(os.tmpdir(),'jarvis-session-language-'));
+let assertions=0;
+function check(value,message){assert.ok(value,message);assertions++}
+try{
+  for(const input of ['__proto__','constructor','not a locale','en--US','tr;exit',{},42,null])check(lang.normalizeLocale(input)===null,'reject malformed '+String(input));
+  check(lang.normalizeLocale('zh_Hant_TW')==='zh-Hant-TW','preserve script and region');
+  check(lang.normalizeLocale('sr-Latn-RS')==='sr-Latn-RS','preserve Latin Serbian');
+  for(const confidence of [NaN,Infinity,-1,1.1,'0.99',null,true])check(!learning.observe('de',{root,confidence}).ok,'reject invalid confidence');
+  check(!fs.existsSync(path.join(root,'.jarvis-memory')),'invalid observations must not create profile');
+  const s=sessions.createSession({systemLocale:'tr',root});let sequence=0;
+  const observe=(locale='de',extra={})=>sessions.observe(s,{locale,confidence:.95,sequence:++sequence,automatic:true,final:true,speechPlan:{ok:true,locale:lang.normalizeLocale(locale)},root,...extra});
+  observe();check(s.locale==='tr-TR'&&s.pending===null,'one detection cannot switch');
+  observe('de',{confidence:NaN});observe();check(!s.pending,'invalid evidence breaks consecutive detections');
+  observe();check(s.pending.locale==='de-DE'&&s.locale==='tr-TR','staged until turn boundary');
+  const first=sessions.beginTurn(s,{id:'turn-1',root});check(first.locale==='de-DE','apply at boundary');
+  observe('ja');observe('ja');check(sessions.resolve(s,{root}).locale==='de-DE','in-flight turn remains German');
+  check(!sessions.endTurn(s,'wrong').ok,'wrong completion cannot unlock');
+  check(sessions.endTurn(s,'turn-1').ok,'matching completion unlocks');
+  check(sessions.beginTurn(s,{id:'turn-2',root}).locale==='ja-JP','next turn receives Japanese');
+  sessions.endTurn(s,'turn-2');
+  check(!sessions.observe(s,{locale:'tr',sequence,root}).ok,'duplicate/out-of-order rejected');
+  check(!observe('de',{automatic:false}).ok,'forced decode cannot count');
+  check(!observe('de',{final:false}).ok,'partial transcript cannot count');
+  check(!observe('de',{speechPlan:{ok:false,locale:'de-DE'}}).ok,'unsupported speech cannot switch');
+  check(!fs.existsSync(path.join(root,'.jarvis-memory')),'session observations never persist by themselves');
+  learning.setExplicit('tr',root);
+  check(!observe('de').ok,'explicit preference locks detection');
+  check(sessions.resolve(s,{root}).locale==='tr-TR','explicit profile precedes session');
+  sessions.beginTurn(s,{id:'turn-3',root});learning.setExplicit('en',root);
+  check(sessions.resolve(s,{root}).locale==='tr-TR','preference update cannot change active turn');
+  sessions.endTurn(s,'turn-3');
+  check(sessions.beginTurn(s,{id:'turn-4',root}).locale==='en-US','new preference takes next turn');
+  learning.setExplicit(null,root);
+  learning.observe('de',{confidence:.91,root});learning.observe('fr',{confidence:.91,root});learning.observe('de',{confidence:.91,root});
+  check(!learning.load(root).learnedLocale,'mixed observations cannot accumulate a preference');
+  learning.observe('de',{confidence:.92,root});learning.observe('de',{confidence:.93,root});
+  check(learning.load(root).learnedLocale==='de-DE','three accepted observations persist');
+  learning.setExplicit('tr',root);learning.resetLearned(root);
+  check(learning.load(root).explicitLocale==='tr-TR'&&!learning.load(root).learnedLocale,'forget preserves explicit choice');
+  check(fs.readdirSync(path.join(root,'.jarvis-memory')).length===1,'no temporary profile files remain');
+  console.log('SESSION LANGUAGE SELFTEST PASS · '+assertions+' assertions');
+}finally{fs.rmSync(root,{recursive:true,force:true})}

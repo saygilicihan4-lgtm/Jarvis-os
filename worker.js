@@ -4,6 +4,11 @@ const os=require('os');
 const crypto=require('crypto');
 const childProcess=require('child_process');
 const http=require('http');
+let speechSessionRuntime=null;
+function getSpeechSessionRuntime(){
+  if(!speechSessionRuntime)speechSessionRuntime=require('./jarvis-speech-session-runtime').createRuntime({root:WORKSPACE,sttPort:LOCAL_STT_PORT});
+  return speechSessionRuntime;
+}
 let creatorEngine=null;
 try{creatorEngine=require('./jarvis-creator-engine')}catch(_){}
 let creatorWebMedia=null;
@@ -4062,6 +4067,38 @@ function startLocalTtsBridge(){
     res.setHeader('Access-Control-Allow-Headers','content-type');
     res.setHeader('Access-Control-Allow-Methods','GET,POST,OPTIONS');
     if(req.method==='OPTIONS'){res.writeHead(204);return res.end()}
+    // Experimental local integration API. Existing desktop/mobile speech paths
+    // are unchanged until the response-language and synthesis wiring is verified.
+    if(req.method==='POST'&&req.url==='/language-session'){
+      let body='',tooLarge=false;
+      req.on('data',chunk=>{body+=chunk;if(body.length>16384){tooLarge=true;req.destroy()}});
+      req.on('end',async()=>{
+        if(tooLarge)return;
+        try{
+          const d=JSON.parse(body||'{}'),runtime=getSpeechSessionRuntime();
+          let result;
+          switch(d.action){
+            case 'create':result=runtime.create({requested:d.requested});break;
+            case 'status':result=runtime.status(d.sessionId);break;
+            case 'probe':result=await runtime.probe();break;
+            case 'listen':result=await runtime.listen(d.sessionId);break;
+            case 'begin':result=runtime.begin(d.sessionId);break;
+            case 'complete':result=runtime.complete(d.sessionId,{turnId:d.turnId,successful:d.successful});break;
+            case 'set-preference':result=runtime.setPreference(d.locale);break;
+            case 'reset-learned':result=runtime.resetLearned();break;
+            default:throw new Error('unknown_language_session_action');
+          }
+          if(res.destroyed||res.writableEnded)return;
+          res.writeHead(result.ok?200:422,{'content-type':'application/json'});
+          res.end(JSON.stringify(result));
+        }catch(error){
+          if(res.destroyed||res.writableEnded)return;
+          res.writeHead(422,{'content-type':'application/json'});
+          res.end(JSON.stringify({ok:false,error:String(error.message||error).slice(0,160)}));
+        }
+      });
+      return;
+    }
     if(req.method==='GET'&&req.url==='/dialogue-feedback'){
       res.writeHead(200,{'content-type':'application/json'});
       return res.end(JSON.stringify({ok:true,...readDialogueFeedback()}));

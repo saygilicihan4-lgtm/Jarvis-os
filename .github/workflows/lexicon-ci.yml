@@ -36,3 +36,11 @@ jobs:
         run: node lexicon-ui-selftest.js
       - name: Adaptive Worker integration
         run: node lexicon-worker-selftest.js
+      - name: Safe session language switching
+        run: node session-language-selftest.js
+      - name: Runtime speech provider mapping and learning
+        run: node speech-runtime-selftest.js
+      - name: Automatic STT language evidence
+        run: python stt-language-selftest.py
+      - name: Language session Worker HTTP integration
+        run: node language-session-worker-selftest.js
