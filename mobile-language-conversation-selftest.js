@@ -70,6 +70,37 @@ const mobile=require('./public/mobile-language-chat');
   assert.equal(second.state,'completed');assert.equal(second.nextLocale,'ja-JP');assert.equal(captures,1,'explicit second tap reuses held transcript');assert.equal(calls.length,1);assert.equal(calls[0].locale,'ja-JP');
   assert.equal(calls[0].inputSource,'browser-speech');assert.equal(client.history.length,2);assert.equal(second.learning,false);
 
+  let privacyCaptures=0,privacyCalls=0;
+  const privacyClient=mobile.createClient({
+    capture:async()=>{privacyCaptures++;return'こんにちは'},
+    request:async data=>{privacyCalls++;return{ok:true,state:'reply-ready',reply:'こんにちは',locale:data.locale}},
+    play:async()=>{}
+  });
+  const held=await privacyClient.run({locale:'tr-TR'});
+  assert.equal(held.state,'confirm-language');assert.equal(privacyClient.pendingLocale,'ja-JP');
+  const cancelled=privacyClient.cancel();assert.equal(cancelled.pendingCleared,true);assert.equal(privacyClient.pendingLocale,null,'privacy/auth/background cancel must erase held transcript');
+  const afterCancel=await privacyClient.run({locale:'tr-TR'});
+  assert.equal(afterCancel.state,'confirm-language');assert.equal(privacyCaptures,2,'after lifecycle cancel the phone must capture again instead of reusing stale speech');assert.equal(privacyCalls,0);
+
+  let captureAborted=false,timeoutStates=[];
+  const timeoutClient=mobile.createClient({
+    capture:(_locale,signal)=>new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>{captureAborted=true;reject(new Error('capture_aborted'))},{once:true})),
+    request:async()=>{throw new Error('request_must_not_run')},play:async()=>{},captureTimeoutMs:15,
+    onState:(state,detail)=>timeoutStates.push({state,detail})
+  });
+  const timeoutResult=await timeoutClient.run({locale:'tr-TR'});
+  assert.equal(timeoutResult.ok,false);assert.equal(timeoutResult.cancelled,false);assert.equal(timeoutResult.error,'browser_stt_timeout');
+  assert.equal(captureAborted,true,'capture timeout must abort the underlying browser recognition');assert.equal(timeoutClient.busy,false);assert.equal(timeoutClient.history.length,0);
+  assert(timeoutStates.some(x=>x.state==='error'&&x.detail.error==='browser_stt_timeout'),'timeout must surface a truthful error state');
+
+  let manualAbortSeen=false;
+  const cancelClient=mobile.createClient({
+    capture:(_locale,signal)=>new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>{manualAbortSeen=true;reject(new Error('capture_aborted'))},{once:true})),
+    request:async()=>{throw new Error('request_must_not_run')},play:async()=>{},captureTimeoutMs:1000
+  });
+  const running=cancelClient.run({locale:'tr-TR'});await new Promise(r=>setTimeout(r,5));cancelClient.cancel();const manualResult=await running;
+  assert.equal(manualResult.cancelled,true);assert.equal(manualResult.error,'mobile_language_cancelled');assert.equal(manualAbortSeen,true);
+
   const failed=mobile.createClient({capture:async()=> 'Merhaba',request:async data=>({ok:true,state:'reply-ready',reply:'Merhaba',locale:data.locale}),play:async()=>{throw new Error('autoplay_blocked')}});
   const failedResult=await failed.run({locale:'tr-TR'});
   assert.equal(failedResult.ok,false);assert.equal(failed.history.length,0,'unplayed mobile reply cannot enter conversation history');
@@ -86,5 +117,5 @@ const mobile=require('./public/mobile-language-chat');
   assert(worker.includes('serviceMobileLanguage'),'worker must service the mobile language queue');
   assert(worker.includes('jarvis-mobile-language-conversation'),'worker must use locale-frozen conversation engine');
   assert(worker.includes('setInterval(()=>serviceMobileLanguage().catch(()=>{}),650)'),'mobile language relay must use conversational polling cadence');
-  console.log('MOBILE LANGUAGE CONVERSATION SELFTEST PASS · ambiguity-safe locale candidate, claimant binding, lease expiry, playback-gated history, no STT learning claim');
+  console.log('MOBILE LANGUAGE CONVERSATION SELFTEST PASS · claimant binding, lease expiry, capture timeout, pending transcript privacy, playback-gated history, no STT learning claim');
 })().catch(error=>{console.error(error);process.exitCode=1});
