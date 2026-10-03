@@ -1,6 +1,6 @@
 const childProcess=require('child_process');
 const path=require('path');
-const VERSION='1.6';
+const VERSION='1.7';
 function ps(script){
   if(process.platform!=='win32')return{ok:false,reason:'windows_required'};
   try{return{ok:true,output:childProcess.execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',script],{encoding:'utf8',windowsHide:true,timeout:12000,maxBuffer:1024*1024}).trim()}}catch(e){return{ok:false,reason:'powershell_failed',error:String(e.message||e).slice(0,300)}}
@@ -16,7 +16,11 @@ function chooseAudioDevice(output){
   try{const v=JSON.parse(output||'[]');const a=(Array.isArray(v)?v:[v]).filter(x=>x&&x.FriendlyName&&x.InstanceId);const ok=a.filter(x=>String(x.Status||'').toLowerCase()==='ok');const pool=ok.length?ok:a;if(pool.length===1)return{ok:true,device:pool[0]};if(!pool.length)return{ok:false,reason:'audio_device_not_found'};return{ok:false,reason:'multiple_audio_devices',candidates:pool.slice(0,10)};}catch{return{ok:false,reason:'audio_device_parse_failed'}}
 }
 function autoAudioDevice(){
-  const listed=pairedAudioDevices();if(!listed.ok)return listed;return chooseAudioDevice(listed.output);
+  const listed=coreAudioEndpoints();if(!listed.ok)return listed;
+  const active=listed.endpoints.filter(x=>x&&x.Id&&x.Name&&Number(x.State)===1);
+  if(active.length===1)return{ok:true,device:{FriendlyName:active[0].Name,Id:active[0].Id,State:active[0].State},source:'coreaudio'};
+  if(!active.length)return{ok:false,reason:'audio_device_not_found',source:'coreaudio'};
+  return{ok:false,reason:'multiple_audio_devices',candidates:active.slice(0,10),source:'coreaudio'};
 }
 function findAudioDevice(name){
   const wanted=normalizeName(name); if(!wanted)return{ok:false,reason:'device_name_required'};
