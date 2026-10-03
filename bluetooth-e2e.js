@@ -3,7 +3,7 @@ const fs=require('fs'),path=require('path'),crypto=require('crypto');
 let name=process.argv.slice(2).join(' ').trim();
 const report={version:2,platform:process.platform,deviceName:name,startedAt:new Date().toISOString(),steps:[]};
 function step(name,result){report.steps.push({name,result});return result}
-function finish(code){report.finishedAt=report.finishedAt||new Date().toISOString();const dir=path.join(__dirname,'.jarvis-memory','bluetooth-evidence');fs.mkdirSync(dir,{recursive:true});const body=JSON.stringify(report,null,2);const sha256=crypto.createHash('sha256').update(body).digest('hex');const stamp=report.finishedAt.replace(/[:.]/g,'-');const file=path.join(dir,stamp+'-'+(report.ok?'PASS':'FAIL')+'.json');fs.writeFileSync(file,body);console.log(JSON.stringify({...report,evidenceFile:file,evidenceSha256:sha256},null,2));process.exit(code)}
+function finish(code){report.finishedAt=report.finishedAt||new Date().toISOString();const dir=path.join(__dirname,'.jarvis-memory','bluetooth-evidence');fs.mkdirSync(dir,{recursive:true});const body=JSON.stringify(report,null,2);const sha256=crypto.createHash('sha256').update(body).digest('hex');const stamp=report.finishedAt.replace(/[:.]/g,'-');const file=path.join(dir,stamp+'-'+(report.ok?'PASS':'FAIL')+'.json');fs.writeFileSync(file,body);fs.writeFileSync(file+'.sha256',sha256+'  '+path.basename(file)+'\n');console.log(JSON.stringify({...report,evidenceFile:file,evidenceSha256:sha256,evidenceSha256File:file+'.sha256'},null,2));process.exit(code)}
 if(process.platform!=='win32'){report.ok=false;report.reason='windows_required';finish(2)}
 if(!name){
   const auto=step('auto_audio_target',bt.autoAudioDevice());
