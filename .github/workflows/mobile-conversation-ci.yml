@@ -1,0 +1,29 @@
+name: Jarvis Mobile Conversation CI
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  mobile-conversation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Syntax
+        run: |
+          node --check server.js
+          node --check worker.js
+          node --check jarvis-mobile-language-relay.js
+          node --check jarvis-mobile-language-conversation.js
+          node --check public/mobile-language-chat.js
+          node --check mobile-language-conversation-selftest.js
+      - name: Mobile multilingual conversation safety
+        run: |
+          node mobile-language-conversation-selftest.js
+          node mobile-tts-relay-selftest.js
+          node language-conversation-selftest.js
+          node language-chat-ui-selftest.js
