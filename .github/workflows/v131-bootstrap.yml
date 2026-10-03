@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: '20'
       - name: Apply deterministic v131 integration
-        run: node scripts/v131-apply-fixed.js
+        run: node scripts/v131-apply-final.js
       - name: Verify syntax and mobile conversation invariants
         run: |
           node --check server.js
