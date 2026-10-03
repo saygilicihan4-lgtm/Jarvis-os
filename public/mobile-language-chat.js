@@ -7,7 +7,7 @@
   const TTS_EVIDENCE_KEY='jarvisMobileTtsEvidenceV1';
   const TTS_EVIDENCE_TTL_MS=5*60*1000;
   const DEFAULT_CAPTURE_TIMEOUT_MS=20000;
-  const RUNTIME_TTS_INVALIDATION_REASONS=new Set(['tts_locale_not_in_runtime_inventory','runtime_tts_locale_ambiguous','runtime_voice_missing','invalid_runtime_tts_locale','runtime_speech_provider_unavailable']);
+  const RUNTIME_TTS_INVALIDATION_REASONS=new Set(['tts_locale_not_in_runtime_inventory','runtime_tts_locale_ambiguous']);
   const COMMON_LOCALES=[
     ['tr-TR','Türkçe'],['en-US','English (US)'],['en-GB','English (UK)'],['de-DE','Deutsch'],['fr-FR','Français'],
     ['es-ES','Español'],['it-IT','Italiano'],['pt-BR','Português (Brasil)'],['pt-PT','Português (Portugal)'],['nl-NL','Nederlands'],
