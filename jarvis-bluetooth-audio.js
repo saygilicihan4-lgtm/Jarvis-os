@@ -1,6 +1,6 @@
 const childProcess=require('child_process');
 const path=require('path');
-const VERSION='1.4';
+const VERSION='1.5';
 function ps(script){
   if(process.platform!=='win32')return{ok:false,reason:'windows_required'};
   try{return{ok:true,output:childProcess.execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',script],{encoding:'utf8',windowsHide:true,timeout:12000,maxBuffer:1024*1024}).trim()}}catch(e){return{ok:false,reason:'powershell_failed',error:String(e.message||e).slice(0,300)}}
@@ -12,6 +12,12 @@ function pairedAudioDevices(){
   return ps("Get-PnpDevice -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -and ($_.Class -eq 'AudioEndpoint' -or $_.Class -eq 'Media') } | Select-Object Status,Class,FriendlyName,InstanceId | ConvertTo-Json -Compress");
 }
 function normalizeName(name){return String(name||'').replace(/[\r\n]/g,' ').trim().slice(0,120)}
+function chooseAudioDevice(output){
+  try{const v=JSON.parse(output||'[]');const a=(Array.isArray(v)?v:[v]).filter(x=>x&&x.FriendlyName&&x.InstanceId);const ok=a.filter(x=>String(x.Status||'').toLowerCase()==='ok');const pool=ok.length?ok:a;if(pool.length===1)return{ok:true,device:pool[0]};if(!pool.length)return{ok:false,reason:'audio_device_not_found'};return{ok:false,reason:'multiple_audio_devices',candidates:pool.slice(0,10)};}catch{return{ok:false,reason:'audio_device_parse_failed'}}
+}
+function autoAudioDevice(){
+  const listed=pairedAudioDevices();if(!listed.ok)return listed;return chooseAudioDevice(listed.output);
+}
 function findAudioDevice(name){
   const wanted=normalizeName(name); if(!wanted)return{ok:false,reason:'device_name_required'};
   const q=wanted.replace(/'/g,"''");
@@ -62,10 +68,11 @@ function command(action,args={}){
   if(a==='list_audio')return pairedAudioDevices();
   if(a==='pair')return openBluetoothSettings();
   if(a==='find_audio')return findAudioDevice(args.deviceName);
+  if(a==='auto_audio')return autoAudioDevice();
   if(a==='select_output'){
     return selectOutput(args.deviceName);
   }
   if(['playpause','next','previous','stop','volumeup','volumedown','mute'].includes(a))return mediaKey(a);
   return{ok:false,reason:'unsupported_action'};
 }
-module.exports={VERSION,status,pairedAudioDevices,findAudioDevice,defaultAudioEndpoint,parseFoundDevice,setDefaultEndpoint,verifyDefaultEndpoint,selectOutput,openSoundOutputSettings,openBluetoothSettings,mediaKey,command};
+module.exports={VERSION,status,pairedAudioDevices,chooseAudioDevice,autoAudioDevice,findAudioDevice,defaultAudioEndpoint,parseFoundDevice,setDefaultEndpoint,verifyDefaultEndpoint,selectOutput,openSoundOutputSettings,openBluetoothSettings,mediaKey,command};
