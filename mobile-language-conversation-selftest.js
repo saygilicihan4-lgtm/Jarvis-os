@@ -31,24 +31,28 @@ const mobile=require('./public/mobile-language-chat');
   const unsupported=await engine.turn({text:'Bonjour',locale:'fr-FR',inputSource:'browser-speech'});
   assert.equal(unsupported.ok,false);assert.equal(unsupported.reason,'tts_locale_not_in_runtime_inventory');
 
-  assert.equal(mobile.safeLanguageHint('Merhaba, nasılsın?'),'tr-TR');
-  assert.equal(mobile.safeLanguageHint('Привет'),'ru-RU');
-  assert.equal(mobile.safeLanguageHint('مرحبا'),'ar-SA');
+  assert.equal(mobile.safeLanguageHint('Привет'),null,'generic Cyrillic must not be guessed as Russian');
+  assert.equal(mobile.safeLanguageHint('مرحبا'),null,'generic Arabic script must not be guessed as ar-SA');
+  assert.equal(mobile.safeLanguageHint('Merhaba, nasılsın?'),null,'Latin-script Turkish must not be region-guessed from characters alone');
+  assert.equal(mobile.safeLanguageHint('Hello there'),null,'plain Latin text cannot be treated as automatic language evidence');
+  assert.equal(mobile.safeLanguageHint('你好'),null,'Han-only text is ambiguous with Japanese and must not be region-guessed');
   assert.equal(mobile.safeLanguageHint('こんにちは'),'ja-JP');
   assert.equal(mobile.safeLanguageHint('안녕하세요'),'ko-KR');
-  assert.equal(mobile.safeLanguageHint('Straße'),'de-DE');
-  assert.equal(mobile.safeLanguageHint('Hello there'),null,'plain Latin text cannot be treated as automatic language evidence');
+  assert.equal(mobile.safeLanguageHint('Καλημέρα'),'el-GR');
+  assert.equal(mobile.safeLanguageHint('สวัสดี'),'th-TH');
+  assert.equal(mobile.safeLanguageHint('Բարեւ'),'hy-AM');
+  assert.equal(mobile.safeLanguageHint('გამარჯობა'),'ka-GE');
 
   let captures=0,calls=[],plays=0,states=[];
   const client=mobile.createClient({
-    capture:async()=>{captures++;return'Привет'},
-    request:async(data)=>{calls.push(data);return{ok:true,state:'reply-ready',reply:'Здравствуйте',locale:data.locale,learning:false}},
+    capture:async()=>{captures++;return'こんにちは'},
+    request:async(data)=>{calls.push(data);return{ok:true,state:'reply-ready',reply:'こんにちは',locale:data.locale,learning:false}},
     play:async()=>{plays++},onState:(state,detail)=>states.push({state,detail})
   });
   const first=await client.run({locale:'tr-TR'});
-  assert.equal(first.state,'confirm-language');assert.equal(first.locale,'ru-RU');assert.equal(calls.length,0,'heuristic mismatch must not silently send or switch');assert.equal(plays,0);
+  assert.equal(first.state,'confirm-language');assert.equal(first.locale,'ja-JP');assert.equal(calls.length,0,'candidate mismatch must not silently send or switch');assert.equal(plays,0);
   const second=await client.run({locale:'tr-TR'});
-  assert.equal(second.state,'completed');assert.equal(second.nextLocale,'ru-RU');assert.equal(captures,1,'explicit second tap reuses held transcript');assert.equal(calls.length,1);assert.equal(calls[0].locale,'ru-RU');
+  assert.equal(second.state,'completed');assert.equal(second.nextLocale,'ja-JP');assert.equal(captures,1,'explicit second tap reuses held transcript');assert.equal(calls.length,1);assert.equal(calls[0].locale,'ja-JP');
   assert.equal(calls[0].inputSource,'browser-speech');assert.equal(client.history.length,2);assert.equal(second.learning,false);
 
   const failed=mobile.createClient({capture:async()=> 'Merhaba',request:async data=>({ok:true,state:'reply-ready',reply:'Merhaba',locale:data.locale}),play:async()=>{throw new Error('autoplay_blocked')}});
@@ -67,5 +71,5 @@ const mobile=require('./public/mobile-language-chat');
   assert(worker.includes('serviceMobileLanguage'),'worker must service the mobile language queue');
   assert(worker.includes('jarvis-mobile-language-conversation'),'worker must use locale-frozen conversation engine');
   assert(worker.includes('setInterval(()=>serviceMobileLanguage().catch(()=>{}),650)'),'mobile language relay must use conversational polling cadence');
-  console.log('MOBILE LANGUAGE CONVERSATION SELFTEST PASS · client-requested locale, confirmation gate, claimant binding, playback-gated history, no STT learning claim');
+  console.log('MOBILE LANGUAGE CONVERSATION SELFTEST PASS · ambiguity-safe locale candidate, explicit confirmation, claimant binding, playback-gated history, no STT learning claim');
 })().catch(error=>{console.error(error);process.exitCode=1});
