@@ -254,6 +254,8 @@ jobs:
         run: node bluetooth-target-proof-selftest.js
       - name: Bluetooth evidence integrity selftest
         run: node bluetooth-evidence-integrity-selftest.js
+      - name: Multilingual language core selftest
+        run: node language-core-selftest.js
       - name: Safe PC mission selftest
         run: node pc-mission-selftest.js
       - name: Workspace file engine selftest

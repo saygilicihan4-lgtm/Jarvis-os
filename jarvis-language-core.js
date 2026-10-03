@@ -1,0 +1,6 @@
+const VERSION='1.0';
+const ALIASES={tr:'tr-TR',en:'en-US',de:'de-DE',fr:'fr-FR',es:'es-ES',it:'it-IT',pt:'pt-BR',ru:'ru-RU',ar:'ar-SA',ja:'ja-JP',ko:'ko-KR',zh:'zh-CN',hi:'hi-IN'};
+function normalizeLocale(v){const s=String(v||'').trim().replace('_','-');if(!s)return null;const low=s.toLowerCase();if(ALIASES[low])return ALIASES[low];const p=s.split('-');if(p.length===1)return p[0].toLowerCase();return p[0].toLowerCase()+'-'+p[1].toUpperCase()}
+function resolveLanguage({requested,detected,profileLocale,systemLocale}={}){for(const x of [requested,detected,profileLocale,systemLocale]){const locale=normalizeLocale(x);if(locale)return{ok:true,locale,language:locale.split('-')[0],source:x===requested?'requested':x===detected?'detected':x===profileLocale?'profile':'system'}}return{ok:true,locale:'en-US',language:'en',source:'fallback'}}
+function speechPlan(input={}){const r=resolveLanguage(input);return{...r,sttLocale:r.locale,ttsLocale:r.locale,fallbackAllowed:true,requireExplicitFallbackNotice:true}}
+module.exports={VERSION,ALIASES,normalizeLocale,resolveLanguage,speechPlan};
