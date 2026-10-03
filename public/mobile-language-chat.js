@@ -3,6 +3,7 @@
   else root.JarvisMobileLanguageChat=factory();
 })(typeof globalThis==='object'?globalThis:this,function(){
   'use strict';
+  const DEFAULT_CAPTURE_TIMEOUT_MS=20000;
   function safeLanguageHint(text){
     const s=String(text||'');
     // Only emit a locale candidate for scripts that are strong enough to be
@@ -21,7 +22,19 @@
     if(!Array.isArray(value))return[];
     return value.slice(-8).filter(x=>x&&['user','assistant'].includes(x.role)&&typeof x.content==='string'&&x.content.trim()).map(x=>({role:x.role,content:x.content.replace(/\s+/g,' ').trim().slice(0,1800)}));
   }
-  function createClient({capture,request,play,onState=()=>{},onReply=()=>{},hint=safeLanguageHint}={}){
+  function captureWithTimeout(capture,locale,controller,timeoutMs){
+    const signal=controller.signal,limit=Number.isFinite(timeoutMs)?Math.max(5,Math.min(60000,timeoutMs)):DEFAULT_CAPTURE_TIMEOUT_MS;
+    return new Promise((resolve,reject)=>{
+      let settled=false,timedOut=false;
+      const finish=(fn,value)=>{if(settled)return;settled=true;clearTimeout(timer);signal.removeEventListener('abort',onAbort);fn(value)};
+      const onAbort=()=>finish(reject,new Error(timedOut?'browser_stt_timeout':'mobile_language_cancelled'));
+      const timer=setTimeout(()=>{if(settled)return;timedOut=true;controller.abort()},limit);
+      signal.addEventListener('abort',onAbort,{once:true});
+      if(signal.aborted){onAbort();return}
+      Promise.resolve().then(()=>capture(locale,signal)).then(value=>finish(resolve,value),error=>finish(reject,error instanceof Error?error:new Error(String(error||'browser_stt_failed'))));
+    });
+  }
+  function createClient({capture,request,play,onState=()=>{},onReply=()=>{},hint=safeLanguageHint,captureTimeoutMs=DEFAULT_CAPTURE_TIMEOUT_MS}={}){
     let busy=false,pending=null,history=[],controller=null;
     async function run({locale}={}){
       if(busy)return{ok:false,state:'busy'};
@@ -34,7 +47,7 @@
           onState('language-confirmed',{locale:targetLocale,transcript:text});
         }else{
           onState('listening',{locale});
-          text=String(await capture(locale,active.signal)||'').replace(/\s+/g,' ').trim().slice(0,1800);
+          text=String(await captureWithTimeout(capture,locale,active,captureTimeoutMs)||'').replace(/\s+/g,' ').trim().slice(0,1800);
           active.signal.throwIfAborted();
           if(!text)throw new Error('empty_transcript');
           const candidate=hint(text,locale);
@@ -56,15 +69,20 @@
         const completed={...result,state:'completed',nextLocale:targetLocale,historyCommitted:true,learning:false,deviceE2eVerified:false};
         onState('completed',completed);return completed;
       }catch(error){
-        if(!active.signal.aborted)onState('error',{error:String(error.message||error)});
-        return{ok:false,cancelled:active.signal.aborted,error:String(error.message||error),learning:false,deviceE2eVerified:false};
+        const message=String(error&&error.message||error),timedOut=message==='browser_stt_timeout';
+        if(!active.signal.aborted||timedOut)onState('error',{error:message});
+        return{ok:false,cancelled:active.signal.aborted&&!timedOut,error:message,learning:false,deviceE2eVerified:false};
       }finally{
         if(controller===active){controller=null;busy=false;onState('idle')}
       }
     }
-    function cancel(){controller?.abort();return{ok:true,cancelled:true}}
-    function clearPending(){pending=null}
+    function cancel(){
+      pending=null;
+      controller?.abort();
+      return{ok:true,cancelled:true,pendingCleared:true};
+    }
+    function clearPending(){const had=!!pending;pending=null;return{ok:true,cleared:had}}
     return{run,cancel,clearPending,get busy(){return busy},get pendingLocale(){return pending?.locale||null},get history(){return cleanHistory(history)}};
   }
-  return{safeLanguageHint,cleanHistory,createClient};
+  return{DEFAULT_CAPTURE_TIMEOUT_MS,safeLanguageHint,cleanHistory,captureWithTimeout,createClient};
 });
