@@ -101,9 +101,10 @@
           preferenceSaved,preferenceLocale:preferredLocale,preferenceEvidence:preferenceSaved?'explicit-confirmation-plus-playback':null,deviceE2eVerified:false};
         onState('completed',completed);return completed;
       }catch(error){
-        const message=String(error&&error.message||error),timedOut=message==='browser_stt_timeout';
-        if(!active.signal.aborted||timedOut)onState('error',{error:message});
-        return{ok:false,cancelled:active.signal.aborted&&!timedOut,error:message,learning:false,preferenceSaved:false,deviceE2eVerified:false};
+        const rawMessage=String(error&&error.message||error),timedOut=rawMessage==='browser_stt_timeout';
+        const cancelled=active.signal.aborted&&!timedOut,message=cancelled?'mobile_language_cancelled':rawMessage;
+        if(!cancelled)onState('error',{error:message});
+        return{ok:false,cancelled,error:message,learning:false,preferenceSaved:false,deviceE2eVerified:false};
       }finally{
         if(controller===active){controller=null;busy=false;onState('idle')}
       }
