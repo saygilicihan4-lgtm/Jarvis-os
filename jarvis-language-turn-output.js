@@ -5,7 +5,7 @@ const VERSION='1.1';
 function validatePlan(context,speech){
   const locale=normalizeLocale(context?.locale),ttsLocale=normalizeLocale(speech?.ttsLocale);
   const exact=!!locale&&ttsLocale===locale;
-  const uniqueRuntimeMatch=!!locale&&!locale.includes('-')&&speech?.localeResolution==='unique_runtime_language_match'&&
+  const uniqueRuntimeMatch=!!locale&&!locale.includes('-')&&speech?.localeResolution==='unique_runtime_language_match'&&speech?.evidenceLevel==='runtime_inventory'&&
     !!ttsLocale&&ttsLocale.split('-')[0]===locale&&ttsLocale!==locale;
   if(!locale||speech?.ok!==true||speech.locale!==locale||(!exact&&!uniqueRuntimeMatch)||speech.cost!==0||speech.fallbackUsed!==false||
     !['edge-tts','windows-sapi'].includes(speech.ttsProvider)||typeof speech.voice!=='string'||!speech.voice||speech.voice.length>200)
