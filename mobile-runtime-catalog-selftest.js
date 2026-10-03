@@ -38,6 +38,7 @@ function listMock(){
   const success=mobile.createClient({storage:successStore,now:()=>now,capture:async()=> 'merhaba',request:async data=>({ok:true,state:'reply-ready',reply:'Merhaba.',locale:data.locale,ttsLocale:data.locale,provider:'edge-tts',voice:'tr-TR-AhmetNeural',localeResolution:'exact',speechEvidence:'runtime_inventory'}),play:async()=>{played++}});
   const successResult=await success.run({locale:'tr-TR'});assert.equal(successResult.state,'completed');assert.equal(played,1);assert.equal(successResult.runtimeTtsVerified,true);assert.equal(successResult.sttVerified,false);
   assert.equal(success.runtimeTtsEvidence.length,1);assert.equal(success.selectLocale('tr-TR').runtimeTtsEvidence.ttsVerified,true,'fresh evidence may be surfaced on explicit selection');
+  success.forgetPreference();
 
   assert.equal(mobile.shouldInvalidateTtsEvidence('tts_locale_not_in_runtime_inventory'),true);
   assert.equal(mobile.shouldInvalidateTtsEvidence('runtime_tts_locale_ambiguous'),true);
