@@ -5,6 +5,16 @@ const relay=require('./jarvis-mobile-language-relay');
 const {createEngine}=require('./jarvis-mobile-language-conversation');
 const mobile=require('./public/mobile-language-chat');
 
+function memoryStorage(seed={}){
+  const rows=new Map(Object.entries(seed));
+  return{
+    getItem:key=>rows.has(key)?rows.get(key):null,
+    setItem:(key,value)=>rows.set(key,String(value)),
+    removeItem:key=>rows.delete(key),
+    raw:key=>rows.get(key)||null
+  };
+}
+
 (async()=>{
   let clock=1000;
   const request=relay.createRequest({id:'q1',text:'  Guten   Tag  ',locale:'de-de',inputSource:'browser-speech',history:[{role:'system',content:'drop me'},{role:'user',content:'hello'}],now:()=>clock});
@@ -46,6 +56,8 @@ const mobile=require('./public/mobile-language-chat');
   const unsupported=await engine.turn({text:'Bonjour',locale:'fr-FR',inputSource:'browser-speech'});
   assert.equal(unsupported.ok,false);assert.equal(unsupported.reason,'tts_locale_not_in_runtime_inventory');
 
+  assert.equal(mobile.canonicalLocale('de-de'),'de-DE');
+  assert.equal(mobile.canonicalLocale('../../bad'),null);
   assert.equal(mobile.safeLanguageHint('Привет'),null,'generic Cyrillic must not be guessed as Russian');
   assert.equal(mobile.safeLanguageHint('مرحبا'),null,'generic Arabic script must not be guessed as ar-SA');
   assert.equal(mobile.safeLanguageHint('Merhaba, nasılsın?'),null,'Latin-script Turkish must not be region-guessed from characters alone');
@@ -58,21 +70,56 @@ const mobile=require('./public/mobile-language-chat');
   assert.equal(mobile.safeLanguageHint('Բարեւ'),'hy-AM');
   assert.equal(mobile.safeLanguageHint('გამარჯობა'),'ka-GE');
 
+  const explicitStorage=memoryStorage(),explicitStore=mobile.createPreferenceStore(explicitStorage,{now:()=>123456});
   let captures=0,calls=[],plays=0,states=[];
   const client=mobile.createClient({
     capture:async()=>{captures++;return'こんにちは'},
     request:async(data)=>{calls.push(data);return{ok:true,state:'reply-ready',reply:'こんにちは',locale:data.locale,learning:false}},
-    play:async()=>{plays++},onState:(state,detail)=>states.push({state,detail})
+    play:async()=>{plays++},onState:(state,detail)=>states.push({state,detail}),preferenceStore:explicitStore
   });
   const first=await client.run({locale:'tr-TR'});
   assert.equal(first.state,'confirm-language');assert.equal(first.locale,'ja-JP');assert.equal(calls.length,0,'candidate mismatch must not silently send or switch');assert.equal(plays,0);
+  assert.equal(explicitStore.read(),null,'a language hint alone must never become a persisted preference');
   const second=await client.run({locale:'tr-TR'});
   assert.equal(second.state,'completed');assert.equal(second.nextLocale,'ja-JP');assert.equal(captures,1,'explicit second tap reuses held transcript');assert.equal(calls.length,1);assert.equal(calls[0].locale,'ja-JP');
   assert.equal(calls[0].inputSource,'browser-speech');assert.equal(client.history.length,2);assert.equal(second.learning,false);
+  assert.equal(second.devicePreferenceSaved,true,'explicit confirmation plus successful playback persists only the locale');
+  assert.deepEqual(explicitStore.read(),{version:1,locale:'ja-JP',source:'explicit-confirmation',confirmedAt:123456});
+  assert.equal(explicitStorage.raw(mobile.PREFERENCE_KEY).includes('こんにちは'),false,'transcripts must never be persisted with the device language preference');
 
-  const failed=mobile.createClient({capture:async()=> 'Merhaba',request:async data=>({ok:true,state:'reply-ready',reply:'Merhaba',locale:data.locale}),play:async()=>{throw new Error('autoplay_blocked')}});
+  let restoredCaptureLocale=null;
+  const restored=mobile.createClient({
+    capture:async locale=>{restoredCaptureLocale=locale;return'hello'},
+    request:async data=>({ok:true,state:'reply-ready',reply:'ok',locale:data.locale}),
+    play:async()=>{},hint:()=>null,preferenceStore:explicitStore
+  });
+  const restoredResult=await restored.run({locale:'tr-TR'});
+  assert.equal(restoredResult.state,'completed');assert.equal(restoredCaptureLocale,'ja-JP','new phone client restores explicitly confirmed device locale');
+  assert.equal(restoredResult.nextLocale,'ja-JP');assert.equal(restoredResult.devicePreferenceSaved,false,'ordinary turns cannot rewrite preference evidence');
+
+  const ordinaryStore=mobile.createPreferenceStore(memoryStorage(),{now:()=>200000});
+  const ordinary=mobile.createClient({
+    capture:async()=> 'Merhaba',
+    request:async data=>({ok:true,state:'reply-ready',reply:'Merhaba',locale:data.locale}),
+    play:async()=>{},hint:()=>null,preferenceStore:ordinaryStore
+  });
+  const ordinaryResult=await ordinary.run({locale:'tr-TR'});
+  assert.equal(ordinaryResult.state,'completed');assert.equal(ordinaryStore.read(),null,'successful ordinary conversation is not explicit language preference consent');
+
+  const failedStore=mobile.createPreferenceStore(memoryStorage(),{now:()=>300000});
+  const failed=mobile.createClient({
+    capture:async()=> 'こんにちは',
+    request:async data=>({ok:true,state:'reply-ready',reply:'こんにちは',locale:data.locale}),
+    play:async()=>{throw new Error('autoplay_blocked')},preferenceStore:failedStore
+  });
+  assert.equal((await failed.run({locale:'tr-TR'})).state,'confirm-language');
   const failedResult=await failed.run({locale:'tr-TR'});
   assert.equal(failedResult.ok,false);assert.equal(failed.history.length,0,'unplayed mobile reply cannot enter conversation history');
+  assert.equal(failedStore.read(),null,'failed playback cannot persist an explicitly confirmed locale');
+
+  const poisonedStorage=memoryStorage({[mobile.PREFERENCE_KEY]:JSON.stringify({version:1,locale:'ja-JP',source:'browser-speech',confirmedAt:400000,transcript:'secret'})});
+  const poisonedStore=mobile.createPreferenceStore(poisonedStorage,{now:()=>400001});
+  assert.equal(poisonedStore.read(),null,'browser-speech evidence cannot masquerade as explicit preference');
 
   const html=fs.readFileSync('public/index.html','utf8'),worker=fs.readFileSync('worker.js','utf8'),server=fs.readFileSync('server.js','utf8');
   assert(html.includes('/mobile-language-chat.js'),'mobile client script must be loaded');
@@ -86,5 +133,5 @@ const mobile=require('./public/mobile-language-chat');
   assert(worker.includes('serviceMobileLanguage'),'worker must service the mobile language queue');
   assert(worker.includes('jarvis-mobile-language-conversation'),'worker must use locale-frozen conversation engine');
   assert(worker.includes('setInterval(()=>serviceMobileLanguage().catch(()=>{}),650)'),'mobile language relay must use conversational polling cadence');
-  console.log('MOBILE LANGUAGE CONVERSATION SELFTEST PASS · ambiguity-safe locale candidate, claimant binding, lease expiry, playback-gated history, no STT learning claim');
+  console.log('MOBILE LANGUAGE CONVERSATION SELFTEST PASS · explicit device preference requires confirmation + playback, claimant binding, lease expiry, no STT learning claim');
 })().catch(error=>{console.error(error);process.exitCode=1});
