@@ -1,6 +1,7 @@
 const fs=require('fs');
 const path=require('path');
 const crypto=require('crypto');
+const approvalLifecycle=require('./jarvis-approval-lifecycle');
 
 const MISSION_ENGINE_VERSION='1.0';
 const OPEN_STATUSES=new Set(['queued','running','waiting_dependency','needs_verification']);
@@ -128,6 +129,7 @@ function startStep(workspace,id,{allowUncertainRetry=false}={}){
     return saveMission(workspace,m);
   }
   if(step.status==='running'){
+    approvalLifecycle.revokeApproval(m,'interrupted_in_flight');
     step.status='uncertain';
     step.error={code:'INTERRUPTED_IN_FLIGHT',message:'Step was running when execution was interrupted',at:now()};
     m.status='needs_verification';
@@ -167,6 +169,10 @@ function completeStep(workspace,id,{artifact=null,meta=null}={}){
 function failStep(workspace,id,{code='STEP_FAILED',message='Step failed',retryable=false,dependency=null,uncertain=false}={}){
   const m=loadMission(workspace,id);if(!m)throw new Error('Mission not found');
   const step=currentStep(m);if(!step)throw new Error('Mission step not found');
+  // Revoke on the freshly loaded object before the atomic save. Mutating a
+  // caller's copy does not survive this function's loadMission().
+  approvalLifecycle.revokeApproval(m,String(code||'step_failed').toLowerCase());
+  if(dependency==='approval')approvalLifecycle.requestApproval(m);
   step.status=uncertain?'uncertain':(retryable?'blocked':'failed');
   step.error={code:String(code||'STEP_FAILED').slice(0,80),message:String(message||'Step failed').slice(0,1200),retryable:!!retryable,dependency:dependency?String(dependency).slice(0,120):null,at:now()};
   m.status=uncertain?'needs_verification':(retryable?'waiting_dependency':'failed');
@@ -177,6 +183,7 @@ function retryBlockedStep(workspace,id){
   const m=loadMission(workspace,id);if(!m)throw new Error('Mission not found');
   const step=currentStep(m);if(!step)throw new Error('Mission step not found');
   if(step.status!=='blocked')return clone(m);
+  approvalLifecycle.revokeApproval(m,'blocked_step_retry');
   step.status='pending';step.error=null;
   m.status='queued';
   addHistory(m,'step_retry_armed',{step:step.name});
@@ -193,6 +200,7 @@ function resolveUncertainStep(workspace,id,{completed=false,artifact=null,note='
     if(m.currentStep>=m.steps.length-1){m.status='completed';m.completedAt=now()}
     else{m.currentStep++;m.status='queued'}
   }else{
+    approvalLifecycle.revokeApproval(m,'uncertain_step_retry');
     step.status='pending';step.error=null;
     m.status='queued';
     addHistory(m,'uncertain_step_verified_retry',{step:step.name,note:String(note||'').slice(0,240)});
@@ -205,6 +213,7 @@ function recoverInterruptedMissions(workspace){
     if(row.status!=='running')continue;
     const step=currentStep(row);
     if(!step||step.status!=='running')continue;
+    approvalLifecycle.revokeApproval(row,'process_restarted');
     step.status='uncertain';
     step.error={code:'PROCESS_RESTARTED_DURING_STEP',message:'JARVIS restarted while this step was in flight',retryable:false,at:now()};
     row.status='needs_verification';
@@ -212,6 +221,22 @@ function recoverInterruptedMissions(workspace){
     saveMission(workspace,row);changed.push(row.id);
   }
   return changed;
+}
+function approveStep(workspace,id,{surface='',targetReason='',nowMs=Date.now()}={}){
+  const m=loadMission(workspace,id);if(!m)throw new Error('Mission not found');
+  const out=approvalLifecycle.grantApproval(m,{surface,targetReason,nowMs});
+  if(!out.ok){
+    // Persist a refreshed review request, never a grant for changed/legacy data.
+    saveMission(workspace,m);
+    const e=new Error(out.code==='APPROVAL_REVIEW_REQUIRED'
+      ?'Görev içeriği veya onay süresi değişti. Görevi yeniden inceleyip tekrar açık onay verin.'
+      :'Bu görev şu anda geçerli açık kullanıcı onayı beklemiyor.');
+    e.code=out.code;throw e;
+  }
+  const step=currentStep(m);
+  step.status='pending';step.error=null;m.status='queued';
+  addHistory(m,'step_explicitly_approved',{step:step.name});
+  return saveMission(workspace,m);
 }
 function summarizeMission(m){
   if(!m)return null;
@@ -246,5 +271,6 @@ module.exports={
   retryBlockedStep,
   resolveUncertainStep,
   recoverInterruptedMissions,
+  approveStep,
   summarizeMission
 };

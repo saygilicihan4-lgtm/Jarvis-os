@@ -107,7 +107,7 @@ const missionDir=path.join(approvalRoot,'.jarvis-missions');
 fs.mkdirSync(missionDir,{recursive:true});
 const missionFile=path.join(missionDir,'M-ABCDEF123456.json');
 function missionFixture(){
-  return{
+  const mission={
     schema:1,
     engine:'JARVIS_MISSION_ENGINE',
     version:'1.0',
@@ -146,6 +146,13 @@ function missionFixture(){
       }
     ]
   };
+  const lifecycle=require('./jarvis-approval-lifecycle');
+  const step=mission.steps[1],at=Date.parse(step.meta.approvedAt);
+  mission.status='waiting_dependency';step.status='blocked';step.error={dependency:'approval'};
+  lifecycle.requestApproval(mission,at);
+  assert.strictEqual(lifecycle.grantApproval(mission,{surface:'shopify',targetReason:'explicit_surface',nowMs:at}).ok,true);
+  mission.status='running';step.status='running';step.error=null;
+  return mission;
 }
 function saveMission(mission){
   fs.writeFileSync(missionFile,JSON.stringify(mission,null,2),'utf8');

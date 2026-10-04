@@ -365,6 +365,7 @@ function resolveYouTubePublishApproval(workspace,existing,id,proof,{nowMs=Date.n
   const publishStep=mission.steps[currentIndex];
   if(!publishStep||publishStep.name!=='youtube_publish'||publishStep.status!=='running')throw youtubeApprovalError('Aktif mission adımı youtube_publish değil.');
   if(!(publishStep.meta&&publishStep.meta.requiresApproval===true))throw youtubeApprovalError('YouTube publish step explicit approval gerektirmiyor olarak işaretlenmiş; fail-closed.');
+  if(!require('./jarvis-approval-lifecycle').validateApproval(mission,{nowMs:now}).ok)throw youtubeApprovalError('YouTube approval süresi veya içerik bağı geçersiz.');
   const diskApproved=canonicalUtcIso(publishStep.meta.approvedAt);
   const publishStarted=canonicalUtcIso(publishStep.startedAt);
   if(!diskApproved||diskApproved.value!==approved.value)throw youtubeApprovalError('Caller approval timestamp aktif mission onayıyla birebir eşleşmiyor.');
@@ -376,6 +377,8 @@ function resolveYouTubePublishApproval(workspace,existing,id,proof,{nowMs=Date.n
   return{
     missionId,
     approvedAt:approved.value,
+    approvalRequestId:publishStep.meta.approvalRequestId,
+    approvalPayloadSha256:publishStep.meta.approvalPayloadSha256,
     draftCompletedAt:draftCompleted.value,
     publishStartedAt:publishStarted.value
   };
@@ -438,6 +441,11 @@ async function publishPreparedDraft(operator,workspace,{missionId='',approvedAt=
     return{ok:false,code:'YOUTUBE_STALE_SUCCESS_MARKER',retryable:false,uncertain:true,receipt,message:'Publish tıklamasından önce sayfada eski bir yayın başarı işareti zaten görünüyordu. Yanlış başarı kanıtını kullanmamak için PUBLIC adımı durduruldu.'};
   }
 
+  // Re-read the persisted grant after browser awaits, immediately before effect.
+  const latestApproval=resolveYouTubePublishApproval(workspace,existing,id,approvedAt);
+  if(latestApproval.approvalRequestId!==approval.approvalRequestId||latestApproval.approvalPayloadSha256!==approval.approvalPayloadSha256){
+    throw youtubeApprovalError('YouTube onayı işlem sırasında değişti.');
+  }
   const preflight={
     ...existing,
     updatedAt:new Date().toISOString(),

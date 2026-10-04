@@ -29,6 +29,8 @@ function Download-RepoFile([string]$Name) {
 Write-Host "[1/9] JARVIS dosyalari guncelleniyor..." -ForegroundColor Yellow
 $files = @(
   "worker.js",
+  "jarvis-approval-intent.js",
+  "jarvis-approval-lifecycle.js",
   "jarvis-language-turn-output.js",
   "jarvis-language-conversation.js",
   "jarvis-language-sapi.ps1",
