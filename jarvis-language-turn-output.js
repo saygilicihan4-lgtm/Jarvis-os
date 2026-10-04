@@ -2,8 +2,9 @@
 const fs=require('fs'),os=require('os'),path=require('path'),cp=require('child_process');
 const {normalizeLocale}=require('./jarvis-language-core');
 const triCore=require('./jarvis-tri-core-personality');
+const cognitive=require('./jarvis-tri-core-cognitive-state');
 const {createDeliberator,advisoryBlock}=require('./jarvis-tri-core-deliberation');
-const VERSION='1.3';
+const VERSION='1.4';
 function validatePlan(context,speech){
   const locale=normalizeLocale(context?.locale),ttsLocale=normalizeLocale(speech?.ttsLocale);
   const exact=!!locale&&ttsLocale===locale;
@@ -18,18 +19,21 @@ function validatePlan(context,speech){
 function runFile(command,args,{signal,timeout=45000}={}){
   return new Promise((resolve,reject)=>cp.execFile(command,args,{signal,timeout,windowsHide:true,maxBuffer:1024*1024},error=>error?reject(new Error(signal?.aborted?'turn_cancelled':'voice_render_failed')):resolve()));
 }
+function emitCognitive(onCognitiveState,value){if(typeof onCognitiveState!=='function')return;try{onCognitiveState(cognitive.publicState(value))}catch(_){}}
 function createOutput({brainUrl='http://127.0.0.1:11434',model='qwen3.5:2b',fetchImpl=fetch,runner=runFile,platform=process.platform}={}){
   const url=new URL(brainUrl);
   if(url.protocol!=='http:'||!['127.0.0.1','localhost','[::1]'].includes(url.hostname)||url.username||url.password||url.pathname!=='/'||url.search||url.hash)
     throw new Error('loopback_brain_required');
   const deliberator=createDeliberator({origin:url.origin,model,fetchImpl});
-  async function generate({text,context,speech,history=[],signal,core}={}){
+  async function generate({text,context,speech,history=[],signal,core,onCognitiveState}={}){
     const locale=validatePlan(context,speech);
     signal?.throwIfAborted();
     const selected=core&&triCore.PROFILES[core.core]?core:triCore.select(text);
     const cleanText=String(selected.cleanText||text||'').replace(/\s+/g,' ').trim().slice(0,1800);
-    const deliberation=await deliberator.consult({selection:selected,text:cleanText,locale,signal});
+    emitCognitive(onCognitiveState,{phase:'thinking',primary:selected.core,consulting:[],completed:[]});
+    const deliberation=await deliberator.consult({selection:selected,text:cleanText,locale,signal,onState:onCognitiveState});
     signal?.throwIfAborted();
+    emitCognitive(onCognitiveState,{phase:'synthesizing',primary:selected.core,consulting:[],completed:deliberation.consultedWith});
     const personaPrompt=triCore.promptFor(selected,locale)+advisoryBlock(deliberation.notes);
     const tuning=selected.core==='orion'?{num_predict:520,temperature:0.35}:selected.core==='jarvis'?{num_predict:260,temperature:0.45}:{num_predict:400,temperature:0.62};
     const response=await fetchImpl(url.origin+'/api/chat',{method:'POST',headers:{'content-type':'application/json'},signal:signal||AbortSignal.timeout(45000),body:JSON.stringify({
@@ -45,6 +49,7 @@ function createOutput({brainUrl='http://127.0.0.1:11434',model='qwen3.5:2b',fetc
     let parsed;try{parsed=JSON.parse(data.message?.content)}catch(_){throw new Error('invalid_local_reply')}
     if(normalizeLocale(parsed?.locale)!==locale||typeof parsed.reply!=='string'||!parsed.reply.trim()||parsed.reply.length>900)
       throw new Error('reply_locale_or_length_mismatch');
+    emitCognitive(onCognitiveState,{phase:'waiting',primary:selected.core,consulting:[],completed:deliberation.consultedWith});
     return{reply:parsed.reply.replace(/\s+/g,' ').trim(),locale,core:selected.core,role:selected.role,coreSource:selected.source,
       consultWith:[...(selected.consultWith||[])],consultedWith:[...(deliberation.consultedWith||[])],
       consultationAttempted:[...(deliberation.attempted||[])],consultationMode:deliberation.mode||'local_advisory_only',
@@ -79,4 +84,4 @@ function createOutput({brainUrl='http://127.0.0.1:11434',model='qwen3.5:2b',fetc
   }
   return{generate,render};
 }
-module.exports={VERSION,createOutput,validatePlan};
+module.exports={VERSION,createOutput,validatePlan,emitCognitive};
