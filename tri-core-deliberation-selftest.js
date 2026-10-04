@@ -54,6 +54,19 @@ const mobileConversation=require('./jarvis-mobile-language-conversation');
   const aborter=new AbortController();aborter.abort();
   await assert.rejects(d.consult({selection:selected,text:'analiz et',locale:'tr-TR',signal:aborter.signal}),/abort/i,'turn cancellation must stop consultation');
 
+  let timedCalls=0;
+  const parent=new AbortController();
+  const bounded=deliberation.createDeliberator({origin:'http://127.0.0.1:11434',consultationTimeoutMs:15,fetchImpl:async(_url,options)=>{
+    timedCalls++;
+    return new Promise((_resolve,reject)=>options.signal.addEventListener('abort',()=>reject(new Error('lens_timeout')),{once:true}));
+  }});
+  const started=Date.now();
+  const timed=await bounded.consult({selection:selected,text:'Teknik analiz yap ve riskleri karşılaştır',locale:'tr-TR',signal:parent.signal});
+  assert.equal(parent.signal.aborted,false,'per-lens timeout must not abort the parent conversation signal');
+  assert.equal(timedCalls,2,'each planned lens gets one bounded attempt');
+  assert.deepEqual([...timed.consultedWith],[],'timed-out lenses cannot be reported as completed');
+  assert(Date.now()-started<1000,'parent signal must not disable per-lens consultation timeout');
+
   const calls=[];
   const output=createOutput({fetchImpl:async(url,options)=>{
     assert.equal(url,'http://127.0.0.1:11434/api/chat');
