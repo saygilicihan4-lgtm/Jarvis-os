@@ -1,4 +1,5 @@
 name: Approval target v157 branch patch
+# rerun after replacing brittle implementation assertion with behavioral target-binding coverage
 
 on:
   push:
