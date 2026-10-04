@@ -895,7 +895,7 @@ const server=http.createServer((req,res)=>{
       if(err)return json(res,400,{error:'bad json'});
       if(String(d.confirm||'')!=='DISABLE_LEGACY_SESSIONS')return json(res,409,{error:'explicit legacy disable confirmation required'});
       try{
-        const r=await sessionLifecycle.setLegacyAllowed(false);
+        const r=await sessionLifecycle.disableLegacy();
         log('SESSION_LEGACY_POLICY','disabled');
         return json(res,200,{ok:true,...r});
       }catch(e){return json(res,e&&e.code==='SESSION_STORE_UNAVAILABLE'?503:400,{error:String(e.message||e)})}
