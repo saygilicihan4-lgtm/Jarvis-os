@@ -1,6 +1,7 @@
 'use strict';
 const lang=require('./jarvis-language-core');
-const VERSION='1.1';
+const cognitive=require('./jarvis-tri-core-cognitive-state');
+const VERSION='1.2';
 const TERMINAL=new Set(['ready','failed','cancelled']);
 const SOURCES=new Set(['browser-speech','typed']);
 const CLAIM_LEASE_MS=90_000;
@@ -25,9 +26,9 @@ function attachLeaseStatus(request,clock){
     get(){
       const nowMs=request.__relayClock(),status=request.__relayStatus;
       if(status==='claimed'&&Number.isFinite(request.claimedAtMs)&&nowMs-request.claimedAtMs>CLAIM_LEASE_MS){
-        request.__relayStatus='failed';request.failedAtMs=nowMs;request.result=null;request.error='worker_claim_expired';
+        request.__relayStatus='failed';request.failedAtMs=nowMs;request.result=null;request.error='worker_claim_expired';request.cognitive=cognitive.next(request.cognitive,{phase:'error',consulting:[]});
       }else if(status==='queued'&&Number.isFinite(request.createdAtMs)&&nowMs-request.createdAtMs>QUEUE_TTL_MS){
-        request.__relayStatus='failed';request.failedAtMs=nowMs;request.result=null;request.error='request_expired';
+        request.__relayStatus='failed';request.failedAtMs=nowMs;request.result=null;request.error='request_expired';request.cognitive=cognitive.next(request.cognitive,{phase:'error',consulting:[]});
       }
       return request.__relayStatus;
     },
@@ -43,7 +44,7 @@ function createRequest({id,text,locale,inputSource='browser-speech',history=[],n
   if(!SOURCES.has(source))throw new Error('input_source_not_allowed');
   const createdAtMs=now();
   if(!Number.isFinite(createdAtMs))throw new Error('request_clock_invalid');
-  return attachLeaseStatus({id,text:clean,locale:normalized,inputSource:source,history:sanitizeHistory(history),createdAtMs,claimedBy:null,claimedAtMs:null,result:null,error:null},now);
+  return attachLeaseStatus({id,text:clean,locale:normalized,inputSource:source,history:sanitizeHistory(history),createdAtMs,claimedBy:null,claimedAtMs:null,result:null,error:null,cognitive:cognitive.sanitize({phase:'waiting'})},now);
 }
 function claim(request,workerId,{now=Date.now}={}){
   const id=String(workerId||'').trim();
@@ -51,13 +52,24 @@ function claim(request,workerId,{now=Date.now}={}){
   if(!id)return{ok:false,reason:'worker_id_required'};
   const claimedAtMs=now();
   if(!Number.isFinite(claimedAtMs))return{ok:false,reason:'claim_clock_invalid'};
-  request.status='claimed';request.claimedBy=id;request.claimedAtMs=claimedAtMs;return{ok:true,request};
+  request.status='claimed';request.claimedBy=id;request.claimedAtMs=claimedAtMs;request.cognitive=cognitive.next(request.cognitive,{phase:'thinking'});return{ok:true,request};
 }
-function verifyResult(request,{workerId,locale}={}){
+function verifyWorker(request,workerId){
   if(!request)return{ok:false,reason:'request_not_found'};
   if(request.status!=='claimed'||TERMINAL.has(request.status))return{ok:false,reason:'request_not_claimed_or_terminal'};
   const id=String(workerId||'').trim();
   if(!id||id!==request.claimedBy)return{ok:false,reason:'worker_claim_mismatch'};
+  return{ok:true,workerId:id};
+}
+function updateCognitive(request,{workerId,state}={}){
+  const verified=verifyWorker(request,workerId);if(!verified.ok)return verified;
+  const safe=cognitive.sanitize(state||{});
+  request.cognitive=cognitive.next(request.cognitive,{phase:safe.phase,primary:safe.primary,consulting:safe.consulting,completed:safe.completed});
+  return{ok:true,cognitive:cognitive.publicState(request.cognitive)};
+}
+function getCognitive(request){return cognitive.publicState(request&&request.cognitive||{phase:'idle'})}
+function verifyResult(request,{workerId,locale}={}){
+  const verified=verifyWorker(request,workerId);if(!verified.ok)return verified;
   const normalized=normalizeLocale(locale);
   if(!normalized||normalized!==request.locale)return{ok:false,reason:'locale_mismatch'};
   return{ok:true,locale:normalized};
@@ -65,8 +77,8 @@ function verifyResult(request,{workerId,locale}={}){
 function cancel(request,{now=Date.now}={}){
   if(!request)return{ok:false,reason:'request_not_found'};
   if(TERMINAL.has(request.status))return{ok:false,reason:'request_terminal'};
-  request.status='cancelled';request.cancelledAtMs=now();request.result=null;request.error='cancelled';return{ok:true,status:'cancelled'};
+  request.status='cancelled';request.cancelledAtMs=now();request.result=null;request.error='cancelled';request.cognitive=cognitive.next(request.cognitive,{phase:'idle',consulting:[],completed:[]});return{ok:true,status:'cancelled'};
 }
 function isTerminal(request){return !!request&&TERMINAL.has(request.status)}
 
-module.exports={VERSION,CLAIM_LEASE_MS,QUEUE_TTL_MS,normalizeLocale,sanitizeHistory,createRequest,claim,verifyResult,cancel,isTerminal};
+module.exports={VERSION,CLAIM_LEASE_MS,QUEUE_TTL_MS,normalizeLocale,sanitizeHistory,createRequest,claim,verifyWorker,updateCognitive,getCognitive,verifyResult,cancel,isTerminal};
