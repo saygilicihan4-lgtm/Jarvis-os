@@ -2750,49 +2750,27 @@ async function requireLocalDeviceUnlock(force=false){
 async function bootstrapSession(){
   const isPhoneClient=/iPhone|iPod|Android.*Mobile/i.test(navigator.userAgent);
 
-  const tryTrustedNetwork=async()=>{
-    try{
-      const lan=await fetch('/api/session/lan-bootstrap',{method:'POST',credentials:'same-origin'});
-      if(!lan.ok)return false;
-      await load();
-      setAuthenticated(true);
-      setAccessMode('trusted-network');
-      authmsg.textContent='';
-      await refreshDeviceLockStatus().catch(()=>false);
-      resyncExistingPush().catch(()=>{});
-      consoleStatus.textContent='TRUSTED WI-FI · SIGNED PC WORKER VERIFIED';
-      return true;
-    }catch(_){return false}
-  };
-
   const tryTrustedSession=async()=>{
     try{
       const s=await fetch('/api/session/bootstrap',{credentials:'same-origin'});
       if(!s.ok)return false;
-      // A valid HttpOnly JARVIS session is already authenticated. Do not
-      // automatically invoke WebAuthn during a normal desktop refresh; that
-      // caused the OS passkey chooser to appear every time the trusted-network
-      // heartbeat was a little late. Passkey remains available as recovery.
+      // Browser identity is its verified session, not its network or a PC
+      // heartbeat. Both phone and desktop may reuse it after changing Wi-Fi.
       await load();
       setAuthenticated(true);
       setAccessMode('trusted-session');
+      authmsg.textContent='';
       refreshDeviceLockStatus().catch(()=>false);
       resyncExistingPush().catch(()=>{});
       return true;
     }catch(_){return false}
   };
 
-  // Always prefer trusted Wi-Fi before any passkey/session unlock flow.
-  // The trusted-network route already requires the approved signed PC Worker
-  // to be online on the same network, so a normal refresh must not trigger a
-  // WebAuthn/passkey popup while the trusted PC bridge is available.
-  if(await tryTrustedNetwork())return;
+  // Reuse a server-verified session first on every device. Unknown browsers
+  // must prove identity even when a signed PC shares their public IP.
+  if(await tryTrustedSession())return;
 
-  // Desktop may reuse its trusted session only after trusted Wi-Fi was not
-  // available. Phone keeps passkey as its off-network recovery path.
-  if(!isPhoneClient&&await tryTrustedSession())return;
-
-  // Phone outside trusted Wi-Fi may use passkey automatically.
+  // Phone without a valid session may use passkey automatically.
   // Desktop never invokes the OS passkey chooser on refresh/F8/clap.
   if(isPhoneClient){
     try{
@@ -2812,9 +2790,7 @@ async function bootstrapSession(){
   // Recovery/new-device path only.
   setAuthenticated(false);
   setAccessMode('recovery');
-  authmsg.textContent=isPhoneClient
-    ?'TELEFON GÜVENİLİR WI-FI DIŞINDA · PASSKEY YOKSA 8 HANELİ KURTARMA KODU'
-    :'GÜVENİLİR AĞ BULUNAMADI · PASSKEY YOKSA 8 HANELİ KURTARMA KODU';
+  authmsg.textContent='BU TARAYICIDA DOĞRULANMIŞ OTURUM YOK · PASSKEY VEYA 8 HANELİ KURTARMA KODU';
 }
 async function languageConversationRequest(data,signal){
   const response=await fetch('http://127.0.0.1:8765/language-conversation',{

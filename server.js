@@ -773,21 +773,12 @@ const server=http.createServer((req,res)=>{
   }
 
   if(pathname==='/api/session/lan-bootstrap'&&req.method==='POST'){
-    // Same public egress alone is NOT sufficient. We also require an approved,
-    // recently-online signed PC Worker whose heartbeat came through that same
-    // network tag. This gives convenient home-Wi-Fi entry without making IP
-    // address itself the credential.
-    const tag=ipTag(req);
-    const trusted=Object.values(state.workers.devices).find(w=>
-      w&&w.approved&&w.authMode==='signed'&&workerOnline(w)&&w.networkTag===tag
-    );
-    if(!trusted){
-      log('LAN_SESSION_BOOTSTRAP_DENY','no signed online worker on matching network');
-      return json(res,401,{error:'trusted local network worker required'});
-    }
-    const exp=setJarvisSessionCookie(req,res);
-    log('LAN_SESSION_BOOTSTRAP','same-network signed worker presence accepted');
-    return json(res,200,{ok:true,networkTrusted:true,expiresAt:new Date(exp).toISOString()});
+    // Compatibility route for cached clients. A signed PC heartbeat proves
+    // that PC's identity, never the identity of another browser behind its NAT.
+    // Reuse existing proof only; no IP/Worker-based minting or expiry extension.
+    if(validPhoneSession(req))return json(res,200,{ok:true,existing:true});
+    log('LAN_SESSION_BOOTSTRAP_DENY','browser session proof required');
+    return json(res,401,{error:'trusted session required',pairingRequired:true});
   }
 
   if(pathname==='/api/db/status'&&req.method==='GET'){
