@@ -387,6 +387,9 @@ async function publishProduct(workspace,productId){
   const creds=resolveCredentials(workspace);
   if(!creds.ready)throw new Error('SHOPIFY_NOT_CONNECTED');
 
+  const publication=await findOnlineStorePublication(creds);
+  if(!publication)throw new Error('Online Store publication bulunamadı');
+
   const active=await graphQLRequest(creds,`mutation JarvisActivateProduct($product: ProductUpdateInput!) {
     productUpdate(product: $product) {
       product { id title status }
@@ -397,8 +400,6 @@ async function publishProduct(workspace,productId){
   const updateErrors=summarizeErrors(update.userErrors);
   if(updateErrors.length)throw new Error('Ürün ACTIVE yapılamadı: '+updateErrors.map(x=>x.message).join(' | '));
 
-  const publication=await findOnlineStorePublication(creds);
-  if(!publication)throw new Error('Online Store publication bulunamadı');
   const pub=await graphQLRequest(creds,`mutation JarvisPublishProduct($id: ID!, $input: [PublicationInput!]!, $publicationId: ID!) {
     publishablePublish(id: $id, input: $input) {
       publishable { publishedOnPublication(publicationId: $publicationId) }
