@@ -27,6 +27,14 @@ assert.ok(worker.includes('"Devam et" tek başına yayınlama onayı değildir')
 assert.ok(worker.includes('"Devam et" tek başına YouTube PUBLIC onayı değildir'),'generic resume must not count as YouTube approval');
 assert.ok(worker.includes("publish:{type:'boolean'"),'Shopify publish request schema missing');
 
+const directShopifyStart=worker.indexOf('  const shopifyPublish=c.match(');
+const directShopifyEnd=worker.indexOf("\n\n  if(/^(?:creator motor durumu",directShopifyStart);
+assert.ok(directShopifyStart>=0&&directShopifyEnd>directShopifyStart,'direct Shopify command boundary missing');
+const directShopifyBlock=worker.slice(directShopifyStart,directShopifyEnd);
+assert.ok(directShopifyBlock.includes('Shopify PUBLIC doğrudan yerel komut yolundan çalıştırılmaz; approval-gated mission gerekir.'),'direct Shopify PUBLIC fail-closed message missing');
+assert.ok(!directShopifyBlock.includes('publishProduct('),'direct local Shopify command must never call publishProduct');
+assert.ok(worker.includes("getCommerceEngine().publishProduct(WORKSPACE,productId)"),'approval-gated Shopify mission publish path must remain');
+
 const positiveCases=[
   ['shopify','mağazada yayınla'],
   ['shopify','ürünü yayınla'],
@@ -96,4 +104,4 @@ assert.ok(youtube.includes('YOUTUBE_PUBLISH_UNCERTAIN'),'YouTube uncertain publi
 assert.ok(worker.includes("'youtube_publish_approval_v1'"),'YouTube publish approval capability missing');
 assert.ok(!worker.includes("function:{\n        name:'youtube_publish',"),'direct autonomous YouTube publish tool must not exist');
 
-console.log('APPROVAL GATE SELFTEST PASS · Shopify/YouTube/browser irreversible approval intent rejects explicit Turkish/English negation');
+console.log('APPROVAL GATE SELFTEST PASS · negated approval fails closed and direct local Shopify PUBLIC bypass is blocked');

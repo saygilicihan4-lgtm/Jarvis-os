@@ -8548,15 +8548,7 @@ async function execute(task){
 
   const shopifyPublish=c.match(/^(?:shopify ürünü yayınla|shopify urunu yayinla|ürünü yayınla|urunu yayinla|mağazada yayınla|magazada yayinla)\s+(gid:\/\/shopify\/Product\/\d+)$/i);
   if(shopifyPublish){
-    try{
-      const out=await getCommerceEngine().publishProduct(WORKSPACE,shopifyPublish[1]);
-      return{ok:true,message:out.message};
-    }catch(e){
-      const m=e.message==='SHOPIFY_NOT_CONNECTED'
-        ?'Shopify yerel bağlantısı kurulmamış.'
-        :'Ürün yayınlanamadı: '+e.message;
-      return{ok:false,retryable:false,message:m};
-    }
+    return{ok:false,retryable:false,message:'Shopify PUBLIC doğrudan yerel komut yolundan çalıştırılmaz; approval-gated mission gerekir.'};
   }
 
   if(/^(?:creator motor durumu|creator engine status|video motor durumu)$/i.test(c)){
