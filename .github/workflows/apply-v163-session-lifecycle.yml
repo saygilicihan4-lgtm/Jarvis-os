@@ -44,7 +44,14 @@ jobs:
           new_route="reminderStorage:dbReady?'postgresql':'unavailable',pushStorage:dbReady?'postgresql':'unavailable'});"
           if s.count(old_route)!=1:
               raise SystemExit('expected one db status anchor fragment')
-          p.write_text(s.replace(old_route,new_route,1))
+          s=s.replace(old_route,new_route,1)
+          policy_start="replaceOnce('jarvis-session-lifecycle.js',"
+          a=s.find(policy_start)
+          b=s.find("console.log('v163 integration patch applied');",a)
+          if a<0 or b<0:
+              raise SystemExit('expected policy patch tail')
+          s=s[:a]+s[b:]
+          p.write_text(s)
           PY
       - name: Apply exact v163 integration
         run: node scripts/apply-v163-session-lifecycle.js
