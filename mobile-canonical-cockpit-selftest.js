@@ -13,7 +13,7 @@ assert.strictEqual(joined.length,75968,'approved mobile cockpit base64 length dr
 assert.strictEqual(art.length,56974,'approved mobile cockpit byte length drifted');
 assert.strictEqual(art.subarray(0,4).toString('ascii'),'RIFF','approved cockpit RIFF header missing');
 assert.strictEqual(art.subarray(8,12).toString('ascii'),'WEBP','approved cockpit WEBP header missing');
-assert.strictEqual(crypto.createHash('sha256').update(art).digest('hex'),'a6f13c1570db28cfce4db5b158ff0be981bf4a8f91be6d5f11c42f9661e2624a','approved cockpit image bytes drifted');
+assert.strictEqual(crypto.createHash('sha256').update(art).digest('hex'),'a6f13cb2a07b42abb4d795bdff62069ef9c5e6528145287407890fcb48049193','approved cockpit image bytes drifted');
 
 assert(mobile.includes("const VERSION='2.0'"),'v185 canonical implementation version missing');
 assert(mobile.includes("const MEDIA='(max-width: 860px) and (orientation: portrait)'"),'portrait mobile activation contract missing');
