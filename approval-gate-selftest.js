@@ -207,8 +207,8 @@ resolved=approvalIntent.resolveApprovalTarget({approval:youtubeApproval,pending:
 assert.strictEqual(resolved.ok,false);
 assert.strictEqual(resolved.code,'SURFACE_NOT_PENDING');
 
-assert.ok(commerce.includes('async function publishProduct(workspace,productId)'),'Shopify publish engine missing');
-assert.ok(commerce.includes("Geçersiz Shopify Product GID")&&commerce.includes("Product\\/\\d+$/.test(id)"),'Shopify publish product id validation missing');
+assert.ok(commerce.includes('async function publishProduct(workspace,productId,opts={})'),'Shopify publish engine missing');
+assert.ok(commerce.includes("Geçersiz Shopify Product GID")&&commerce.includes('function validProductGid(id)')&&commerce.includes("Product\\/\\d+$/.test(String(id||'').trim())"),'Shopify publish product id validation missing');
 assert.ok(youtube.includes('async function publishPreparedDraft('),'YouTube approval-gated publish engine missing');
 assert.ok(youtube.includes('explicit approval proof required for YouTube publish'),'YouTube module approval proof missing');
 assert.ok(youtube.includes("state:'publish_started'"),'YouTube publish preflight receipt missing');
