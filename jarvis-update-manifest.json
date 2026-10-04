@@ -17,7 +17,7 @@
     },
     {
       "path": "jarvis-browser-operator.js",
-      "signature": "BROWSER_OPERATOR_VERSION='1.1'",
+      "signature": "BROWSER_OPERATOR_VERSION='1.2'",
       "kind": "node",
       "min_bytes": 7000
     },
