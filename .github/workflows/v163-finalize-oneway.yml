@@ -1,0 +1,62 @@
+name: Finalize v163 One-Way Legacy Cutoff
+
+on:
+  push:
+    branches: [ jarvis-session-lifecycle-v163 ]
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: jarvis-session-lifecycle-v163
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Patch exact server call idempotently
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('server.js')
+          s=p.read_text()
+          old="const r=await sessionLifecycle.setLegacyAllowed(false);"
+          new="const r=await sessionLifecycle.disableLegacy();"
+          if s.count(old)==1 and s.count(new)==0:
+              s=s.replace(old,new,1)
+          elif s.count(old)==0 and s.count(new)==1:
+              pass
+          else:
+              raise SystemExit(f'unexpected legacy route call counts old={s.count(old)} new={s.count(new)}')
+          p.write_text(s)
+          PY
+      - name: Install test dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Verify one-way session lifecycle
+        run: |
+          node --check server.js
+          node --check jarvis-session-lifecycle.js
+          node --check session-lifecycle-selftest.js
+          node --check session-lifecycle-http-selftest.js
+          node session-lifecycle-selftest.js
+          node session-lifecycle-http-selftest.js
+          node session-bootstrap-selftest.js
+          node selftest.js
+          git diff --check
+      - name: Commit only after verification
+        run: |
+          git rm .github/workflows/v163-finalize-oneway.yml
+          git config user.name "Jarvis Security Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add server.js
+          if git diff --cached --quiet; then
+            echo "No production change required; workflow cleanup only"
+          fi
+          git commit -m "security: finalize one-way legacy session cutoff v163"
+          git push origin HEAD:jarvis-session-lifecycle-v163
