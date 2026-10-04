@@ -1,0 +1,22 @@
+name: Jarvis State Restore Security CI
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  state-restore-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Syntax
+        run: |
+          node --check server.js
+          node --check state-restore-security-selftest.js
+      - name: State restore authority regression
+        run: node state-restore-security-selftest.js
