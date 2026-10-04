@@ -7,12 +7,12 @@ const MISSION_ENGINE_VERSION='1.0';
 const OPEN_STATUSES=new Set(['queued','running','waiting_dependency','needs_verification']);
 
 function ensureDir(dir){fs.mkdirSync(dir,{recursive:true});return dir}
-function missionDir(workspace){return ensureDir(path.join(workspace,'.jarvis-missions'))}
 function safeId(id){
   const s=String(id||'').trim();
   if(!/^M-[A-Z0-9-]{12,80}$/.test(s))throw new Error('Invalid mission id');
   return s;
 }
+function missionDir(workspace){return ensureDir(path.join(workspace,'.jarvis-missions'))}
 function missionFile(workspace,id){return path.join(missionDir(workspace),safeId(id)+'.json')}
 function now(){return new Date().toISOString()}
 function clone(x){return JSON.parse(JSON.stringify(x))}
@@ -238,13 +238,65 @@ function approveStep(workspace,id,{surface='',targetReason='',nowMs=Date.now()}=
   addHistory(m,'step_explicitly_approved',{step:step.name});
   return saveMission(workspace,m);
 }
+function previewText(value,max=70){
+  return String(value==null?'':value).replace(/[\r\n\t]+/g,' ').replace(/\s+/g,' ').trim().slice(0,max);
+}
+function requestFingerprint(value){
+  const s=String(value||'').trim();
+  return s?crypto.createHash('sha256').update(s,'utf8').digest('hex').slice(0,10):'';
+}
+function safeHost(value){
+  try{
+    const u=new URL(String(value||''));
+    if(u.protocol!=='https:'&&u.protocol!=='http:')return'';
+    return String(u.hostname||'').toLowerCase().slice(0,80);
+  }catch(_){return''}
+}
+function idTail(value){
+  const s=String(value||'').trim();
+  if(!s)return'';
+  const tail=s.split('/').pop()||s;
+  return '…'+tail.slice(-8);
+}
+function approvalReviewLabel(m,step=currentStep(m)){
+  if(!m||!step||m.status!=='waiting_dependency'||step.status!=='blocked'||
+    !(step.meta&&step.meta.requiresApproval===true)||String(step.error&&step.error.dependency||'')!=='approval')return'';
+  const req=requestFingerprint(step.meta.approvalRequestId)||'pending';
+  const ttl=Math.max(1,Math.round(Number(approvalLifecycle.APPROVAL_TTL_MS||900000)/60000));
+  const input=m.input&&typeof m.input==='object'?m.input:{};
+  let subject=previewText(step.name.replace(/_/g,' '),70).toUpperCase();
+
+  if(step.name==='browser_click'){
+    const host=safeHost(input.url)||'web-target';
+    const action=previewText(input.finalClick||'SEND',28);
+    const fields=Array.isArray(input.fields)?input.fields:[];
+    const names=fields.map(x=>previewText(x&&x.label||x&&x.name||'',20)).filter(Boolean);
+    const shown=names.slice(0,3).join(',');
+    const extra=names.length>3?('+'+(names.length-3)):'';
+    subject='WEB '+action+' @ '+host+(shown?(' · ALAN '+shown+extra):'');
+  }else if(step.name==='shopify_publish'){
+    const draft=m.artifacts&&m.artifacts.shopify_draft||{};
+    const product=draft&&draft.product||input.product||{};
+    const title=previewText(product&&product.title||input.productTitle||'ürün',46);
+    const storeHash=String(product&&product._jarvisStoreHash||'').replace(/[^a-f0-9]/gi,'').slice(0,8);
+    subject='SHOPIFY PUBLIC · '+title+(idTail(product&&product.id)?(' · '+idTail(product.id)):'')+(storeHash?(' · STORE '+storeHash):'');
+  }else if(step.name==='youtube_publish'){
+    const draft=m.artifacts&&m.artifacts.youtube_draft||m.artifacts&&m.artifacts.youtube_upload||{};
+    const title=previewText(draft&&draft.title||input.youtubeTitle||input.title||'video',52);
+    const targetHash=String(draft&&draft.targetHash||draft&&draft.channelHash||'').replace(/[^a-f0-9]/gi,'').slice(0,8);
+    subject='YOUTUBE PUBLIC · '+title+(targetHash?(' · CHANNEL '+targetHash):'');
+  }
+
+  return ['ONAY',subject,ttl+' DK','REQ '+req].join(' · ').slice(0,160);
+}
 function summarizeMission(m){
   if(!m)return null;
   const step=currentStep(m);
+  const approvalLabel=approvalReviewLabel(m,step);
   return{
     id:m.id,
     type:m.type,
-    label:m.label,
+    label:approvalLabel||m.label,
     status:m.status,
     currentStep:Number(m.currentStep)||0,
     step:step?{name:step.name,status:step.status,attempts:step.attempts,error:step.error||null}:null,
@@ -272,5 +324,6 @@ module.exports={
   resolveUncertainStep,
   recoverInterruptedMissions,
   approveStep,
+  approvalReviewLabel,
   summarizeMission
 };

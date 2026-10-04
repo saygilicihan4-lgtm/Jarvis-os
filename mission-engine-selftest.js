@@ -56,6 +56,62 @@ const latest=m.latestOpenMission(tmp);
 assert.strictEqual(latest.id,x.id);
 const summary=m.summarizeMission(latest);
 assert.strictEqual(summary.step.name,'shopify_draft');
+assert.strictEqual(summary.label,'V-GAP campaign');
+
+// v168: approval review text must be useful on the existing mobile Mission Queue
+// without putting raw form values, URL query secrets, or approval UUIDs in telemetry.
+let review=m.createMission(tmp,{
+  type:'browser_form',
+  label:'Checkout form',
+  input:{
+    url:'https://secure.example.test/checkout?token=QUERY_SECRET_123',
+    finalClick:'Submit order',
+    fields:[
+      {label:'Name',value:'Cihan Secret Name'},
+      {label:'Email',value:'owner@example.test'},
+      {label:'Password',value:'TOP_SECRET_PASSWORD'},
+      {label:'Note',value:'PRIVATE_NOTE'}
+    ]
+  },
+  steps:[{name:'browser_click',meta:{requiresApproval:true}}]
+});
+m.startStep(tmp,review.id);
+review=m.failStep(tmp,review.id,{code:'EXPLICIT_APPROVAL_REQUIRED',message:'approval required',retryable:true,dependency:'approval'});
+const reviewRequestId=m.currentStep(review).meta.approvalRequestId;
+const reviewSummary=m.summarizeMission(review);
+assert.ok(reviewSummary.label.includes('ONAY'));
+assert.ok(reviewSummary.label.includes('WEB Submit order @ secure.example.test'));
+assert.ok(reviewSummary.label.includes('ALAN Name,Email,Password+1'));
+assert.ok(reviewSummary.label.includes('15 DK'));
+assert.ok(reviewSummary.label.includes('REQ '));
+for(const secret of ['QUERY_SECRET_123','Cihan Secret Name','owner@example.test','TOP_SECRET_PASSWORD','PRIVATE_NOTE',reviewRequestId]){
+  assert.ok(!reviewSummary.label.includes(secret),'approval review leaked '+secret);
+}
+assert.ok(reviewSummary.label.length<=160);
+
+// Shopify review binds the human-readable product target plus only a short store
+// fingerprint. The raw store/account/token never needs to enter cloud telemetry.
+let shop=m.createMission(tmp,{
+  type:'shopify_product',
+  label:'Publish V-GAP',
+  input:{product:{title:'V-GAP Organizer'}},
+  steps:['shopify_draft',{name:'shopify_publish',meta:{requiresApproval:true}}]
+});
+m.startStep(tmp,shop.id);
+shop=m.completeStep(tmp,shop.id,{artifact:{product:{
+  id:'gid://shopify/Product/12345678',title:'V-GAP Organizer',status:'DRAFT',
+  _jarvisStoreHash:'deadbeefcafebabefeedface0123456789abcdef0123456789abcdef01234567'
+}}});
+m.startStep(tmp,shop.id);
+shop=m.failStep(tmp,shop.id,{code:'EXPLICIT_APPROVAL_REQUIRED',message:'approval required',retryable:true,dependency:'approval'});
+const shopSummary=m.summarizeMission(shop);
+assert.ok(shopSummary.label.includes('SHOPIFY PUBLIC'));
+assert.ok(shopSummary.label.includes('V-GAP Organizer'));
+assert.ok(shopSummary.label.includes('…12345678'));
+assert.ok(shopSummary.label.includes('STORE deadbeef'));
+assert.ok(!shopSummary.label.includes('cafebabe'));
+assert.ok(!shopSummary.label.includes('myshopify.com'));
+assert.ok(shopSummary.label.length<=160);
 
 const ordered=m.schedulerOrder([
   {id:'M-ZZZZZZZZZZZZ',status:'queued',createdAt:'2026-10-02T02:00:00.000Z'},
