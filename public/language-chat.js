@@ -47,7 +47,13 @@
   function loadScript(id,src){
     return new Promise((resolve,reject)=>{
       if(root.document.getElementById(id)){
-        const ready=id==='jarvisMobileSpeechEvidenceCoreScript'?root.JarvisMobileSpeechEvidenceStatus:root.JarvisMobileSpeechEvidenceUi;
+        const ready=id==='jarvisMobileSpeechEvidenceCoreScript'
+          ?root.JarvisMobileSpeechEvidenceStatus
+          :id==='jarvisMobileSpeechEvidenceUiScript'
+            ?root.JarvisMobileSpeechEvidenceUi
+            :id==='jarvisMobileConversationFollowupScript'
+              ?root.JarvisMobileConversationFollowup
+              :null;
         if(ready){resolve(true);return}
       }
       const script=root.document.createElement('script');script.id=id;script.src=src;script.async=false;
@@ -63,7 +69,11 @@
     try{
       if(!root.JarvisMobileSpeechEvidenceStatus)await loadScript('jarvisMobileSpeechEvidenceCoreScript','/mobile-speech-evidence-status.js');
       if(!root.JarvisMobileSpeechEvidenceUi)await loadScript('jarvisMobileSpeechEvidenceUiScript','/mobile-speech-evidence-ui.js');
-      return !!(root.JarvisMobileSpeechEvidenceUi&&root.JarvisMobileSpeechEvidenceUi.install(root.document));
+      if(!root.JarvisMobileConversationFollowup)await loadScript('jarvisMobileConversationFollowupScript','/mobile-conversation-followup.js');
+      const evidenceOk=!!(root.JarvisMobileSpeechEvidenceUi&&root.JarvisMobileSpeechEvidenceUi.install(root.document));
+      const followupOk=!!(root.JarvisMobileConversationFollowup&&root.JarvisMobileConversationFollowup.install(root));
+      if(!followupOk&&attempt<20)setTimeout(()=>boot(attempt+1),100);
+      return evidenceOk&&followupOk;
     }catch(_){return false}
   }
   setTimeout(()=>boot(0),0);
