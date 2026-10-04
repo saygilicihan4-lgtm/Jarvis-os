@@ -4,12 +4,12 @@ const fs=require('fs');
 const assert=require('assert');
 const tri=require('./public/tri-core.js');
 const personality=require('./jarvis-tri-core-personality.js');
-const webgl=require('./public/tri-core-webgl.js');
+const hologram=require('./public/tri-core-hologram.js');
 
 const css=fs.readFileSync('public/style.css','utf8');
 const routerSource=fs.readFileSync('public/tri-core.js','utf8');
 const personalitySource=fs.readFileSync('jarvis-tri-core-personality.js','utf8');
-const webglSource=fs.readFileSync('public/tri-core-webgl.js','utf8');
+const hologramSource=fs.readFileSync('public/tri-core-hologram.js','utf8');
 const loaderSource=fs.readFileSync('public/language-chat.js','utf8');
 const outputSource=fs.readFileSync('jarvis-language-turn-output.js','utf8');
 const desktopConversationSource=fs.readFileSync('jarvis-language-conversation.js','utf8');
@@ -78,20 +78,25 @@ assert(!/core:generated\.core/.test(desktopConversationSource),'model/output met
 assert(!/core:generated\.core/.test(mobileConversationSource),'model/output metadata must not choose mobile authority role');
 
 assert(loaderSource.includes("script.src='/tri-core.js'"),'tri-core browser loader missing');
-assert(loaderSource.includes("script.src='/tri-core-webgl.js'"),'tri-core WebGL loader missing');
+assert(!loaderSource.includes('/tri-core-webgl.js'),'duplicate renderer loader must not return');
+assert(loaderSource.includes('consultWith'),'conversation state must preserve consultation lenses');
 assert(loaderSource.includes('jarvis:conversation-state'),'real conversation state bridge missing');
-assert(routerSource.includes('data-jarvis-core-state')||routerSource.includes('jarvisCoreState'),'reactive core state dataset missing');
+assert(routerSource.includes('jarvisCoreState'),'reactive core state dataset missing');
+assert(routerSource.includes('jarvisCoreCollab'),'consultation collaboration state missing');
 assert(routerSource.includes('jarvis:conversation-state'),'router must bind real conversation state events');
+assert(routerSource.includes("script.src='/tri-core-hologram.js'"),'single hologram renderer must be owned by tri-core router');
 assert(routerSource.includes("doc.body.dataset.jarvisCore=selected.id"),'active role dataset missing');
 
-assert.strictEqual(typeof webgl.install,'function');assert.strictEqual(typeof webgl.destroy,'function');
-assert.deepStrictEqual(webgl.ORDER,['nova','jarvis','orion']);
-assert(webglSource.includes("getContext('webgl'"),'native WebGL renderer missing');
-assert(webglSource.includes("prefers-reduced-motion: reduce"),'WebGL reduced-motion support missing');
-assert(webglSource.includes('deviceMemory')&&webglSource.includes('hardwareConcurrency'),'low-hardware fallback missing');
-assert(webglSource.includes('gl.LINE_STRIP'),'multi-layer energy rings missing');
-assert(webglSource.includes("['thinking','working']"),'data bridge must be limited to real analysis/work states');
-assert(!/\bfetch\s*\(/.test(webglSource),'WebGL renderer must not make network calls');
-assert(!webglSource.includes('localStorage')&&!webglSource.includes('sessionStorage'),'WebGL renderer must not persist sensitive state');
+assert.strictEqual(typeof hologram.install,'function');
+assert.deepStrictEqual(hologram.ROLE_INDEX,{nova:0,jarvis:1,orion:2});
+assert.deepStrictEqual(hologram.STATE_INDEX,{idle:0,waiting:1,listening:2,thinking:3,speaking:4,working:5,error:6});
+assert(hologramSource.includes("getContext('webgl'"),'native WebGL renderer missing');
+assert(hologramSource.includes("prefers-reduced-motion: reduce"),'WebGL reduced-motion support missing');
+assert(hologramSource.includes('deviceMemory')&&hologramSource.includes('hardwareConcurrency'),'low-hardware fallback missing');
+assert(hologramSource.includes('uConsult'),'cross-core data-flow shader input missing');
+assert(hologramSource.includes('uState'),'reactive system-state shader input missing');
+assert(hologramSource.includes("dataset.jarvisCoreFx='lite'"),'CSS fallback marker missing');
+assert(!/\bfetch\s*\(/.test(hologramSource),'WebGL renderer must not make network calls');
+assert(!hologramSource.includes('localStorage')&&!hologramSource.includes('sessionStorage'),'WebGL renderer must not persist sensitive state');
 
-console.log('TRI-CORE v179 PERSONALITY + REACTIVE WEBGL SELFTEST PASS');
+console.log('TRI-CORE v179 PERSONALITY + SINGLE REACTIVE HOLOGRAM SELFTEST PASS');
