@@ -21,17 +21,18 @@ function hasPositiveApproval(intent){
 function hasNegatedApproval(intent){
   // Turkish negative imperative / request forms. Prefix matching intentionally
   // catches suffix variants such as yayınlamayın / yayınlamayalım.
-  if(/(?:^|[\s,.;:!?])(?:yayınlama|yayinlama|onaylama)(?:yın|yin|yinız|yiniz|yalım|yalim|nı|ni|nız|niz)?(?=$|[\s,.;:!?])/i.test(intent))return true;
-  if(/(?:^|[\s,.;:!?])onay\s+verme(?:yin|yiniz|yinız)?(?=$|[\s,.;:!?])/i.test(intent))return true;
-  if(/(?:^|[\s,.;:!?])(?:publish|approve)\s+etme(?:yin|yiniz|yinız)?(?=$|[\s,.;:!?])/i.test(intent))return true;
+  if(/(?:^|[\s,.;:!?])(?:yayınlama|yayinlama|onaylama)(?:yın|yin|yınız|yiniz|yalım|yalim|nı|ni|nız|niz)?(?=$|[\s,.;:!?])/i.test(intent))return true;
+  if(/(?:^|[\s,.;:!?])onay\s+verme(?:yin|yınız|yiniz)?(?=$|[\s,.;:!?])/i.test(intent))return true;
+  if(/(?:^|[\s,.;:!?])(?:publish|approve)\s+etme(?:yin|yınız|yiniz)?(?=$|[\s,.;:!?])/i.test(intent))return true;
 
-  // English explicit negation. Any explicit irreversible negation in the same
-  // turn wins over a positive phrase later in the sentence (fail closed).
-  if(/(?:^|[\s,.;:!?])(?:do\s+not|don't|dont|never|not)\s+(?:publish|approve)(?=$|[\s,.;:!?])/i.test(intent))return true;
+  // English explicit negation. Keep the scan inside the same punctuation-bounded
+  // clause so forms such as "don't ever publish" and "no publish" fail closed.
+  if(/(?:^|[\s,.;:!?])(?:do\s+not|don't|dont|never|not|no)(?:\s+[^,.;:!?\s]+){0,3}\s+(?:publish|approve)(?=$|[\s,.;:!?])/i.test(intent))return true;
 
-  // Turkish “sakın/sakin + action” is a prohibition even when the verb itself
-  // is morphologically positive (e.g. “sakın yayınla”).
-  if((hasToken(intent,'sakın')||hasToken(intent,'sakin'))&&hasPositiveApproval(intent))return true;
+  // Turkish prohibition tokens win over a positive action in the same turn.
+  // This intentionally treats contradictory wording such as “sakın yayınla”
+  // as non-approval because irreversible actions must fail closed.
+  if((hasToken(intent,'sakın')||hasToken(intent,'sakin')||hasToken(intent,'asla'))&&hasPositiveApproval(intent))return true;
   return false;
 }
 
