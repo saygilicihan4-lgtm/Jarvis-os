@@ -31,12 +31,16 @@ const yt=require('./jarvis-youtube-studio');
   let publishClicks=0;
   let publishSucceeded=false;
   let allowPublishSuccess=true;
+  let staleSuccessMarker=false;
+  let publishSuccessUrl='https://studio.youtube.com/video/test/edit';
   const fakeOperator={
     status:async()=>({running:true,profile:'test',browser:'fake'}),
     navigate:async()=>({ok:true}),
-    pageSnapshot:async()=>publishSucceeded
-      ?({ok:true,url:'https://studio.youtube.com/video/test/edit',title:'Studio',text:'Video yayınlandı'})
-      :({ok:true,url:'https://studio.youtube.com/video/test/edit',title:'Studio',text:'Ayrıntılar Görünürlük Visibility Public'}),
+    pageSnapshot:async()=>{
+      if(publishSucceeded)return{ok:true,url:publishSuccessUrl,title:'Studio',text:'Video yayınlandı'};
+      if(staleSuccessMarker)return{ok:true,url:'https://studio.youtube.com/video/test/edit',title:'Studio',text:'Ayrıntılar Görünürlük Visibility Public · Video yayınlandı'};
+      return{ok:true,url:'https://studio.youtube.com/video/test/edit',title:'Studio',text:'Ayrıntılar Görünürlük Visibility Public'};
+    },
     evaluate:async(_workspace,expression)=>String(expression||'').includes("document.querySelector('input[type=file]')")
       ?true
       :({ok:true,text:'Public'}),
@@ -174,11 +178,37 @@ const yt=require('./jarvis-youtube-studio');
   await approvalRequired(()=>yt.publishPreparedDraft(fakeOperator,tmp,{missionId,approvedAt}));
   assert.strictEqual(publishClicks,beforeInvalidProofClicks,'non-running YouTube publish step must fail before Publish click');
 
+  // Stale success text visible before the click must never be accepted as evidence for this publish attempt.
+  const staleId='M-STALE-123456789';
+  publishSucceeded=false;
+  staleSuccessMarker=false;
+  allowPublishSuccess=true;
+  const staleDraft=await yt.prepareDraft(fakeOperator,tmp,{
+    file:'creator-video/demo.mp4',
+    title:'Stale Success Test',
+    description:'Açıklama',
+    missionId:staleId
+  });
+  assert.strictEqual(staleDraft.ok,true);
+  const staleApprovedAt=new Date().toISOString();
+  saveMissionApproval(staleId,staleApprovedAt);
+  staleSuccessMarker=true;
+  const beforeStaleClicks=publishClicks;
+  const stale=await yt.publishPreparedDraft(fakeOperator,tmp,{missionId:staleId,approvedAt:staleApprovedAt});
+  assert.strictEqual(stale.ok,false);
+  assert.strictEqual(stale.code,'YOUTUBE_STALE_SUCCESS_MARKER');
+  assert.strictEqual(stale.uncertain,true);
+  assert.strictEqual(publishClicks,beforeStaleClicks,'stale pre-click success marker must stop before Publish click');
+  assert.strictEqual(yt.readReceipt(tmp,staleId).state,'draft_prepared','stale marker must not poison receipt into publish_started');
+  staleSuccessMarker=false;
+
   saveMissionApproval(missionId,approvedAt);
+  publishSucceeded=false;
+  publishSuccessUrl='https://studio.youtube.com/video/test/edit';
   const published=await yt.publishPreparedDraft(fakeOperator,tmp,{missionId,approvedAt});
   assert.strictEqual(published.ok,true);
   assert.strictEqual(published.published,true);
-  assert.strictEqual(publishClicks,1);
+  assert.strictEqual(publishClicks,beforeStaleClicks+1);
   receipt=yt.readReceipt(tmp,missionId);
   assert.strictEqual(receipt.state,'published');
   assert.strictEqual(receipt.published,true);
@@ -186,11 +216,37 @@ const yt=require('./jarvis-youtube-studio');
   assert.strictEqual(receipt.approvalMissionId,missionId);
   assert.strictEqual(receipt.approvalDraftCompletedAt,mission.steps[0].completedAt);
   assert.strictEqual(receipt.approvalPublishStartedAt,mission.steps[1].startedAt);
+  assert.ok(/^https:\/\/studio\.youtube\.com\//.test(receipt.publishEvidenceBaselineUrl));
+  assert.ok(/^https:\/\/studio\.youtube\.com\//.test(receipt.publishEvidenceUrl));
 
   const publishedAgain=await yt.publishPreparedDraft(fakeOperator,tmp,{missionId});
   assert.strictEqual(publishedAgain.ok,true);
   assert.strictEqual(publishedAgain.reused,true);
-  assert.strictEqual(publishClicks,1,'published mission must never click Publish twice');
+  assert.strictEqual(publishClicks,beforeStaleClicks+1,'published mission must never click Publish twice');
+
+  // A suffix/prefix lookalike host with success text is not valid YouTube Studio PUBLIC evidence.
+  const offOriginId='M-OFFORIGIN-123456';
+  publishSucceeded=false;
+  staleSuccessMarker=false;
+  allowPublishSuccess=true;
+  publishSuccessUrl='https://studio.youtube.com.evil.example/not-youtube';
+  const offOriginDraft=await yt.prepareDraft(fakeOperator,tmp,{
+    file:'creator-video/demo.mp4',
+    title:'Off Origin Test',
+    description:'Açıklama',
+    missionId:offOriginId
+  });
+  assert.strictEqual(offOriginDraft.ok,true);
+  const offOriginApprovedAt=new Date().toISOString();
+  saveMissionApproval(offOriginId,offOriginApprovedAt);
+  const beforeOffOriginClicks=publishClicks;
+  const offOrigin=await yt.publishPreparedDraft(fakeOperator,tmp,{missionId:offOriginId,approvedAt:offOriginApprovedAt});
+  assert.strictEqual(offOrigin.ok,false);
+  assert.strictEqual(offOrigin.code,'YOUTUBE_PUBLISH_UNCERTAIN');
+  assert.strictEqual(offOrigin.uncertain,true);
+  assert.strictEqual(publishClicks,beforeOffOriginClicks+1);
+  assert.strictEqual(yt.readReceipt(tmp,offOriginId).state,'publish_started');
+  publishSuccessUrl='https://studio.youtube.com/video/test/edit';
 
   // A tampered receipt must never let approval from one mission authorize another mission's draft.
   const mismatchId='M-MISMATCH-123456';
@@ -246,6 +302,11 @@ const yt=require('./jarvis-youtube-studio');
   assert.ok(source.includes("state:'publish_started'"),'publish preflight receipt missing');
   assert.ok(source.includes("YOUTUBE_UPLOAD_UNCERTAIN"),'uncertain upload guard missing');
   assert.ok(source.includes("YOUTUBE_PUBLISH_UNCERTAIN"),'uncertain publish guard missing');
+  assert.ok(source.includes("YOUTUBE_STALE_SUCCESS_MARKER"),'stale success marker guard missing');
+  assert.ok(source.includes('publishEvidenceBaselineUrl'),'pre-click publish evidence baseline missing');
+  assert.ok(source.includes('publishEvidenceUrl'),'post-click publish evidence URL missing');
+  assert.ok(source.includes("url.hostname.toLowerCase()==='studio.youtube.com'"),'publish success must require exact YouTube Studio hostname');
+  assert.ok(source.includes("url.protocol==='https:'"),'publish success must require HTTPS YouTube Studio origin');
   assert.ok(source.includes('explicit approval proof required for YouTube publish'),'module-level approval proof missing');
   assert.ok(source.includes('valid explicit approval timestamp required for YouTube publish'),'approval timestamp validation missing');
   assert.ok(source.includes('YouTube approval mission receipt mismatch'),'approval mission binding missing');
@@ -264,5 +325,5 @@ const yt=require('./jarvis-youtube-studio');
   assert.ok(worker.includes('"Devam et" tek başına YouTube PUBLIC onayı değildir'),'generic resume must not count as YouTube publish approval');
   assert.ok(server.includes("return'youtube_upload_prepare_v1'"),'server YouTube draft routing missing');
 
-  console.log('YOUTUBE STUDIO APPROVAL SELFTEST PASS · PUBLIC click requires exact active mission approval provenance plus mission-bound draft lifecycle');
+  console.log('YOUTUBE STUDIO APPROVAL SELFTEST PASS · PUBLIC success requires fresh exact-origin Studio evidence after mission-bound approval');
 })().catch(e=>{console.error(e);process.exit(1)});
