@@ -1,6 +1,6 @@
 const crypto=require('crypto');
 
-const FINAL_TARGET_VERIFICATION_VERSION='1.1';
+const FINAL_TARGET_VERIFICATION_VERSION='1.2';
 const DEFAULT_TTL_MS=15000;
 const PROVIDERS={
   youtube:{hosts:new Set(['studio.youtube.com'])},
@@ -23,6 +23,31 @@ function safeEvidence(snapshot={}){
     target:[e.target,e.channel,e.channelId,e.store,e.storeId,e.storeDomain].filter(Boolean).map(x=>clean(x))
   };
 }
+function safePathPart(v,max=160){
+  try{return decodeURIComponent(String(v||'')).replace(/[\r\n\t]/g,'').trim().slice(0,max)}catch(_){return''}
+}
+function resourceEvidence(provider,rawUrl){
+  const p=normalize(provider);let u;
+  try{u=new URL(clean(rawUrl,2000))}catch(_){return{kind:'',id:''}}
+  if(u.protocol!=='https:')return{kind:'',id:''};
+  const parts=u.pathname.split('/').filter(Boolean).map(x=>safePathPart(x));
+  if(p==='youtube'&&u.hostname.toLowerCase()==='studio.youtube.com'){
+    const vi=parts.indexOf('video');if(vi>=0&&parts[vi+1])return{kind:'video',id:clean(parts[vi+1],160)};
+    const ci=parts.indexOf('channel');if(ci>=0&&parts[ci+1])return{kind:'channel',id:clean(parts[ci+1],160)};
+  }
+  if(p==='shopify'&&u.hostname.toLowerCase()==='admin.shopify.com'){
+    const storeIndex=parts.indexOf('store'),storeId=storeIndex>=0?parts[storeIndex+1]:'';
+    const kinds=new Set(['products','orders','customers','collections','discounts']);
+    for(let i=Math.max(0,storeIndex+2);i<parts.length-1;i++){
+      if(kinds.has(parts[i]))return{kind:parts[i].replace(/s$/,''),id:clean(parts[i+1],160),store:clean(storeId,160)};
+    }
+    if(storeId)return{kind:'store',id:clean(storeId,160),store:clean(storeId,160)};
+  }
+  return{kind:'',id:''};
+}
+function resourceFingerprint(provider,snapshot={}){
+  const r=resourceEvidence(provider,snapshot.url);return r.kind&&r.id?evidenceHash(r.kind+':'+r.id):'';
+}
 function canonicalControl(control={}){
   return{
     tag:normalize(control.tag),type:normalize(control.type),name:normalize(control.name),id:normalize(control.id),
@@ -44,14 +69,19 @@ function surfaceFingerprint(snapshot={}){
   const stable={sameOriginFrames:Number(e.sameOriginFrames)||0,openShadowRoots:Number(e.openShadowRoots)||0,crossOriginFrames:Boolean(e.crossOriginFrames)};
   return hashJson(stable);
 }
-function evidenceFingerprint(snapshot={}){
+function evidenceFingerprint(snapshot={},provider=''){
   const e=safeEvidence(snapshot);
   return{
     accountHash:e.account[0]?evidenceHash(e.account[0]):'',
     targetHash:e.target[0]?evidenceHash(e.target[0]):'',
+    resourceHash:resourceFingerprint(provider,snapshot),
     formHash:formFingerprint(snapshot),
     surfaceHash:surfaceFingerprint(snapshot)
   };
+}
+function expectedResourceMatches(contractResource,resource){
+  const want=normalize(contractResource);if(!want)return true;
+  return want===normalize(resource.id)||want===normalize(resource.kind+':'+resource.id);
 }
 function verifyFinalTarget(contract={},snapshot={},opts={}){
   const provider=normalize(contract.provider),cfg=PROVIDERS[provider];
@@ -60,11 +90,14 @@ function verifyFinalTarget(contract={},snapshot={},opts={}){
   if(!cfg.hosts.has(host))return fail('host_mismatch',{provider,host});
   const action=normalize(contract.expectedAction);
   if(!action)return fail('action_missing',{provider,host});
-  const ev=safeEvidence(snapshot),formHash=formFingerprint(snapshot),surfaceHash=surfaceFingerprint(snapshot);
+  const ev=safeEvidence(snapshot),resource=resourceEvidence(provider,snapshot.url),resourceHash=resourceFingerprint(provider,snapshot),formHash=formFingerprint(snapshot),surfaceHash=surfaceFingerprint(snapshot);
   if(contract.expectedAccount&&!exactEvidence(ev.account,contract.expectedAccount))return fail('account_mismatch',{provider,host,action});
   if(contract.expectedAccountHash&&!ev.account.some(x=>evidenceHash(x)===contract.expectedAccountHash))return fail('account_mismatch',{provider,host,action});
   if(contract.expectedTarget&&!exactEvidence(ev.target,contract.expectedTarget))return fail('target_mismatch',{provider,host,action});
   if(contract.expectedTargetHash&&!ev.target.some(x=>evidenceHash(x)===contract.expectedTargetHash))return fail('target_mismatch',{provider,host,action});
+  if(contract.expectedResource&&!expectedResourceMatches(contract.expectedResource,resource))return fail('resource_mismatch',{provider,host,action,resourceKind:resource.kind||''});
+  if(contract.expectedResourceHash&&resourceHash!==clean(contract.expectedResourceHash,64))return fail('resource_mismatch',{provider,host,action,resourceKind:resource.kind||''});
+  if(contract.expectedResourceKind&&normalize(contract.expectedResourceKind)!==normalize(resource.kind))return fail('resource_kind_mismatch',{provider,host,action});
   if(contract.expectedFormHash&&formHash!==clean(contract.expectedFormHash,64))return fail('form_mismatch',{provider,host,action});
   if(contract.expectedSurfaceHash&&surfaceHash!==clean(contract.expectedSurfaceHash,64))return fail('surface_mismatch',{provider,host,action});
   const now=Number.isFinite(opts.nowMs)?opts.nowMs:Date.now(),ttl=Math.max(1000,Math.min(Number(opts.ttlMs)||DEFAULT_TTL_MS,30000));
@@ -72,10 +105,10 @@ function verifyFinalTarget(contract={},snapshot={},opts={}){
     provider,host,action,
     account:normalize(contract.expectedAccount)||clean(contract.expectedAccountHash,64),
     target:normalize(contract.expectedTarget)||clean(contract.expectedTargetHash,64),
-    url:clean(snapshot.url,2000),formHash,surfaceHash
+    resourceHash,url:clean(snapshot.url,2000),formHash,surfaceHash
   };
   const digest=hashJson(binding);
-  return{ok:true,version:FINAL_TARGET_VERIFICATION_VERSION,provider,host,action,bindingHash:digest,formHash,surfaceHash,verifiedAt:new Date(now).toISOString(),expiresAt:new Date(now+ttl).toISOString(),approvalGranted:false};
+  return{ok:true,version:FINAL_TARGET_VERIFICATION_VERSION,provider,host,action,bindingHash:digest,resourceHash,resourceKind:resource.kind||'',formHash,surfaceHash,verifiedAt:new Date(now).toISOString(),expiresAt:new Date(now+ttl).toISOString(),approvalGranted:false};
 }
 function fail(reason,extra={}){return{ok:false,version:FINAL_TARGET_VERIFICATION_VERSION,reason,...extra,approvalGranted:false}}
 function assertReceipt(receipt,contract={},snapshot={},opts={}){
@@ -87,4 +120,4 @@ function assertReceipt(receipt,contract={},snapshot={},opts={}){
   return true;
 }
 function codeError(code){const e=new Error(code);e.code=code;return e}
-module.exports={FINAL_TARGET_VERIFICATION_VERSION,DEFAULT_TTL_MS,evidenceFingerprint,canonicalForms,formFingerprint,surfaceFingerprint,verifyFinalTarget,assertReceipt};
+module.exports={FINAL_TARGET_VERIFICATION_VERSION,DEFAULT_TTL_MS,evidenceFingerprint,resourceEvidence,resourceFingerprint,canonicalForms,formFingerprint,surfaceFingerprint,verifyFinalTarget,assertReceipt};
