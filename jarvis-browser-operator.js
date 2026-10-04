@@ -5,9 +5,9 @@ const http=require('http');
 const childProcess=require('child_process');
 const finalTarget=require('./jarvis-final-target-verification');
 
-const BROWSER_OPERATOR_VERSION='1.0';
+const BROWSER_OPERATOR_VERSION='1.1';
 const DEFAULT_PORT=9222;
-const DEFAULT_ALLOWED_HOSTS=['studio.youtube.com','youtube.com','www.youtube.com','admin.shopify.com'];
+const DEFAULT_ALLOWED_HOSTS=['*'];
 
 function execFile(exe,args,opts={}){
   return childProcess.execFileSync(exe,args,{
@@ -36,18 +36,20 @@ function profileDir(workspace){
   return dir;
 }
 function allowedHosts(){
-  const extra=String(process.env.JARVIS_BROWSER_ALLOWED_HOSTS||'').split(',').map(x=>x.trim().toLowerCase()).filter(Boolean);
-  return[...new Set([...DEFAULT_ALLOWED_HOSTS,...extra])];
+  return DEFAULT_ALLOWED_HOSTS.slice();
 }
 function hostAllowed(hostname){
-  const host=String(hostname||'').toLowerCase();
-  return allowedHosts().some(rule=>host===rule||host.endsWith('.'+rule));
+  const host=String(hostname||'').trim();
+  if(!host)return false;
+  try{
+    const u=new URL('https://'+host);
+    return !!u.hostname;
+  }catch(_){return false}
 }
 function safeUrl(raw){
   const u=new URL(String(raw||'').trim());
   if(!['https:','http:'].includes(u.protocol))throw new Error('Only http/https URLs are allowed');
-  if(['127.0.0.1','localhost'].includes(u.hostname))return u.toString();
-  if(!hostAllowed(u.hostname))throw new Error('Host is outside JARVIS browser allowlist: '+u.hostname);
+  if(!hostAllowed(u.hostname))throw new Error('Invalid browser hostname');
   return u.toString();
 }
 function getJson(url,timeout=2500){
@@ -71,7 +73,7 @@ async function status(workspace,port=DEFAULT_PORT){
     browser:version&&version.Browser||browser&&browser.name||null,
     executable:browser&&browser.exe||null,port,profile:profileDir(workspace),
     tabs:Array.isArray(tabs)?tabs.filter(x=>x&&x.type==='page').map(x=>({id:x.id,title:x.title,url:x.url})).slice(0,20):[],
-    allowedHosts:allowedHosts()
+    allowedHosts:allowedHosts(),anyHttpSite:true
   };
 }
 async function waitReady(port=DEFAULT_PORT,timeoutMs=12000){
@@ -97,7 +99,7 @@ async function start(workspace,{preferred='',port=DEFAULT_PORT,url='https://www.
   const args=['--remote-debugging-port='+port,'--remote-debugging-address=127.0.0.1','--user-data-dir='+profile,'--no-first-run','--no-default-browser-check','--disable-features=TranslateUI',target];
   childProcess.spawn(browser.exe,args,{detached:true,windowsHide:true,stdio:'ignore'}).unref();
   const v=await waitReady(port);
-  return{ok:true,version:BROWSER_OPERATOR_VERSION,running:true,browser:v.Browser||browser.name,executable:browser.exe,port,profile,opened:target,reused:false,allowedHosts:allowedHosts()};
+  return{ok:true,version:BROWSER_OPERATOR_VERSION,running:true,browser:v.Browser||browser.name,executable:browser.exe,port,profile,opened:target,reused:false,allowedHosts:allowedHosts(),anyHttpSite:true};
 }
 function psQuote(x){return String(x).replace(/'/g,"''")}
 async function activePage(port=DEFAULT_PORT){
@@ -137,7 +139,7 @@ async function evaluate(workspace,expression,{port=DEFAULT_PORT}={}){
   return result.result&&Object.prototype.hasOwnProperty.call(result.result,'value')?result.result.value:null;
 }
 async function pageSnapshot(workspace,{port=DEFAULT_PORT}={}){
-  const expression="(()=>{const p=location.pathname.split('/').filter(Boolean);const ci=p.indexOf('channel'),si=p.indexOf('store');const accountEl=[...document.querySelectorAll('[aria-label]')].find(e=>/@/.test(e.getAttribute('aria-label')||'')&&/(account|hesap|google)/i.test(e.getAttribute('aria-label')||''));return{title:document.title,url:location.href,targetEvidence:{account:accountEl?accountEl.getAttribute('aria-label'):'',target:ci>=0?(p[ci+1]||''):si>=0?(p[si+1]||''):''},text:(document.body&&document.body.innerText||'').replace(/\\\\s+/g,' ').slice(0,12000),forms:[...document.querySelectorAll('form')].slice(0,12).map(f=>({action:f.action,controls:[...f.querySelectorAll('input,textarea,select,button')].slice(0,60).map(el=>({tag:el.tagName.toLowerCase(),type:el.type||'',name:el.name||'',id:el.id||'',placeholder:el.placeholder||'',aria:el.getAttribute('aria-label')||'',text:(el.tagName==='BUTTON'||el.type==='submit'?String(el.innerText||el.value||''):'').slice(0,120)}))}))}})()";
+  const expression="(()=>{const p=location.pathname.split('/').filter(Boolean);const ci=p.indexOf('channel'),si=p.indexOf('store');const accountEl=[...document.querySelectorAll('[aria-label]')].find(e=>/@/.test(e.getAttribute('aria-label')||'')&&/(account|hesap|google)/i.test(e.getAttribute('aria-label')||''));return{title:document.title,url:location.href,targetEvidence:{account:accountEl?accountEl.getAttribute('aria-label'):'',target:ci>=0?(p[ci+1]||''):si>=0?(p[si+1]||''):''},text:(document.body&&document.body.innerText||'').replace(/\\s+/g,' ').slice(0,12000),forms:[...document.querySelectorAll('form')].slice(0,12).map(f=>({action:f.action,controls:[...f.querySelectorAll('input,textarea,select,button')].slice(0,60).map(el=>({tag:el.tagName.toLowerCase(),type:el.type||'',name:el.name||'',id:el.id||'',placeholder:el.placeholder||'',aria:el.getAttribute('aria-label')||'',text:(el.tagName==='BUTTON'||el.type==='submit'?String(el.innerText||el.value||''):'').slice(0,120)}))}))}})()";
   const value=await evaluate(workspace,expression,{port});return{ok:true,...value};
 }
 async function navigate(workspace,url,{port=DEFAULT_PORT}={}){
