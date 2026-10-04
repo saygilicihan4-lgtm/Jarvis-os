@@ -103,6 +103,19 @@
   setTimeout(()=>boot(0),0);
 })(typeof window!=='undefined'?window:null);
 
+// v189 phone visual-fit loader. Presentation-only: fixes viewport/touch rendering and owns no execution authority.
+;(function(host){
+  if(!host||!host.document)return;
+  const doc=host.document;
+  function boot(attempt=0){
+    if(doc.getElementById('jarvisMobileVisualFitV189Script'))return true;
+    if(!doc.getElementById('jarvisMobileCanonical')&&attempt<140){setTimeout(()=>boot(attempt+1),60);return false}
+    const script=doc.createElement('script');script.id='jarvisMobileVisualFitV189Script';script.src='/mobile-visual-fit-v189.js';script.async=false;
+    (doc.head||doc.documentElement).appendChild(script);return true;
+  }
+  setTimeout(()=>boot(0),0);
+})(typeof window!=='undefined'?window:null);
+
 // v186 mobile approval review loader. Review UI proxies the existing mission approval buttons; it owns no approval authority.
 ;(function(host){
   if(!host||!host.document)return;
