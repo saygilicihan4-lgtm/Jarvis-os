@@ -49,7 +49,7 @@ function normalizeTags(value){
 }
 function normalizeImages(value){
   const arr=Array.isArray(value)?value:(value?[value]:[]);
-  return arr.map((x,i)=>{
+  return arr.map(x=>{
     if(typeof x==='string')return{url:x.trim(),alt:''};
     return{url:String(x&&x.url||'').trim(),alt:String(x&&x.alt||'').trim()};
   }).filter(x=>/^https:\/\//i.test(x.url)).slice(0,20);
@@ -402,6 +402,54 @@ function assertPublishedOnPublication(out,publication){
   }
   return true;
 }
+function classifyProductPublicationState(product,productId){
+  const id=String(productId||'').trim();
+  if(!product||String(product.id||'')!==id){
+    const e=new Error('SHOPIFY_PUBLICATION_STATE_INVALID');
+    e.code='SHOPIFY_PUBLICATION_STATE_INVALID';
+    e.productId=id;
+    throw e;
+  }
+  const status=String(product.status||'').toUpperCase();
+  if(!['ACTIVE','DRAFT','ARCHIVED','UNLISTED'].includes(status)){
+    const e=new Error('SHOPIFY_PUBLICATION_STATE_INVALID');
+    e.code='SHOPIFY_PUBLICATION_STATE_INVALID';
+    e.productId=id;
+    throw e;
+  }
+  return{
+    product:{...product,status},
+    active:status==='ACTIVE',
+    published:product.publishedOnPublication===true
+  };
+}
+async function readProductPublicationState(creds,productId,publicationId){
+  const id=String(productId||'').trim();
+  const pubId=String(publicationId||'').trim();
+  if(!/^gid:\/\/shopify\/Product\/\d+$/.test(id))throw new Error('Geçersiz Shopify Product GID');
+  if(!/^gid:\/\/shopify\/Publication\/\d+$/.test(pubId)){
+    const e=new Error('SHOPIFY_PUBLICATION_STATE_INVALID');
+    e.code='SHOPIFY_PUBLICATION_STATE_INVALID';
+    throw e;
+  }
+  const data=await graphQLRequest(creds,`query JarvisProductPublicationState($id: ID!, $publicationId: ID!) {
+    product(id: $id) {
+      id
+      title
+      status
+      publishedOnPublication(publicationId: $publicationId)
+    }
+  }`,{id,publicationId:pubId});
+  return classifyProductPublicationState(data.product||null,id);
+}
+function publishRecoveryError(code,productId,publicationId,{state=null}={}){
+  const e=new Error(code);
+  e.code=code;
+  e.productId=String(productId||'').trim()||null;
+  e.publicationId=String(publicationId||'').trim()||null;
+  if(state)e.state={active:state.active===true,published:state.published===true,status:String(state.product&&state.product.status||'')||null};
+  return e;
+}
 async function publishProduct(workspace,productId){
   const id=String(productId||'').trim();
   if(!/^gid:\/\/shopify\/Product\/\d+$/.test(id))throw new Error('Geçersiz Shopify Product GID');
@@ -421,22 +469,44 @@ async function publishProduct(workspace,productId){
   const update=active.productUpdate||{};
   const updateErrors=summarizeErrors(update.userErrors);
   if(updateErrors.length)throw new Error('Ürün ACTIVE yapılamadı: '+updateErrors.map(x=>x.message).join(' | '));
-  const activeProduct=assertActiveProduct(update,id);
+  let activeProduct=assertActiveProduct(update,id);
+  let publicationVerified=false;
+  let publishRecovered=false;
 
-  const pub=await graphQLRequest(creds,`mutation JarvisPublishProduct($id: ID!, $input: [PublicationInput!]!, $publicationId: ID!) {
-    publishablePublish(id: $id, input: $input) {
-      publishable { publishedOnPublication(publicationId: $publicationId) }
-      userErrors { field message }
+  try{
+    const pub=await graphQLRequest(creds,`mutation JarvisPublishProduct($id: ID!, $input: [PublicationInput!]!, $publicationId: ID!) {
+      publishablePublish(id: $id, input: $input) {
+        publishable { publishedOnPublication(publicationId: $publicationId) }
+        userErrors { field message }
+      }
+    }`,{
+      id,
+      input:[{publicationId:publication.id}],
+      publicationId:publication.id
+    });
+    const out=pub.publishablePublish||{};
+    const errors=summarizeErrors(out.userErrors);
+    if(errors.length){
+      const e=new Error('Ürün yayınlanamadı: '+errors.map(x=>x.message).join(' | '));
+      e.code='SHOPIFY_PUBLISH_MUTATION_REJECTED';
+      throw e;
     }
-  }`,{
-    id,
-    input:[{publicationId:publication.id}],
-    publicationId:publication.id
-  });
-  const out=pub.publishablePublish||{};
-  const errors=summarizeErrors(out.userErrors);
-  if(errors.length)throw new Error('Ürün yayınlanamadı: '+errors.map(x=>x.message).join(' | '));
-  const publicationVerified=assertPublishedOnPublication(out,publication);
+    publicationVerified=assertPublishedOnPublication(out,publication);
+  }catch(publishError){
+    let state;
+    try{
+      state=await readProductPublicationState(creds,id,publication.id);
+    }catch(_verificationError){
+      throw publishRecoveryError('SHOPIFY_PUBLICATION_STATE_AMBIGUOUS',id,publication.id);
+    }
+    if(!(state.active&&state.published)){
+      throw publishRecoveryError('SHOPIFY_PUBLICATION_NOT_CONFIRMED',id,publication.id,{state});
+    }
+    activeProduct=state.product;
+    publicationVerified=true;
+    publishRecovered=true;
+  }
+
   const dirs=commerceDirs(workspace);
   const receipt=path.join(dirs.receipts,'publish-'+safeName(activeProduct.title||id)+'-'+Date.now()+'.json');
   fs.writeFileSync(receipt,JSON.stringify({
@@ -451,16 +521,18 @@ async function publishProduct(workspace,productId){
     draftCompletedAt:approval.draftCompletedAt,
     product:activeProduct,
     publication,
-    publicationVerified
+    publicationVerified,
+    publishRecovered
   },null,2),'utf8');
   return{
     ok:true,
     product:activeProduct,
     publication,
     publicationVerified,
+    publishRecovered,
     approval,
     receipt,
-    message:'Ürün Online Store kanalında yayınlandı · '+String(activeProduct.title||id)
+    message:'Ürün Online Store kanalında yayınlandı'+(publishRecovered?' · durum sorgusuyla doğrulandı':'')+' · '+String(activeProduct.title||id)
   };
 }
 function missionTag(missionId){
@@ -538,5 +610,7 @@ module.exports={
   resolveShopifyPublishApproval,
   assertActiveProduct,
   assertPublishedOnPublication,
+  classifyProductPublicationState,
+  readProductPublicationState,
   publishProduct
 };
