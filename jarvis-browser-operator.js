@@ -3,6 +3,7 @@ const path=require('path');
 const os=require('os');
 const http=require('http');
 const childProcess=require('child_process');
+const finalTarget=require('./jarvis-final-target-verification');
 
 const BROWSER_OPERATOR_VERSION='1.0';
 const DEFAULT_PORT=9222;
@@ -162,6 +163,13 @@ async function clickByText(workspace,text,{port=DEFAULT_PORT}={}){
   ].join('');
   return evaluate(workspace,expr,{port});
 }
+async function verifiedFinalClick(workspace,text,contract,{port=DEFAULT_PORT,receipt=null}={}){
+  const snap=await pageSnapshot(workspace,{port});
+  const proof=receipt||finalTarget.verifyFinalTarget(contract,snap);
+  finalTarget.assertReceipt(proof,contract,snap);
+  const result=await clickByText(workspace,text,{port});
+  return{...result,verification:{bindingHash:proof.bindingHash,verifiedAt:proof.verifiedAt,expiresAt:proof.expiresAt,approvalGranted:false}};
+}
 async function setField(workspace,label,value,{port=DEFAULT_PORT}={}){
   const key=String(label||'').trim(),val=String(value??'');if(!key)throw new Error('label required');
   const controlSelector=JSON.stringify('input:not([type="hidden"]),textarea,select,[contenteditable="true"]');
@@ -194,4 +202,4 @@ async function uploadFile(workspace,selector,filePath,{port=DEFAULT_PORT}={}){
   if(!query.nodeId)throw new Error('File input not found');
   runCdpPowerShell(page.webSocketDebuggerUrl,'DOM.setFileInputFiles',{nodeId:query.nodeId,files:[full]});return{ok:true,file:full};
 }
-module.exports={BROWSER_OPERATOR_VERSION,DEFAULT_PORT,findBrowser,allowedHosts,hostAllowed,safeUrl,profileDir,status,start,pageSnapshot,navigate,evaluate,clickByText,setField,uploadFile};
+module.exports={BROWSER_OPERATOR_VERSION,DEFAULT_PORT,findBrowser,allowedHosts,hostAllowed,safeUrl,profileDir,status,start,pageSnapshot,navigate,evaluate,clickByText,verifiedFinalClick,setField,uploadFile};
