@@ -62,6 +62,12 @@ function authRequired(snap){
   if(/(?:oturum aç|oturum ac|sign in to youtube|sign in)/i.test(text)&&!/(?:içerik|content|dashboard|kanal içeriği|channel content)/i.test(text))return true;
   return false;
 }
+function isYouTubeStudioSnapshot(snap){
+  try{
+    const url=new URL(String(snap&&snap.url||''));
+    return url.protocol==='https:'&&url.hostname.toLowerCase()==='studio.youtube.com';
+  }catch(_){return false}
+}
 async function status(operator,workspace){
   const s=await operator.status(workspace);
   if(!s.running)return{
@@ -290,14 +296,12 @@ async function prepareDraft(operator,workspace,{file,title='',description='',thu
 }
 
 function publishContextReady(snap){
-  const url=String(snap&&snap.url||'').toLowerCase();
   const text=String(snap&&snap.text||'').toLocaleLowerCase('tr-TR');
-  return /studio\.youtube\.com/.test(url)&&/(?:görünürlük|gorunurluk|visibility|ayrıntılar|ayrintilar|details|kontroller|checks|video öğeleri|video ogeleri|video elements|ileri|next)/i.test(text);
+  return isYouTubeStudioSnapshot(snap)&&/(?:görünürlük|gorunurluk|visibility|ayrıntılar|ayrintilar|details|kontroller|checks|video öğeleri|video ogeleri|video elements|ileri|next)/i.test(text);
 }
 function publishSuccess(snap){
-  const url=String(snap&&snap.url||'').toLowerCase();
   const text=String(snap&&snap.text||'').toLocaleLowerCase('tr-TR');
-  return /studio\.youtube\.com/.test(url)&&/(?:video\s+(?:yayınlandı|yayinlandi)|(?:yayınlandı|yayinlandi)\s+video|video\s+published|published\s+successfully)/i.test(text);
+  return isYouTubeStudioSnapshot(snap)&&/(?:video\s+(?:yayınlandı|yayinlandi)|(?:yayınlandı|yayinlandi)\s+video|video\s+published|published\s+successfully)/i.test(text);
 }
 async function selectPublicVisibility(operator,workspace){
   const expression=[
@@ -427,8 +431,7 @@ async function publishPreparedDraft(operator,workspace,{missionId='',approvedAt=
   }
 
   const preClickSnap=await snapshot(operator,workspace);
-  const preClickUrl=String(preClickSnap&&preClickSnap.url||'').toLowerCase();
-  if(!(preClickSnap&&preClickSnap.ok)||!/studio\.youtube\.com/.test(preClickUrl)){
+  if(!(preClickSnap&&preClickSnap.ok)||!isYouTubeStudioSnapshot(preClickSnap)){
     return{ok:false,code:'YOUTUBE_PUBLISH_CONTEXT_REQUIRED',retryable:true,receipt,message:'Publish öncesi YouTube Studio bağlamı doğrulanamadı. PUBLIC adımı uygulanmadı.'};
   }
   if(publishSuccess(preClickSnap)){
