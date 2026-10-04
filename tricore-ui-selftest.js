@@ -4,11 +4,13 @@ const fs=require('fs');
 const assert=require('assert');
 const tri=require('./public/tri-core.js');
 const personality=require('./jarvis-tri-core-personality.js');
+const consultation=require('./jarvis-tri-core-consultation.js');
 const hologram=require('./public/tri-core-hologram.js');
 
 const css=fs.readFileSync('public/style.css','utf8');
 const routerSource=fs.readFileSync('public/tri-core.js','utf8');
 const personalitySource=fs.readFileSync('jarvis-tri-core-personality.js','utf8');
+const consultationSource=fs.readFileSync('jarvis-tri-core-consultation.js','utf8');
 const hologramSource=fs.readFileSync('public/tri-core-hologram.js','utf8');
 const loaderSource=fs.readFileSync('public/language-chat.js','utf8');
 const outputSource=fs.readFileSync('jarvis-language-turn-output.js','utf8');
@@ -45,6 +47,8 @@ assert.deepStrictEqual(
 );
 for(const p of Object.values(tri.PROFILES))assert.strictEqual(p.authority,'shared_guardrail_only','UI role must not gain independent authority');
 for(const p of Object.values(personality.PROFILES))assert.strictEqual(p.authority,'shared_guardrail_only','conversation role must not gain independent authority');
+assert.strictEqual(consultation.MAX_LENSES,2,'internal consultation must stay bounded');
+assert.deepStrictEqual(consultation.lensIds({core:'jarvis',consultWith:['orion','nova','jarvis','bad']}),['orion','nova'],'consultation allow-list/bound changed');
 
 const directNova=personality.select('Nova, iki seçeneği riskleriyle karşılaştır');
 assert.strictEqual(directNova.core,'nova');assert.strictEqual(directNova.source,'explicit');assert(!/^nova\b/i.test(directNova.cleanText),'explicit persona prefix should be stripped before model input');
@@ -67,11 +71,18 @@ assert(!/\bexecute\s*[:=(]/i.test(routerSource),'presentation router must not ex
 assert(!/\bapprove\s*[:=(]/i.test(routerSource),'presentation router must not expose approval authority');
 assert(!/\bfetch\s*\(/.test(personalitySource),'personality selector must stay local/pure');
 assert(!personalitySource.includes('localStorage')&&!personalitySource.includes('sessionStorage'),'personality selector must not persist user text');
+assert(!/\bfetch\s*\(/.test(consultationSource),'consultation policy module must stay local/pure');
+assert(!consultationSource.includes('localStorage')&&!consultationSource.includes('sessionStorage'),'consultation policy must not persist notes or user text');
+assert(!consultationSource.includes("require('fs')")&&!consultationSource.includes('child_process'),'consultation policy must not gain filesystem/process authority');
 assert(outputSource.includes("require('./jarvis-tri-core-personality')"),'local conversation output must use tri-core personality contract');
+assert(outputSource.includes("require('./jarvis-tri-core-consultation')"),'local conversation output must use bounded consultation policy');
+assert(outputSource.includes('consultation.synthesisBlock(consultationNotes)'),'final reply must synthesize completed internal consultation notes');
 assert(desktopConversationSource.includes('const selected=triCore.select(capture.text)'),'desktop conversation must select deterministic tri-core metadata before generation');
 assert(mobileConversationSource.includes('const selected=triCore.select(clean)'),'mobile conversation must select deterministic tri-core metadata before generation');
-assert(desktopConversationSource.includes('core:selected.core')&&desktopConversationSource.includes('consultWith:[...(selected.consultWith||[])]'),'desktop result must pin role metadata to deterministic router');
-assert(mobileConversationSource.includes('core:selected.core')&&mobileConversationSource.includes('consultWith:[...(selected.consultWith||[])]'),'mobile result must pin role metadata to deterministic router');
+assert(desktopConversationSource.includes('core:selected.core')&&desktopConversationSource.includes('consultWith:completedConsult')&&desktopConversationSource.includes('consultationRequested:[...(selected.consultWith||[])]'),'desktop result must pin role/requested consultation to deterministic router and report only completed lenses');
+assert(mobileConversationSource.includes('core:selected.core')&&mobileConversationSource.includes('consultWith:completedConsult')&&mobileConversationSource.includes('consultationRequested:[...(selected.consultWith||[])]'),'mobile result must pin role/requested consultation to deterministic router and report only completed lenses');
+assert(desktopConversationSource.includes('.filter(id=>(selected.consultWith||[]).includes(id))'),'desktop completed lenses must be re-filtered against deterministic plan');
+assert(mobileConversationSource.includes('.filter(id=>(selected.consultWith||[]).includes(id))'),'mobile completed lenses must be re-filtered against deterministic plan');
 assert(desktopConversationSource.includes("authority:'shared_guardrail_only'"),'desktop result authority marker missing');
 assert(mobileConversationSource.includes("authority:'shared_guardrail_only'"),'mobile result authority marker missing');
 assert(!/core:generated\.core/.test(desktopConversationSource),'model/output metadata must not choose desktop authority role');
@@ -104,4 +115,4 @@ assert(hologramSource.includes("dataset.jarvisCoreFx='lite'"),'CSS fallback mark
 assert(!/\bfetch\s*\(/.test(hologramSource),'WebGL renderer must not make network calls');
 assert(!hologramSource.includes('localStorage')&&!hologramSource.includes('sessionStorage'),'WebGL renderer must not persist sensitive state');
 
-console.log('TRI-CORE v179 PERSONALITY + SINGLE REACTIVE HOLOGRAM SELFTEST PASS');
+console.log('TRI-CORE v180 PERSONALITY + PRIVATE CONSULTATION + SINGLE REACTIVE HOLOGRAM SELFTEST PASS');
