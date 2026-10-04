@@ -7,6 +7,7 @@ const html=fs.readFileSync('./public/index.html','utf8');
 const css=fs.readFileSync('./public/style.css','utf8');
 const missionEngine=fs.readFileSync('./jarvis-mission-engine.js','utf8');
 const languageChat=fs.readFileSync('./public/language-chat.js','utf8');
+const serviceWorker=fs.readFileSync('./public/sw.js','utf8');
 
 assert.ok(worker.includes("const WORKER_VERSION='2.102.0'"),'Worker 2.102.0 required');
 assert.ok(worker.includes("'pc_self_repair_v1'"),'self-repair capability must be preserved');
@@ -70,4 +71,28 @@ assert.ok(!languageChat.includes("'/api/tasks/'+")&&!languageChat.includes('/app
 assert.ok(languageChat.includes("textContent='ONAYLA'"),'mobile approval button missing');
 assert.ok(languageChat.includes("textContent='İPTAL'"),'mobile cancel button missing');
 
-console.log('MISSION CONSOLE SELFTEST PASS');
+// v171: notification clicks deep-link to one exact durable mission, and the
+// approval action is rebound to the currently rendered card + current queue
+// before any message can reach the Worker.
+assert.doesNotThrow(()=>new Function(serviceWorker),'service worker has invalid JavaScript syntax');
+const swHelperSource=serviceWorker.slice(0,serviceWorker.indexOf("self.addEventListener('push'"));
+const swHelpers=new Function(swHelperSource+';return {missionIdFromTag,safeNotificationUrl};')();
+const deepId='M-AAAAAAAAAAAA';
+assert.strictEqual(swHelpers.missionIdFromTag('jarvis-mission-'+deepId),deepId);
+assert.strictEqual(swHelpers.missionIdFromTag('jarvis-mission-bad'),'');
+assert.strictEqual(swHelpers.safeNotificationUrl('/', 'jarvis-mission-'+deepId),'/?mission='+deepId);
+assert.strictEqual(swHelpers.safeNotificationUrl('/reminders','jarvis-reminder'),'/reminders');
+assert.strictEqual(swHelpers.safeNotificationUrl('https://evil.example/','jarvis-reminder'),'/');
+assert.strictEqual(swHelpers.safeNotificationUrl('//evil.example/','jarvis-reminder'),'/');
+assert.ok(serviceWorker.includes('event.notification.tag'),'notification click must preserve mission tag binding');
+assert.ok(languageChat.includes('const MISSION_ID_RE=/^M-[A-Z0-9-]{12,80}$/'),'mobile deep link mission id validation missing');
+assert.ok(languageChat.includes('function missionIdFromLocation()'),'mobile mission query parser missing');
+assert.ok(languageChat.includes("new URLSearchParams(root.location&&root.location.search||'').get('mission')"),'mission deep link query is not read');
+assert.ok(languageChat.includes('function missionForCard(queue,card)'),'rendered card/current queue binding missing');
+assert.ok(languageChat.includes("const mission=await resolveFreshMission(req,card)"),'mobile action is not rebound to its exact rendered card');
+assert.ok(languageChat.includes('card.dataset.jarvisMissionId=String(mission.id)'),'verified card mission id is not retained');
+assert.ok(languageChat.includes('function focusMissionFromUrl('),'mission deep link focus helper missing');
+assert.ok(languageChat.includes("card.dataset.jarvisMissionFocused='1'"),'focused mission evidence missing');
+assert.ok(languageChat.includes("card.scrollIntoView({behavior:'smooth',block:'center'})"),'mission deep link does not bring the exact card into view');
+
+console.log('MISSION CONSOLE SELFTEST PASS · v171 exact mission deep-link + current-card approval binding');
