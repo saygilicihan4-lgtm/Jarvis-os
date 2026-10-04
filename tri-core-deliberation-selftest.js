@@ -4,6 +4,8 @@ const fs=require('fs');
 const tri=require('./jarvis-tri-core-personality');
 const deliberation=require('./jarvis-tri-core-deliberation');
 const {createOutput}=require('./jarvis-language-turn-output');
+const desktopConversation=require('./jarvis-language-conversation');
+const mobileConversation=require('./jarvis-mobile-language-conversation');
 
 (async()=>{
   const secretText='Jarvis, race condition kök nedenini analiz et, riskleri karşılaştır; token=TOPSECRET123 password=qwerty987 87654321 Bearer abcdefghijklmnop sk-abcdefghijk https://user:pass@example.test/path';
@@ -15,6 +17,10 @@ const {createOutput}=require('./jarvis-language-turn-output');
   assert.equal(selected.core,'jarvis');
   assert.deepEqual([...selected.consultWith],['orion','nova'],'mixed technical/advisory request should plan ORION + NOVA');
   assert.deepEqual([...deliberation.sanitizePlan(selected)],['orion','nova']);
+  assert.deepEqual(desktopConversation.verifiedConsulted({consultedWith:['orion']},selected),['orion']);
+  assert.deepEqual(mobileConversation.verifiedConsulted({consultedWith:['nova','orion','nova']},selected),['nova','orion']);
+  assert.throws(()=>desktopConversation.verifiedConsulted({consultedWith:['jarvis']},selected),/contract_mismatch/,'primary core cannot masquerade as consultant');
+  assert.throws(()=>mobileConversation.verifiedConsulted({consultedWith:['unknown']},selected),/contract_mismatch/,'unknown consultant must fail closed');
   assert.throws(()=>deliberation.createDeliberator({origin:'https://paid.example'}),/loopback/);
   assert.throws(()=>deliberation.createDeliberator({origin:'http://user:pass@localhost:11434'}),/loopback/);
 
