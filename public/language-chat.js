@@ -66,5 +66,20 @@
       return !!(root.JarvisMobileSpeechEvidenceUi&&root.JarvisMobileSpeechEvidenceUi.install(root.document));
     }catch(_){return false}
   }
+  function bootMissionActions(attempt=0){
+    if(root.JarvisMissionActions){
+      try{return !!root.JarvisMissionActions.install(root)}catch(_){return false}
+    }
+    let script=root.document.getElementById('jarvisMissionActionsScript');
+    if(!script){
+      script=root.document.createElement('script');
+      script.id='jarvisMissionActionsScript';script.src='/mission-actions.js';script.async=false;
+      script.onload=()=>{try{root.JarvisMissionActions&&root.JarvisMissionActions.install(root)}catch(_){}};
+      (root.document.head||root.document.documentElement).appendChild(script);
+    }
+    if(attempt<30)setTimeout(()=>bootMissionActions(attempt+1),100);
+    return false;
+  }
   setTimeout(()=>boot(0),0);
+  setTimeout(()=>bootMissionActions(0),0);
 })(typeof globalThis==='object'?globalThis:this);
