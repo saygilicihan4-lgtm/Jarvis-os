@@ -1,6 +1,7 @@
 const fs=require('fs');
 const assert=require('assert');
 const approvalIntent=require('./jarvis-approval-intent');
+const commerceEngine=require('./jarvis-commerce-engine');
 
 const worker=fs.readFileSync('./worker.js','utf8');
 const commerce=fs.readFileSync('./jarvis-commerce-engine.js','utf8');
@@ -207,8 +208,8 @@ resolved=approvalIntent.resolveApprovalTarget({approval:youtubeApproval,pending:
 assert.strictEqual(resolved.ok,false);
 assert.strictEqual(resolved.code,'SURFACE_NOT_PENDING');
 
-assert.ok(commerce.includes('async function publishProduct(workspace,productId,opts={})'),'Shopify publish engine missing');
-assert.ok(commerce.includes("Geçersiz Shopify Product GID")&&commerce.includes('function validProductGid(id)')&&commerce.includes("Product\\/\\d+$/.test(String(id||'').trim())"),'Shopify publish product id validation missing');
+assert.strictEqual(typeof commerceEngine.publishProduct,'function','Shopify publish engine missing');
+assert.throws(()=>commerceEngine.resolveShopifyPublishApproval('/tmp/jarvis-invalid-approval-root','not-a-product-gid'),/Geçersiz Shopify Product GID/,'Shopify publish product id validation missing');
 assert.ok(youtube.includes('async function publishPreparedDraft('),'YouTube approval-gated publish engine missing');
 assert.ok(youtube.includes('explicit approval proof required for YouTube publish'),'YouTube module approval proof missing');
 assert.ok(youtube.includes("state:'publish_started'"),'YouTube publish preflight receipt missing');
