@@ -66,3 +66,14 @@
   }
   return Object.freeze({VERSION,ROLE_INDEX,STATE_INDEX,lowPower,reduced,install});
 });
+
+;(function(host){
+  if(!host||!host.document)return;
+  const doc=host.document;
+  if(doc.getElementById('jarvisReferenceCockpitScript'))return;
+  const script=doc.createElement('script');
+  script.id='jarvisReferenceCockpitScript';
+  script.src='/reference-cockpit.js';
+  script.async=false;
+  (doc.head||doc.documentElement).appendChild(script);
+})(typeof window!=='undefined'?window:null);
