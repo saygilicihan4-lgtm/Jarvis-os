@@ -1,5 +1,6 @@
 'use strict';
 const assert=require('assert/strict');
+const fs=require('fs');
 const mobile=require('./public/mobile-language-chat');
 function storage(seed={}){const m=new Map(Object.entries(seed));return{getItem:k=>m.has(k)?m.get(k):null,setItem:(k,v)=>m.set(String(k),String(v)),removeItem:k=>m.delete(k),dump:()=>Object.fromEntries(m)}}
 (async()=>{
@@ -46,5 +47,27 @@ function storage(seed={}){const m=new Map(Object.entries(seed));return{getItem:k
   const pending=cancelClient.run({locale:'tr-TR'});await new Promise(resolve=>setTimeout(resolve,5));cancelClient.cancel();const cancelResult=await pending;
   assert.equal(cancelResult.cancelled,true);assert.deepEqual(mobile.readSttCaptureEvidence(cancelStore,now),[],'manual cancel must not create evidence');
 
-  console.log('MOBILE STT CAPTURE EVIDENCE SELFTEST PASS · non-empty browser capture is privacy-safe, locale-bound, TTL-limited, and never promoted to STT/language verification');
+  const index=fs.readFileSync(require.resolve('./public/index.html'),'utf8');
+  const captureStart=index.indexOf('function captureMobileLanguageTranscript(locale,signal)');
+  const captureEnd=index.indexOf('function waitMobileLanguagePoll',captureStart);
+  assert(captureStart>=0&&captureEnd>captureStart,'production browser capture adapter must exist');
+  const productionCapture=index.slice(captureStart,captureEnd);
+  assert(productionCapture.includes("if(!recognition)return Promise.reject(new Error('browser_stt_unsupported'))"),'production capture must fail closed without browser recognizer');
+  assert(productionCapture.includes('recognition.lang=locale;recognition.start()'),'production capture must bind the requested locale before starting the recognizer');
+
+  const resultStart=index.indexOf('recognition.onresult=async e=>');
+  const resultEnd=index.indexOf('function ',resultStart+20);
+  assert(resultStart>=0,'production SpeechRecognition onresult handler must exist');
+  const productionResult=index.slice(resultStart,resultEnd>resultStart?resultEnd:resultStart+5000);
+  assert(productionResult.includes('if(e.results[e.results.length-1].isFinal)'),'mobile capture must wait for a final browser recognition result');
+  assert(productionResult.includes('if(mobileLanguageCapture)'),'final browser result must resolve through the dedicated mobile capture slot');
+  assert(productionResult.includes('slot.resolve(captured)'),'dedicated mobile capture slot must receive the recognizer transcript');
+
+  const clientStart=index.indexOf('JarvisMobileLanguageChat.createClient({');
+  const clientEnd=index.indexOf('});',clientStart);
+  assert(clientStart>=0&&clientEnd>clientStart,'production mobile language client wiring must exist');
+  const productionClient=index.slice(clientStart,clientEnd);
+  assert(productionClient.includes('capture:captureMobileLanguageTranscript'),'production evidence path must stay wired to the browser SpeechRecognition adapter, not an arbitrary text source');
+
+  console.log('MOBILE STT CAPTURE EVIDENCE SELFTEST PASS · privacy-safe locale-bound evidence is backed by the production browser SpeechRecognition wiring and never promoted to STT/language verification');
 })().catch(error=>{console.error(error);process.exitCode=1});
