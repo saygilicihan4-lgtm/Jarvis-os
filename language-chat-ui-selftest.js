@@ -24,8 +24,8 @@ const missionActions=require('./public/mission-actions');
   const confirm=createClient({request:async d=>d.action==='create'?{sessionId:'s'}:{ok:true,state:'confirm-language'},play:async()=>assert.fail('ambiguous language must not play')});
   await confirm.run();assert.equal(confirm.busy,false);
 
-  // v170: mobile Mission Queue actions are only derived from sanitized durable
-  // mission telemetry. PUBLIC approval carries the exact v169 80-bit REQ marker;
+  // v170: mobile Mission Queue actions are derived from the exact cloud-sanitized
+  // durable mission shape. PUBLIC approval carries the v169 80-bit REQ marker;
   // the cloud/mobile UI never manufactures a fresh approval fingerprint.
   const missionId='M-AAAAAAAAAAAA';
   const req='0123456789abcdefabcd';
@@ -33,7 +33,8 @@ const missionActions=require('./public/mission-actions');
     id:missionId,
     label:'ONAY · YOUTUBE PUBLIC · Demo · 15 DK · REQ '+req,
     status:'waiting_dependency',
-    step:{name:'youtube_publish',status:'blocked',error:{dependency:'approval'}}
+    step:{name:'youtube_publish',status:'blocked',attempts:1,dependency:'approval'},
+    artifacts:[]
   };
   assert.equal(missionActions.cleanMissionId(missionId),missionId);
   assert.equal(missionActions.cleanMissionId('M-bad'), '');
@@ -43,7 +44,7 @@ const missionActions=require('./public/mission-actions');
   });
   assert.equal(missionActions.approvalDescriptor({...approvalMission,label:'ONAY · REQ 0123456789'}),null,'legacy 40-bit REQ must not create an approval button');
   assert.equal(missionActions.approvalDescriptor({...approvalMission,status:'queued'}),null,'non-waiting mission must not expose approve');
-  assert.equal(missionActions.approvalDescriptor({...approvalMission,step:{error:{dependency:'shopify'}}}),null,'non-approval dependency must not expose approve');
+  assert.equal(missionActions.approvalDescriptor({...approvalMission,step:{...approvalMission.step,dependency:'shopify'}}),null,'non-approval dependency must not expose approve');
   assert.equal(missionActions.cancelDescriptor({...approvalMission,status:'completed'}),null,'terminal mission cannot be cancelled');
   assert.deepEqual(missionActions.cancelDescriptor({...approvalMission,status:'queued'}),{id:missionId,message:'görevi iptal et '+missionId});
   const decorated=missionActions.decorateMissionCard('<div class="task local-mission"><small>safe</small></div>',approvalMission);
@@ -103,5 +104,5 @@ const missionActions=require('./public/mission-actions');
   assert.ok(html.includes("if(document.hidden)languageChatClient?.cancel()"));
   assert.ok(html.includes("if(!ok)languageChatClient?.cancel()"));
   assert.ok(html.includes('languageChatStarting=true'));
-  console.log('LANGUAGE CHAT UI SELFTEST PASS · speech lifecycle + v170 mobile mission approve/cancel relay guards');
+  console.log('LANGUAGE CHAT UI SELFTEST PASS · speech lifecycle + v170 cloud-shaped mobile mission approve/cancel relay guards');
 })().catch(error=>{console.error(error);process.exitCode=1});
