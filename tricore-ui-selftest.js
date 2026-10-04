@@ -9,6 +9,7 @@ const hologram=require('./public/tri-core-hologram.js');
 const css=fs.readFileSync('public/style.css','utf8');
 const routerSource=fs.readFileSync('public/tri-core.js','utf8');
 const personalitySource=fs.readFileSync('jarvis-tri-core-personality.js','utf8');
+const deliberationSource=fs.readFileSync('jarvis-tri-core-deliberation.js','utf8');
 const hologramSource=fs.readFileSync('public/tri-core-hologram.js','utf8');
 const loaderSource=fs.readFileSync('public/language-chat.js','utf8');
 const outputSource=fs.readFileSync('jarvis-language-turn-output.js','utf8');
@@ -49,7 +50,7 @@ for(const p of Object.values(personality.PROFILES))assert.strictEqual(p.authorit
 const directNova=personality.select('Nova, iki seçeneği riskleriyle karşılaştır');
 assert.strictEqual(directNova.core,'nova');assert.strictEqual(directNova.source,'explicit');assert(!/^nova\b/i.test(directNova.cleanText),'explicit persona prefix should be stripped before model input');
 const directJarvis=personality.select('Jarvis, bu race condition kök nedenini incele');
-assert.strictEqual(directJarvis.core,'jarvis');assert(directJarvis.consultWith.includes('orion'),'explicit JARVIS may consult ORION lens without changing authority');
+assert.strictEqual(directJarvis.core,'jarvis');assert(directJarvis.consultWith.includes('orion'),'explicit JARVIS may plan ORION consultation without changing authority');
 const autoOrion=personality.select('Stack trace ve memory leak için derin teknik analiz yap');
 assert.strictEqual(autoOrion.core,'orion');assert.strictEqual(autoOrion.source,'automatic');
 const autoNova=personality.select('Sence iki alternatiften hangisi daha mantıklı?');assert.strictEqual(autoNova.core,'nova');
@@ -59,6 +60,7 @@ assert(prompt.includes('not independent agents'),'prompt must deny independent-a
 assert(prompt.includes('one Mission Engine, Worker and approval/authorization chain'),'shared authority chain missing from prompt');
 assert(prompt.includes('conversation channel has no tools or computer actions'),'conversation tool boundary missing');
 assert(prompt.includes('ORION (UZMAN)'),'consultation lens missing from generated prompt');
+assert(prompt.includes('when they actually completed'),'prompt must not fabricate consultation completion');
 
 assert(!/\bfetch\s*\(/.test(routerSource),'presentation router must not call network');
 assert(!routerSource.includes('localStorage'),'presentation router must not persist command text locally');
@@ -67,11 +69,20 @@ assert(!/\bexecute\s*[:=(]/i.test(routerSource),'presentation router must not ex
 assert(!/\bapprove\s*[:=(]/i.test(routerSource),'presentation router must not expose approval authority');
 assert(!/\bfetch\s*\(/.test(personalitySource),'personality selector must stay local/pure');
 assert(!personalitySource.includes('localStorage')&&!personalitySource.includes('sessionStorage'),'personality selector must not persist user text');
-assert(outputSource.includes("require('./jarvis-tri-core-personality')"),'local conversation output must use tri-core personality contract');
+assert(outputSource.includes("require('./jarvis-tri-core-deliberation')"),'local conversation output must use real deliberation runtime');
+assert(outputSource.includes('deliberator.consult'),'real consultation call missing');
+assert(outputSource.includes('advisoryBlock(deliberation.notes)'),'completed advisory notes must feed final synthesis');
+assert(deliberationSource.includes('loopback_deliberation_required'),'deliberation loopback gate missing');
+assert(deliberationSource.includes('[REDACTED_CODE]'),'session-code redaction missing');
+assert(!deliberationSource.includes('localStorage')&&!deliberationSource.includes('sessionStorage'),'deliberation must not persist user input or notes');
+assert(!deliberationSource.includes('console.log')&&!deliberationSource.includes('console.error'),'deliberation must not log user input or notes');
+
 assert(desktopConversationSource.includes('const selected=triCore.select(capture.text)'),'desktop conversation must select deterministic tri-core metadata before generation');
 assert(mobileConversationSource.includes('const selected=triCore.select(clean)'),'mobile conversation must select deterministic tri-core metadata before generation');
-assert(desktopConversationSource.includes('core:selected.core')&&desktopConversationSource.includes('consultWith:[...(selected.consultWith||[])]'),'desktop result must pin role metadata to deterministic router');
-assert(mobileConversationSource.includes('core:selected.core')&&mobileConversationSource.includes('consultWith:[...(selected.consultWith||[])]'),'mobile result must pin role metadata to deterministic router');
+assert(desktopConversationSource.includes('verifiedConsulted(generated,selected)'),'desktop must validate completed consultations against deterministic plan');
+assert(mobileConversationSource.includes('verifiedConsulted(generated,selected)'),'mobile must validate completed consultations against deterministic plan');
+assert(desktopConversationSource.includes('consultWith:consultedWith'),'desktop UI may show only completed consultations');
+assert(mobileConversationSource.includes('consultWith:consultedWith'),'mobile UI may show only completed consultations');
 assert(desktopConversationSource.includes("authority:'shared_guardrail_only'"),'desktop result authority marker missing');
 assert(mobileConversationSource.includes("authority:'shared_guardrail_only'"),'mobile result authority marker missing');
 assert(!/core:generated\.core/.test(desktopConversationSource),'model/output metadata must not choose desktop authority role');
@@ -104,4 +115,5 @@ assert(hologramSource.includes("dataset.jarvisCoreFx='lite'"),'CSS fallback mark
 assert(!/\bfetch\s*\(/.test(hologramSource),'WebGL renderer must not make network calls');
 assert(!hologramSource.includes('localStorage')&&!hologramSource.includes('sessionStorage'),'WebGL renderer must not persist sensitive state');
 
-console.log('TRI-CORE v179 PERSONALITY + SINGLE REACTIVE HOLOGRAM SELFTEST PASS');
+require('./tri-core-deliberation-selftest.js');
+console.log('TRI-CORE v180 PERSONALITY + REAL DELIBERATION + REACTIVE HOLOGRAM SELFTEST PASS');
