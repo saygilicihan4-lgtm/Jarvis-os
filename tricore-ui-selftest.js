@@ -81,6 +81,11 @@ assert(loaderSource.includes("script.src='/tri-core.js'"),'tri-core browser load
 assert(!loaderSource.includes('/tri-core-webgl.js'),'duplicate renderer loader must not return');
 assert(loaderSource.includes('consultWith'),'conversation state must preserve consultation lenses');
 assert(loaderSource.includes('jarvis:conversation-state'),'real conversation state bridge missing');
+assert(loaderSource.includes('__jarvisTriCoreMobileBridgeV179'),'mobile tri-core bridge missing');
+assert(loaderSource.includes("const ALLOWED=new Set(['jarvis','nova','orion'])"),'mobile bridge must allow only known core IDs');
+assert(loaderSource.includes("authority:'shared_guardrail_only'"),'mobile visual bridge must pin shared authority marker');
+const mobileBridge=loaderSource.split('// v179 mobile tri-core bridge.')[1].split(";(function(root){\n  'use strict';\n  if(!root||!root.document||!/iPhone|iPad|iPod|Android/i.test")[0];
+assert(!/src\.(transcript|reply|text|mission)/.test(mobileBridge),'mobile visual bridge must not copy transcript, reply or mission input');
 assert(routerSource.includes('jarvisCoreState'),'reactive core state dataset missing');
 assert(routerSource.includes('jarvisCoreCollab'),'consultation collaboration state missing');
 assert(routerSource.includes('jarvis:conversation-state'),'router must bind real conversation state events');
