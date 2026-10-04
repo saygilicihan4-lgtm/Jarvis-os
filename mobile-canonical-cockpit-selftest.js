@@ -5,6 +5,7 @@ const assert=require('assert');
 
 const mobile=fs.readFileSync('public/mobile-canonical-cockpit.js','utf8');
 const holo=fs.readFileSync('public/tri-core-hologram.js','utf8');
+const tri=fs.readFileSync('public/tri-core.js','utf8');
 const parts=[1,2,3,4].map(n=>fs.readFileSync(`public/jarvis-mobile-cockpit-v185-0${n}.b64`,'utf8').replace(/\s+/g,''));
 const joined=parts.join('');
 const art=Buffer.from(joined,'base64');
@@ -15,7 +16,7 @@ assert.strictEqual(art.subarray(0,4).toString('ascii'),'RIFF','approved cockpit 
 assert.strictEqual(art.subarray(8,12).toString('ascii'),'WEBP','approved cockpit WEBP header missing');
 assert.strictEqual(crypto.createHash('sha256').update(art).digest('hex'),'a6f13cb2a07b42abb4d795bdff62069ef9c5e6528145287407890fcb48049193','approved cockpit image bytes drifted');
 
-assert(mobile.includes("const VERSION='2.0'"),'v185 canonical implementation version missing');
+assert(mobile.includes("const VERSION='2.0'"),'exact approved canonical implementation version missing');
 assert(mobile.includes("const MEDIA='(max-width: 860px) and (orientation: portrait)'"),'portrait mobile activation contract missing');
 assert(mobile.includes('aspect-ratio:941/1672'),'approved 941x1672 aspect ratio missing');
 for(let n=1;n<=4;n++)assert(mobile.includes(`/jarvis-mobile-cockpit-v185-0${n}.b64`),`asset chunk ${n} loader missing`);
@@ -35,5 +36,8 @@ assert(!mobile.includes('localStorage')&&!mobile.includes('sessionStorage'),'pre
 assert(!mobile.includes('approve_mission_action')&&!mobile.includes('shopify_publish')&&!mobile.includes('youtube_publish'),'presentation must not gain publish/approval authority');
 assert(holo.includes("script.src='/mobile-canonical-cockpit.js'"),'tri-core runtime must load canonical mobile cockpit');
 assert(holo.includes('Presentation-only: authority remains on the legacy cockpit/mission bridges.'),'authority boundary note missing');
+assert(tri.includes("script.src='/tri-core-hologram.js'"),'tri-core router must bootstrap the presentation runtime');
+assert(!tri.includes("if(!doc||doc.body.dataset.jarvisCoreFx==='lite')return false"),'lite mode must not skip the presentation bootstrap chain');
+assert(tri.includes("const lite=doc.body&&doc.body.dataset.jarvisCoreFx==='lite'"),'lite-mode presentation bootstrap guard missing');
 
-console.log('MOBILE CANONICAL COCKPIT v185 SELFTEST PASS · approved portrait bytes + exact aspect + reactive holograms + i18n/RTL + legacy authority proxy');
+console.log('MOBILE CANONICAL COCKPIT v186 SELFTEST PASS · exact approved portrait bytes + lite bootstrap + reactive holograms + i18n/RTL + legacy authority proxy');

@@ -113,12 +113,16 @@
     return'idle';
   }
   function bootHologram(host){
-    const doc=host&&host.document;if(!doc||doc.body.dataset.jarvisCoreFx==='lite')return false;
-    if(host.JarvisTriCoreHologram){try{return !!host.JarvisTriCoreHologram.install(host)}catch(_){return false}}
+    const doc=host&&host.document;if(!doc)return false;
+    const lite=doc.body&&doc.body.dataset.jarvisCoreFx==='lite';
+    if(host.JarvisTriCoreHologram){
+      if(lite)return true;
+      try{return !!host.JarvisTriCoreHologram.install(host)}catch(_){return false}
+    }
     let script=doc.getElementById('jarvisTriCoreHologramScript');
     if(!script){
       script=doc.createElement('script');script.id='jarvisTriCoreHologramScript';script.src='/tri-core-hologram.js';script.async=false;
-      script.onload=()=>{try{host.JarvisTriCoreHologram&&host.JarvisTriCoreHologram.install(host)}catch(_){}};
+      script.onload=()=>{if(lite)return;try{host.JarvisTriCoreHologram&&host.JarvisTriCoreHologram.install(host)}catch(_){}};
       (doc.head||doc.documentElement).appendChild(script);
     }
     return false;
