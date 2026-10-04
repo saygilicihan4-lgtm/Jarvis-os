@@ -20,6 +20,27 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - name: Repair bounded exchange anchor
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/apply-v163-session-lifecycle.js')
+          s=p.read_text()
+          old="replaceOnce('server.js',oldExchange,newExchange,'code managed session');"
+          new="""{
+            let s=fs.readFileSync('server.js','utf8');
+            const start=\"  if(pathname==='/api/session/exchange'&&req.method==='POST'){\";
+            const end=\"\\n\\n  if(pathname==='/api/pairing/create'&&req.method==='POST'){\";
+            const a=s.indexOf(start),b=a<0?-1:s.indexOf(end,a+start.length);
+            if(a<0||b<0)throw new Error('code managed session: bounded anchor not found');
+            if(s.indexOf(start,a+start.length)>=0)throw new Error('code managed session: start anchor not unique');
+            s=s.slice(0,a)+newExchange+s.slice(b);
+            fs.writeFileSync('server.js',s);
+          }"""
+          if s.count(old)!=1:
+              raise SystemExit('expected one exchange patch call')
+          p.write_text(s.replace(old,new,1))
+          PY
       - name: Apply exact v163 integration
         run: node scripts/apply-v163-session-lifecycle.js
       - name: Validate session security
