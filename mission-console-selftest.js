@@ -55,20 +55,30 @@ assert.ok(css.includes('.status.waiting_dependency'),'waiting dependency styling
 assert.ok(css.includes('.status.paused'),'paused durable mission styling missing');
 assert.ok(html.includes("paused=Number(c.paused||0)"),'paused count is not shown in Mission Console state');
 
-// v171: mobile Mission Control is isolated from language-chat and directly tested.
+// v171/v172: mobile Mission Control is isolated and success requires a two-part
+// proof: authoritative Worker receipt plus a fresh durable-state transition.
 assert.doesNotThrow(()=>new Function(languageChat),'language chat bootstrap has invalid JavaScript syntax');
 assert.doesNotThrow(()=>new Function(missionActions),'mobile mission action module has invalid JavaScript syntax');
 assert.ok(languageChat.includes("script.src='/mission-actions.js'"),'mobile mission action module is not loaded');
 assert.ok(languageChat.includes('JarvisMissionActions.install(root)'),'mobile mission action module is not installed');
 assert.ok(!languageChat.includes('const REQ_RE='),'approval authority must not live inside language-chat.js');
 assert.ok(missionActions.includes("const REQ_RE=/\\bREQ\\s+([a-f0-9]{20})\\b/i"),'mobile approval module must require the v169 80-bit REQ marker');
-assert.ok(missionActions.includes("jsonFetch('/api/state'"),'mobile approval module must re-read current server state before acting');
+assert.ok(missionActions.includes("jsonFetch('/api/state'"),'mobile approval module must re-read current server state');
 assert.ok(missionActions.includes("jsonFetch('/api/mobile-brain'"),'mobile approval module must use the Worker/mobile-brain path');
 assert.ok(missionActions.includes("return'onayla '+id+' req '+req"),'approve command must bind mission id + current REQ');
 assert.ok(missionActions.includes("return'iptal et '+id+' req '+req"),'cancel command must bind mission id + current REQ');
+assert.ok(missionActions.includes('function workerReceiptMatches('),'Worker receipt verifier missing');
+assert.ok(missionActions.includes('function waitForActionProof('),'post-action durable state proof missing');
+assert.ok(missionActions.includes('mission_action_worker_receipt_missing'),'generic Worker success must not count as mobile mission success');
+assert.ok(missionActions.includes('mission_approval_state_unconfirmed'),'approval must fail closed while reviewed REQ remains active');
+assert.ok(missionActions.includes('mission_cancel_state_unconfirmed'),'cancel must fail closed while mission remains in open queue');
+assert.ok(missionActions.includes("/AÇIK ONAY UYGULANDI/i"),'approval receipt marker validation missing');
+assert.ok(missionActions.includes("/MISSION İPTAL EDİLDİ/i"),'cancel receipt marker validation missing');
 assert.ok(!missionActions.includes("'/api/tasks/'+")&&!missionActions.includes('/approve'),'durable mission controls must not reuse legacy cloud-task approve endpoint');
 assert.ok(missionActions.includes("approve.textContent='ONAYLA'"),'mobile approval button missing');
 assert.ok(missionActions.includes("cancel.textContent='İPTAL'"),'mobile cancel button missing');
+assert.ok(worker.includes("message:'AÇIK ONAY UYGULANDI · '"),'authoritative Worker approval receipt marker missing');
+assert.ok(worker.includes("'MISSION İPTAL EDİLDİ'"),'authoritative Worker cancel receipt marker missing');
 
 execFileSync(process.execPath,['mobile-mission-actions-selftest.js'],{stdio:'inherit'});
 console.log('MISSION CONSOLE SELFTEST PASS');
