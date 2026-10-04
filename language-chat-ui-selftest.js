@@ -54,6 +54,50 @@ const missionActions=require('./public/mission-actions');
   assert.equal((decorated.match(/data-jarvis-mission-action=/g)||[]).length,2);
   assert.equal(missionActions.decorateMissionCard(decorated,approvalMission),decorated,'card decoration must be idempotent');
 
+  // v170 REDTEAM: a rendered card is not authority. Re-read /api/state and
+  // require one exact mission-id + REQ match immediately before relay.
+  const stateResponse=payload=>({ok:true,status:200,json:async()=>payload});
+  const stateOf=queue=>({workers:{pc:{missions:{queue}}}});
+  const fresh=await missionActions.resolveFreshApproval(missionId,req,{
+    fetchImpl:async(url)=>{
+      assert.equal(url,'/api/state');
+      return stateResponse(stateOf([approvalMission]));
+    }
+  });
+  assert.equal(fresh.message,'onayla '+missionId+' req '+req);
+  await assert.rejects(
+    missionActions.resolveFreshApproval(missionId,req,{
+      fetchImpl:async()=>stateResponse(stateOf([{...approvalMission,label:'ONAY · REQ fedcba9876543210abcd'}]))
+    }),
+    /mission_approval_stale/,
+    'renewed approval request must invalidate the old card before relay'
+  );
+  await assert.rejects(
+    missionActions.resolveFreshApproval(missionId,req,{
+      fetchImpl:async()=>stateResponse(stateOf([approvalMission,{...approvalMission}]))
+    }),
+    /mission_approval_ambiguous/,
+    'duplicate exact matches must fail closed'
+  );
+  await assert.rejects(
+    missionActions.resolveFreshApproval('M-BBBBBBBBBBBB',req,{
+      fetchImpl:async()=>stateResponse(stateOf([approvalMission]))
+    }),
+    /mission_approval_stale/,
+    'REQ from another mission must not authorize this mission'
+  );
+  const freshCancel=await missionActions.resolveFreshCancel(missionId,{
+    fetchImpl:async()=>stateResponse(stateOf([approvalMission]))
+  });
+  assert.equal(freshCancel.message,'görevi iptal et '+missionId);
+  await assert.rejects(
+    missionActions.resolveFreshCancel(missionId,{
+      fetchImpl:async()=>stateResponse(stateOf([{...approvalMission,status:'completed'}]))
+    }),
+    /mission_cancel_stale/,
+    'terminal mission must not accept a stale cancel card'
+  );
+
   const relayCalls=[];let clock=0,poll=0;
   const fakeResponse=(ok,status,payload)=>({ok,status,json:async()=>payload});
   const relay=await missionActions.relayMessage('onayla '+missionId+' req '+req,{
