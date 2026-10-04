@@ -156,6 +156,9 @@ function readReceipt(workspace,missionId){
   if(!file||!fs.existsSync(file))return null;
   try{return JSON.parse(fs.readFileSync(file,'utf8'))}catch(_){return null}
 }
+function readJson(file){
+  try{return JSON.parse(fs.readFileSync(file,'utf8'))}catch(_){return null}
+}
 function writeReceipt(file,record){
   const tmp=file+'.tmp-'+process.pid+'-'+Date.now();
   fs.writeFileSync(tmp,JSON.stringify(record,null,2),'utf8');
@@ -320,6 +323,58 @@ async function advanceToVisibility(operator,workspace){
   const snap=await snapshot(operator,workspace);
   return{ok:/(?:görünürlük|gorunurluk|visibility)/i.test(String(snap&&snap.text||'')),snapshot:snap};
 }
+function canonicalUtcIso(value){
+  const s=String(value||'').trim();
+  if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(s))return null;
+  const ms=Date.parse(s);
+  if(!Number.isFinite(ms))return null;
+  try{if(new Date(ms).toISOString()!==s)return null}catch(_){return null}
+  return{value:s,ms};
+}
+function youtubeApprovalError(message='YouTube PUBLIC için aktif mission ile bağlı açık kullanıcı onayı gerekli.'){
+  const e=new Error('YOUTUBE_EXPLICIT_APPROVAL_REQUIRED');
+  e.code='YOUTUBE_EXPLICIT_APPROVAL_REQUIRED';
+  e.detail=message;
+  return e;
+}
+function resolveYouTubePublishApproval(workspace,existing,id,proof,{nowMs=Date.now()}={}){
+  const missionId=String(id||'').trim();
+  const value=String(proof||'').trim();
+  if(!value)throw new Error('explicit approval proof required for YouTube publish');
+  const approved=canonicalUtcIso(value);
+  if(!approved)throw new Error('valid explicit approval timestamp required for YouTube publish');
+  if(!existing||String(existing.missionId||'').trim()!==missionId)throw new Error('YouTube approval mission receipt mismatch');
+  const created=canonicalUtcIso(existing.createdAt);
+  if(!created||approved.ms<created.ms)throw new Error('YouTube approval predates draft receipt');
+  const now=Number(nowMs);
+  if(!Number.isFinite(now)||approved.ms>now+5000)throw new Error('YouTube approval timestamp is in the future');
+
+  const missionFile=path.join(path.resolve(workspace),'.jarvis-missions',missionId+'.json');
+  const mission=readJson(missionFile);
+  if(!mission||mission.schema!==1||mission.engine!=='JARVIS_MISSION_ENGINE'||String(mission.id||'')!==missionId){
+    throw youtubeApprovalError('YouTube approval mission kaydı bulunamadı veya geçersiz.');
+  }
+  if(mission.status!=='running'||!Array.isArray(mission.steps))throw youtubeApprovalError('YouTube approval yalnız aktif mission için kullanılabilir.');
+  const currentIndex=Number(mission.currentStep);
+  if(!Number.isInteger(currentIndex)||currentIndex<0||currentIndex>=mission.steps.length)throw youtubeApprovalError('YouTube mission current step geçersiz.');
+  const publishStep=mission.steps[currentIndex];
+  if(!publishStep||publishStep.name!=='youtube_publish'||publishStep.status!=='running')throw youtubeApprovalError('Aktif mission adımı youtube_publish değil.');
+  if(!(publishStep.meta&&publishStep.meta.requiresApproval===true))throw youtubeApprovalError('YouTube publish step explicit approval gerektirmiyor olarak işaretlenmiş; fail-closed.');
+  const diskApproved=canonicalUtcIso(publishStep.meta.approvedAt);
+  const publishStarted=canonicalUtcIso(publishStep.startedAt);
+  if(!diskApproved||diskApproved.value!==approved.value)throw youtubeApprovalError('Caller approval timestamp aktif mission onayıyla birebir eşleşmiyor.');
+  if(!publishStarted||approved.ms>publishStarted.ms)throw youtubeApprovalError('YouTube approval publish step başladıktan sonra üretilmiş görünüyor.');
+  const draftStep=mission.steps.find(x=>x&&x.name==='youtube_draft');
+  if(!draftStep||draftStep.status!=='completed')throw youtubeApprovalError('Aynı mission için tamamlanmış youtube_draft adımı yok.');
+  const draftCompleted=canonicalUtcIso(draftStep.completedAt);
+  if(!draftCompleted||approved.ms<draftCompleted.ms)throw youtubeApprovalError('YouTube approval tamamlanmış draft adımından önce verilmiş.');
+  return{
+    missionId,
+    approvedAt:approved.value,
+    draftCompletedAt:draftCompleted.value,
+    publishStartedAt:publishStarted.value
+  };
+}
 function validateApprovalProof(existing,id,proof,nowMs=Date.now()){
   const value=String(proof||'').trim();
   if(!value)throw new Error('explicit approval proof required for YouTube publish');
@@ -338,7 +393,6 @@ async function publishPreparedDraft(operator,workspace,{missionId='',approvedAt=
   const receipt=missionReceiptFile(workspace,id);
   const existing=readReceipt(workspace,id);
   if(!existing)return{ok:false,code:'YOUTUBE_DRAFT_RECEIPT_MISSING',retryable:false,message:'YouTube publish için mission draft receipt bulunamadı.'};
-  const proof=validateApprovalProof(existing,id,approvedAt);
   if(existing.state==='published'&&existing.published===true){
     return{ok:true,code:'YOUTUBE_PUBLISHED',reused:true,published:true,receipt,title:existing.title||'',message:'YouTube videosu bu mission için zaten PUBLIC olarak doğrulanmış.'};
   }
@@ -348,6 +402,9 @@ async function publishPreparedDraft(operator,workspace,{missionId='',approvedAt=
   if(existing.state!=='draft_prepared'){
     return{ok:false,code:'YOUTUBE_DRAFT_NOT_READY',retryable:false,receipt,message:'YouTube PUBLIC için önce aynı mission taslağı hazırlanmalı.'};
   }
+  validateApprovalProof(existing,id,approvedAt);
+  const approval=resolveYouTubePublishApproval(workspace,existing,id,approvedAt);
+  const proof=approval.approvedAt;
 
   const browser=await operator.status(workspace);
   if(!browser.running){
@@ -374,6 +431,9 @@ async function publishPreparedDraft(operator,workspace,{missionId='',approvedAt=
     action:'PUBLIC_PUBLISH_STARTED',
     state:'publish_started',
     approvedAt:proof,
+    approvalMissionId:approval.missionId,
+    approvalDraftCompletedAt:approval.draftCompletedAt,
+    approvalPublishStartedAt:approval.publishStartedAt,
     published:false
   };
   writeReceipt(receipt,preflight);
@@ -413,5 +473,6 @@ module.exports={
   missionReceiptFile,
   readReceipt,
   prepareDraft,
+  resolveYouTubePublishApproval,
   publishPreparedDraft
 };
