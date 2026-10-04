@@ -29,7 +29,7 @@ class FakePool{
     if(q.startsWith('UPDATE jarvis_admin_sessions SET revoked_at=$2 WHERE id_hash<>$1')){
       const [current,at]=params;for(const r of this.sessions.values())if(r.idHash!==current&&!r.revokedAt&&Date.parse(r.expiresAt)>Date.now())r.revokedAt=at;return{rows:[]};
     }
-    if(q.startsWith("UPDATE jarvis_admin_session_policy SET legacy_allowed=$1")){this.legacyAllowed=!!params[0];return{rows:[]};}
+    if(q.startsWith("UPDATE jarvis_admin_session_policy SET legacy_allowed=false")){this.legacyAllowed=false;return{rows:[]};}
     throw new Error('unexpected fake SQL: '+q.slice(0,140));
   }
 }
@@ -99,7 +99,8 @@ async function createManagedCookie(){
 
   // Legacy invalidation is one-way at the HTTP boundary and requires explicit text.
   r=await request('/api/sessions/legacy/disable',{method:'POST',headers:{cookie:first},body:{confirm:true}});assert.strictEqual(r.status,409);
-  r=await request('/api/sessions/legacy/disable',{method:'POST',headers:{cookie:first},body:{confirm:'DISABLE_LEGACY_SESSIONS'}});assert.strictEqual(r.status,200);assert.strictEqual(r.body.legacyAllowed,false);assert.strictEqual(fakeDb.legacyAllowed,false);
+  r=await request('/api/sessions/legacy/disable',{method:'POST',headers:{cookie:first},body:{confirm:'DISABLE_LEGACY_SESSIONS'}});assert.strictEqual(r.status,200);assert.strictEqual(r.body.legacyAllowed,false);assert.strictEqual(r.body.changed,true);assert.strictEqual(fakeDb.legacyAllowed,false);
+  r=await request('/api/sessions/legacy/disable',{method:'POST',headers:{cookie:first},body:{confirm:'DISABLE_LEGACY_SESSIONS'}});assert.strictEqual(r.status,200);assert.strictEqual(r.body.changed,false,'repeat disable must be idempotent');assert.strictEqual(fakeDb.legacyAllowed,false);
   r=await request('/api/session/bootstrap',{headers:{cookie:legacy}});assert.strictEqual(r.status,401,'legacy cookie rejected after explicit migration cutoff');
   r=await request('/api/sessions/legacy/enable',{method:'POST',headers:{cookie:first},body:{confirm:true}});assert.notStrictEqual(r.status,200,'no HTTP downgrade route may re-enable legacy cookies');
 
