@@ -1,7 +1,15 @@
 'use strict';
 const crypto=require('crypto');
 const triCore=require('./jarvis-tri-core-personality');
-const VERSION='1.1';
+const VERSION='1.2';
+function verifiedConsulted(generated,selected){
+  const allowed=new Set(Array.isArray(selected&&selected.consultWith)?selected.consultWith:[]),out=[];
+  for(const id of Array.isArray(generated&&generated.consultedWith)?generated.consultedWith:[]){
+    if(!allowed.has(id)||!triCore.PROFILES[id])throw new Error('tri_core_consultation_contract_mismatch');
+    if(!out.includes(id))out.push(id);
+  }
+  return out.slice(0,2);
+}
 function createConversation({runtime,output,now=Date.now}={}){
   const records=new Map();let lastProbe=null;
   function get(id){
@@ -43,13 +51,16 @@ function createConversation({runtime,output,now=Date.now}={}){
       const generated=await output.generate({text:capture.text,history:row.history,core:selected,...frozen});
       controller.signal.throwIfAborted();
       if(generated.locale!==frozen.context.locale)throw new Error('reply_locale_mismatch');
+      if(generated.core&&generated.core!==selected.core)throw new Error('tri_core_contract_mismatch');
+      if(generated.authority&&generated.authority!=='shared_guardrail_only')throw new Error('tri_core_contract_mismatch');
+      const consultedWith=verifiedConsulted(generated,selected);
       const rendered=await output.render({reply:generated.reply,...frozen});
       controller.signal.throwIfAborted();
       if(rendered.locale!==frozen.context.locale||rendered.voice!==frozen.speech.voice||!rendered.audio)throw new Error('render_context_mismatch');
       const token=crypto.randomUUID();
       row.receipt={token,turnId:begun.turnId,at:now(),transcript:capture.text,reply:generated.reply};
       return{ok:true,state:'audio-ready',receipt:token,reply:generated.reply,transcript:capture.text,core:selected.core,role:selected.role,
-        coreSource:selected.source,consultWith:[...(selected.consultWith||[])],authority:'shared_guardrail_only',...rendered};
+        coreSource:selected.source,consultWith:consultedWith,consultationMode:'local_advisory_only',authority:'shared_guardrail_only',...rendered};
     }catch(error){
       if(begun?.ok)runtime.complete(id,{turnId:begun.turnId,successful:false});
       else runtime.discardCapture(id,{resetCandidate:true});
@@ -73,4 +84,4 @@ function createConversation({runtime,output,now=Date.now}={}){
   }
   return{create,turn,acknowledge,cancel};
 }
-module.exports={VERSION,createConversation};
+module.exports={VERSION,verifiedConsulted,createConversation};
