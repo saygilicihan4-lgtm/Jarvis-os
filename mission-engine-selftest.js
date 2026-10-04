@@ -37,14 +37,12 @@ assert.strictEqual(s.steps[1].status,'pending');
 
 s=m.startStep(tmp,x.id);
 assert.strictEqual(s.steps[1].attempts,2);
-// Simulate a crash with a running external side effect.
 const recovered=m.recoverInterruptedMissions(tmp);
 assert.ok(recovered.includes(x.id));
 s=m.loadMission(tmp,x.id);
 assert.strictEqual(s.status,'needs_verification');
 assert.strictEqual(s.steps[1].status,'uncertain');
 
-// Never auto-retry an uncertain external side effect.
 s=m.startStep(tmp,x.id);
 assert.strictEqual(s.status,'needs_verification');
 assert.strictEqual(s.steps[1].attempts,2);
@@ -59,8 +57,8 @@ const summary=m.summarizeMission(latest);
 assert.strictEqual(summary.step.name,'shopify_draft');
 assert.strictEqual(summary.label,'V-GAP campaign');
 
-// v168: approval review text must be useful on the existing mobile Mission Queue
-// without putting raw form values, URL query secrets, or approval UUIDs in telemetry.
+// v168/v169: approval review text is privacy-safe and its freshness suffix is
+// always retained. Raw values, query secrets, and approval UUIDs stay local.
 let review=m.createMission(tmp,{
   type:'browser_form',
   label:'Checkout form',
@@ -90,11 +88,9 @@ for(const secret of ['QUERY_SECRET_123','Cihan Secret Name','owner@example.test'
 }
 assert.ok(reviewSummary.label.length<=160);
 
-// v169: a visible REQ fingerprint is an optional freshness lock. When present,
-// it must select exactly the request the user reviewed; stale or malformed cards
-// never grant approval. Manual explicit approval without a REQ remains compatible.
-const visibleReq=(reviewSummary.label.match(/REQ ([a-f0-9]{10})/i)||[])[1];
-assert.ok(visibleReq,'visible approval request fingerprint missing');
+const visibleReq=(reviewSummary.label.match(/REQ ([a-f0-9]{20})/i)||[])[1];
+assert.ok(visibleReq,'80-bit visible approval request fingerprint missing');
+assert.strictEqual(reviewSummary.label.endsWith('REQ '+visibleReq),true);
 let parsed=approvalIntent.classifyApprovalIntent('onayla '+review.id+' req '+visibleReq);
 assert.strictEqual(parsed.approved,true);
 assert.strictEqual(parsed.requestFingerprint,visibleReq);
@@ -111,10 +107,35 @@ resolved=approvalIntent.resolveApprovalTarget({approval:parsed,pending:[{id:revi
 assert.strictEqual(resolved.ok,false);
 assert.strictEqual(resolved.code,'INVALID_APPROVAL_REQUEST_FINGERPRINT');
 
-parsed=approvalIntent.classifyApprovalIntent('onayla '+review.id+' req '+visibleReq+' req 0123456789');
+parsed=approvalIntent.classifyApprovalIntent('onayla '+review.id+' req '+visibleReq+' req 0123456789abcdefabcd');
 resolved=approvalIntent.resolveApprovalTarget({approval:parsed,pending:[{id:review.id,stepName:'browser_click'}],requestedMissionId:review.id});
 assert.strictEqual(resolved.ok,false);
 assert.strictEqual(resolved.code,'AMBIGUOUS_APPROVAL_REQUEST_FINGERPRINT');
+
+// Worst-case review text must truncate the human-readable subject, never TTL/REQ.
+let longReview=m.createMission(tmp,{
+  type:'browser_form',
+  label:'Long approval card',
+  input:{
+    url:'https://abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijk.example.test/form?secret=HIDDEN',
+    finalClick:'ABCDEFGHIJKLMNOPQRSTUVWXYZ-CLICK-ACTION',
+    fields:[
+      {label:'ABCDEFGHIJKLMNOPQRSTUVWXYZ1',value:'one'},
+      {label:'ABCDEFGHIJKLMNOPQRSTUVWXYZ2',value:'two'},
+      {label:'ABCDEFGHIJKLMNOPQRSTUVWXYZ3',value:'three'},
+      {label:'ABCDEFGHIJKLMNOPQRSTUVWXYZ4',value:'four'}
+    ]
+  },
+  steps:[{name:'browser_click',meta:{requiresApproval:true}}]
+});
+m.startStep(tmp,longReview.id);
+longReview=m.failStep(tmp,longReview.id,{code:'EXPLICIT_APPROVAL_REQUIRED',message:'approval required',retryable:true,dependency:'approval'});
+const longLabel=m.summarizeMission(longReview).label;
+const longReq=(longLabel.match(/REQ ([a-f0-9]{20})$/i)||[])[1];
+assert.ok(longReq,'long mobile review lost its approval request suffix');
+assert.ok(longLabel.includes('15 DK'));
+assert.ok(longLabel.length<=160);
+assert.ok(!longLabel.includes('HIDDEN'));
 
 let stale=m.createMission(tmp,{
   type:'browser_form',
@@ -124,13 +145,11 @@ let stale=m.createMission(tmp,{
 });
 m.startStep(tmp,stale.id);
 stale=m.failStep(tmp,stale.id,{code:'EXPLICIT_APPROVAL_REQUIRED',message:'approval required',retryable:true,dependency:'approval'});
-const staleOldTag=(m.summarizeMission(stale).label.match(/REQ ([a-f0-9]{10})/i)||[])[1];
+const staleOldTag=(m.summarizeMission(stale).label.match(/REQ ([a-f0-9]{20})/i)||[])[1];
 const staleOldRequest=m.currentStep(stale).meta.approvalRequestId;
-// Refresh the request while preserving the same mission/payload. A phone card
-// rendered before this refresh must no longer be able to authorize the step.
 stale=m.failStep(tmp,stale.id,{code:'EXPLICIT_APPROVAL_REQUIRED',message:'approval refreshed',retryable:true,dependency:'approval'});
 const staleNewRequest=m.currentStep(stale).meta.approvalRequestId;
-const staleNewTag=(m.summarizeMission(stale).label.match(/REQ ([a-f0-9]{10})/i)||[])[1];
+const staleNewTag=(m.summarizeMission(stale).label.match(/REQ ([a-f0-9]{20})/i)||[])[1];
 assert.notStrictEqual(staleOldRequest,staleNewRequest);
 assert.notStrictEqual(staleOldTag,staleNewTag);
 assert.throws(
@@ -158,8 +177,6 @@ manual=m.approveStep(tmp,manual.id,{surface:'browser',targetReason:'explicit_mis
 assert.strictEqual(manual.status,'queued');
 assert.ok(m.currentStep(manual).meta.approvedAt,'manual explicit approval without REQ must remain compatible');
 
-// Shopify review binds the human-readable product target plus only a short store
-// fingerprint. The raw store/account/token never needs to enter cloud telemetry.
 let shop=m.createMission(tmp,{
   type:'shopify_product',
   label:'Publish V-GAP',
@@ -180,6 +197,7 @@ assert.ok(shopSummary.label.includes('…12345678'));
 assert.ok(shopSummary.label.includes('STORE deadbeef'));
 assert.ok(!shopSummary.label.includes('cafebabe'));
 assert.ok(!shopSummary.label.includes('myshopify.com'));
+assert.ok(/REQ [a-f0-9]{20}$/i.test(shopSummary.label));
 assert.ok(shopSummary.label.length<=160);
 
 const ordered=m.schedulerOrder([
