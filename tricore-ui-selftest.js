@@ -74,6 +74,8 @@ assert(outputSource.includes('deliberator.consult'),'real consultation call miss
 assert(outputSource.includes('advisoryBlock(deliberation.notes)'),'completed advisory notes must feed final synthesis');
 assert(deliberationSource.includes('loopback_deliberation_required'),'deliberation loopback gate missing');
 assert(deliberationSource.includes('[REDACTED_CODE]'),'session-code redaction missing');
+assert(deliberationSource.includes('DEFAULT_TIMEOUT_MS'),'per-lens timeout contract missing');
+assert(deliberationSource.includes('AbortSignal.any'),'parent cancellation and timeout must be composed');
 assert(!deliberationSource.includes('localStorage')&&!deliberationSource.includes('sessionStorage'),'deliberation must not persist user input or notes');
 assert(!deliberationSource.includes('console.log')&&!deliberationSource.includes('console.error'),'deliberation must not log user input or notes');
 
@@ -116,4 +118,5 @@ assert(!/\bfetch\s*\(/.test(hologramSource),'WebGL renderer must not make networ
 assert(!hologramSource.includes('localStorage')&&!hologramSource.includes('sessionStorage'),'WebGL renderer must not persist sensitive state');
 
 require('./tri-core-deliberation-selftest.js');
-console.log('TRI-CORE v180 PERSONALITY + REAL DELIBERATION + REACTIVE HOLOGRAM SELFTEST PASS');
+require('./tri-core-timeout-selftest.js');
+console.log('TRI-CORE v180.1 DELIBERATION TIMEOUT + REACTIVE HOLOGRAM SELFTEST PASS');
