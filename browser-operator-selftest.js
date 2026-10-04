@@ -7,7 +7,7 @@ const op=require('./jarvis-browser-operator');
 const browserSource=fs.readFileSync('./jarvis-browser-operator.js','utf8');
 const workerSource=fs.readFileSync('./worker.js','utf8');
 
-assert.strictEqual(op.BROWSER_OPERATOR_VERSION,'1.1');
+assert.strictEqual(op.BROWSER_OPERATOR_VERSION,'1.2');
 assert.deepStrictEqual(op.allowedHosts(),['*']);
 assert.ok(op.hostAllowed('studio.youtube.com'));
 assert.ok(op.hostAllowed('admin.shopify.com'));
@@ -19,9 +19,35 @@ assert.ok(op.safeUrl('http://localhost:3000/').startsWith('http://localhost:3000
 assert.throws(()=>op.safeUrl('file:///C:/Windows/System32/'),/http\/https/);
 assert.throws(()=>op.safeUrl('javascript:alert(1)'),/http\/https/);
 assert.ok(workerSource.includes("syncRepoRuntimeFile('jarvis-browser-operator.js',\"BROWSER_OPERATOR_VERSION='1.0'\")"),'Worker 2.102 legacy browser sync probe changed unexpectedly');
-assert.ok(browserSource.includes("Runtime rollout compatibility for Worker 2.102.0 sync probe only: BROWSER_OPERATOR_VERSION='1.0'"),'Browser 1.1 must remain retrievable by Worker 2.102 legacy sync probe during rollout');
+assert.ok(browserSource.includes("Runtime rollout compatibility for Worker 2.102.0 sync probe only: BROWSER_OPERATOR_VERSION='1.0'"),'Browser 1.2 must remain retrievable by Worker 2.102 legacy sync probe during rollout');
 
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'jarvis-browser-op-'));
 const profile=op.profileDir(tmp);
 assert.ok(fs.existsSync(profile));
+
+const autofillFile=path.join(tmp,'autofill.json');
+process.env.JARVIS_AUTOFILL_PROFILE_FILE=autofillFile;
+assert.strictEqual(op.autofillProfileStatus().fieldCount,0);
+assert.strictEqual(op.classifyAutofillField('E-mail',{type:'email'}),'email');
+assert.strictEqual(op.classifyAutofillField('Şirket adı',{}),'company');
+assert.strictEqual(op.classifyAutofillField('Ad Soyad',{}),'fullName');
+assert.strictEqual(op.classifyAutofillField('Ürün adı',{}),null,'product names must not pollute identity autofill');
+assert.strictEqual(op.classifyAutofillField('TC Kimlik No',{}),null);
+assert.strictEqual(op.isSensitiveAutofillDescriptor('IBAN',{}),true);
+assert.strictEqual(op.isSensitiveAutofillDescriptor('Doğrulama kodu',{}),true);
+assert.strictEqual(op.rememberAutofillField('E-mail','fixture@example.test',{type:'email'}).remembered,true);
+assert.strictEqual(op.rememberAutofillField('Şifre','do-not-store',{type:'password'}).remembered,false);
+assert.strictEqual(op.rememberAutofillField('IBAN','TR000000000000000000000000',{}).remembered,false);
+const state=op.autofillProfileStatus();
+assert.deepStrictEqual(state.availableKeys,['email']);
+assert.strictEqual(state.storesSecrets,false);
+assert.ok(fs.existsSync(autofillFile));
+const raw=fs.readFileSync(autofillFile,'utf8');
+assert.ok(raw.includes('fixture@example.test'));
+assert.ok(!raw.includes('do-not-store'));
+assert.ok(!raw.includes('TR000000000000000000000000'));
+assert.deepStrictEqual(op.clearAutofillProfile(),{ok:true});
+assert.ok(!fs.existsSync(autofillFile));
+delete process.env.JARVIS_AUTOFILL_PROFILE_FILE;
+fs.rmSync(tmp,{recursive:true,force:true});
 console.log('BROWSER OPERATOR SELFTEST PASS');
