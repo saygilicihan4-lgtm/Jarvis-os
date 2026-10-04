@@ -7,6 +7,7 @@ const html=fs.readFileSync('./public/index.html','utf8');
 const css=fs.readFileSync('./public/style.css','utf8');
 const missionEngine=fs.readFileSync('./jarvis-mission-engine.js','utf8');
 const languageChat=fs.readFileSync('./public/language-chat.js','utf8');
+const missionActions=fs.readFileSync('./public/mission-actions.js','utf8');
 
 assert.ok(worker.includes("const WORKER_VERSION='2.102.0'"),'Worker 2.102.0 required');
 assert.ok(worker.includes("'pc_self_repair_v1'"),'self-repair capability must be preserved');
@@ -53,21 +54,26 @@ assert.ok(css.includes('.status.waiting_dependency'),'waiting dependency styling
 assert.ok(css.includes('.status.paused'),'paused durable mission styling missing');
 assert.ok(html.includes("paused=Number(c.paused||0)"),'paused count is not shown in Mission Console state');
 
-// v170: mobile approval controls are only a user-intent bridge. They must
-// re-read sanitized mission state, bind to the visible 80-bit REQ marker, and
-// hand the action to the existing Worker/mobile-brain approval machinery.
-assert.doesNotThrow(()=>new Function(languageChat),'mobile mission control UI has invalid JavaScript syntax');
-assert.ok(languageChat.includes("const REQ_RE=/\\bREQ\\s+([a-f0-9]{20})\\b/i"),'mobile approval UI must require the v169 80-bit REQ marker');
-assert.ok(languageChat.includes("String(mission&&mission.status||'')==='waiting_dependency'"),'mobile approval UI must require waiting_dependency');
-assert.ok(languageChat.includes("String(step.status||'')==='blocked'"),'mobile approval UI must require a blocked step');
-assert.ok(languageChat.includes("String(err.dependency||step.dependency||'')==='approval'"),'mobile approval UI must require approval dependency');
-assert.ok(languageChat.includes("const state=await jsonFetch('/api/state')"),'mobile approval UI must re-read current server state before acting');
-assert.ok(languageChat.includes('if(rows.length!==1)throw new Error'),'mobile approval UI must fail closed unless exactly one fresh mission matches the REQ marker');
-assert.ok(languageChat.includes("?('onayla '+mission.id+' req '+req)"),'mobile approval command must carry exact mission id + current REQ');
-assert.ok(languageChat.includes("('iptal et '+mission.id+' req '+req)"),'mobile cancel command must carry exact mission id + reviewed REQ');
-assert.ok(languageChat.includes("jsonFetch('/api/mobile-brain'"),'mobile approval must go through the existing Worker/mobile-brain path');
-assert.ok(!languageChat.includes("'/api/tasks/'+")&&!languageChat.includes('/approve'), 'durable mission approval UI must not reuse legacy cloud-task approve endpoint');
-assert.ok(languageChat.includes("textContent='ONAYLA'"),'mobile approval button missing');
-assert.ok(languageChat.includes("textContent='İPTAL'"),'mobile cancel button missing');
+// v171: mobile mission controls are isolated, testable, and can only show
+// success after both the Worker action receipt and a fresh mission-state proof.
+assert.doesNotThrow(()=>new Function(languageChat),'language chat bootstrap has invalid JavaScript syntax');
+assert.doesNotThrow(()=>new Function(missionActions),'mobile mission action proof module has invalid JavaScript syntax');
+assert.ok(languageChat.includes("script.src='/mission-actions.js'"),'mobile mission action proof module is not loaded');
+assert.ok(languageChat.includes('JarvisMissionActions.install(root)'),'mission action proof installer is not invoked');
+assert.ok(missionActions.includes('const REQUEST_RE=/\\bREQ\\s+([a-f0-9]{20})\\b/i'),'mission action module must require the v169 80-bit REQ marker');
+assert.ok(missionActions.includes("status!=='waiting_dependency'"),'mobile approval must require waiting_dependency');
+assert.ok(missionActions.includes("stepStatus!=='blocked'"),'mobile approval must require blocked step');
+assert.ok(missionActions.includes("dependencyOf(mission)!=='approval'"),'mobile approval must require approval dependency');
+assert.ok(missionActions.includes("send('/api/state'"),'mission action module must re-read current sanitized state');
+assert.ok(missionActions.includes('matches.length!==1'),'mission action module must fail closed unless exactly one target matches');
+assert.ok(missionActions.includes("send('/api/mobile-brain'"),'mission action module must route through existing Worker/mobile-brain path');
+assert.ok(missionActions.includes('workerReceiptMatches'),'Worker receipt proof is missing');
+assert.ok(missionActions.includes('waitForStateProof'),'post-action state proof is missing');
+assert.ok(missionActions.includes('mission_action_worker_receipt_missing'),'generic Worker response must not count as action success');
+assert.ok(missionActions.includes('mission_approval_state_unconfirmed'),'approval must fail closed when old REQ remains active');
+assert.ok(missionActions.includes('mission_cancel_state_unconfirmed'),'cancel must fail closed while mission remains open');
+assert.ok(!missionActions.includes('/api/tasks/')&&!missionActions.includes('/approve'),'durable mission action module must not use legacy cloud-task approval endpoint');
+assert.ok(worker.includes("message:'AÇIK ONAY UYGULANDI · '"),'authoritative Worker approval receipt marker missing');
+assert.ok(worker.includes("'MISSION İPTAL EDİLDİ'"),'authoritative Worker cancel receipt marker missing');
 
 console.log('MISSION CONSOLE SELFTEST PASS');
