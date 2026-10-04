@@ -46,9 +46,37 @@
     el.dataset.automaticLearning='false';
     return summary;
   }
+  function nextEvidenceExpiryDelay(summary,nowMs=Date.now()){
+    const now=Number(nowMs);
+    if(!summary||!Number.isFinite(now))return null;
+    const expiries=[];
+    const ttsExpiry=Number(summary.tts&&summary.tts.freshness&&summary.tts.freshness.expiresAt);
+    const sttExpiry=Number(summary.stt&&summary.stt.freshness&&summary.stt.freshness.expiresAt);
+    if(Number.isFinite(ttsExpiry)&&ttsExpiry>=now)expiries.push(ttsExpiry);
+    if(Number.isFinite(sttExpiry)&&sttExpiry>=now)expiries.push(sttExpiry);
+    if(!expiries.length)return null;
+    const delay=Math.min.apply(Math,expiries)-now+1;
+    return Math.max(1,Math.min(2147483647,delay));
+  }
+  function scheduleExpiryRefresh(target,summary,run,nowMs=Date.now()){
+    if(!target||typeof run!=='function')return null;
+    if(target.__jarvisMobileSpeechEvidenceExpiryTimer!=null&&typeof target.clearTimeout==='function'){
+      target.clearTimeout(target.__jarvisMobileSpeechEvidenceExpiryTimer);
+    }
+    target.__jarvisMobileSpeechEvidenceExpiryTimer=null;
+    const delay=nextEvidenceExpiryDelay(summary,nowMs);
+    if(delay==null||typeof target.setTimeout!=='function')return null;
+    target.__jarvisMobileSpeechEvidenceExpiryTimer=target.setTimeout(run,delay);
+    return delay;
+  }
   function install(doc=root&&root.document,{storage,intervalMs=2000,fallback='tr-TR'}={}){
     if(!doc||!root||!ready()||!/iPhone|iPad|iPod|Android/i.test(String(root.navigator&&root.navigator.userAgent||'')))return false;
-    const run=()=>refresh(doc,{storage,nowMs:Date.now(),fallback});
+    const run=()=>{
+      const now=Date.now();
+      const summary=refresh(doc,{storage,nowMs:now,fallback});
+      scheduleExpiryRefresh(root,summary,run,now);
+      return summary;
+    };
     const el=ensureBadge(doc);if(!el)return false;
     run();
     const input=doc.getElementById('jarvisMobileLocaleInput');
@@ -65,5 +93,5 @@
     }
     return true;
   }
-  return{ready,newestLocale,chooseLocale,ensureBadge,refresh,install};
+  return{ready,newestLocale,chooseLocale,ensureBadge,refresh,nextEvidenceExpiryDelay,scheduleExpiryRefresh,install};
 });
