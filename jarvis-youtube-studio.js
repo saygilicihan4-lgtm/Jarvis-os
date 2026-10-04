@@ -1,5 +1,6 @@
 const fs=require('fs');
 const path=require('path');
+const finalTarget=require('./jarvis-final-target-verification');
 
 const YOUTUBE_STUDIO_VERSION='1.1';
 const STUDIO_URL='https://studio.youtube.com/';
@@ -265,6 +266,7 @@ async function prepareDraft(operator,workspace,{file,title='',description='',thu
   const descriptionSet=await setAnyField(operator,workspace,['Açıklama','Aciklama','Description'],cleanDescription);
   const thumbnailSet=thumb?await tryUploadThumbnail(operator,workspace,thumb):{ok:false,skipped:true,reason:thumbnailError||'missing'};
   snap=await snapshot(operator,workspace);
+  const targetFingerprint=finalTarget.evidenceFingerprint(snap);
 
   const record={
     ...preflight,
@@ -276,6 +278,8 @@ async function prepareDraft(operator,workspace,{file,title='',description='',thu
     thumbnail:thumb&&thumb.full||null,
     thumbnailError:thumbnailSet.ok?null:String(thumbnailSet.reason||thumbnailError||'').slice(0,240)||null,
     studioUrl:snap&&snap.url||STUDIO_URL,
+    finalTargetAccountHash:targetFingerprint.accountHash||null,
+    finalTargetChannelHash:targetFingerprint.targetHash||null,
     published:false
   };
   writeReceipt(receipt,record);
@@ -460,7 +464,17 @@ async function publishPreparedDraft(operator,workspace,{missionId='',approvedAt=
   };
   writeReceipt(receipt,preflight);
 
-  const clicked=await clickAny(operator,workspace,['Yayınla','Yayinla','Publish']);
+  const targetContract={provider:'youtube',expectedAction:'publish',expectedAccountHash:existing.finalTargetAccountHash||'',expectedTargetHash:existing.finalTargetChannelHash||''};
+  if(!targetContract.expectedAccountHash||!targetContract.expectedTargetHash){
+    writeReceipt(receipt,{...preflight,updatedAt:new Date().toISOString(),action:'DRAFT_PREPARED',state:'draft_prepared',published:false,publishError:'final_target_evidence_missing'});
+    return{ok:false,code:'YOUTUBE_FINAL_TARGET_EVIDENCE_MISSING',retryable:true,receipt,message:'YouTube hesap/kanal hedef kanıtı eksik. PUBLIC adımı uygulanmadı.'};
+  }
+  const targetCheck=finalTarget.verifyFinalTarget(targetContract,preClickSnap);
+  if(!targetCheck.ok){
+    writeReceipt(receipt,{...preflight,updatedAt:new Date().toISOString(),action:'DRAFT_PREPARED',state:'draft_prepared',published:false,publishError:'final_target_'+targetCheck.reason});
+    return{ok:false,code:'YOUTUBE_FINAL_TARGET_MISMATCH',retryable:false,receipt,message:'YouTube hesap/kanal hedefi taslakla eşleşmiyor. PUBLIC adımı uygulanmadı.'};
+  }
+  const clicked=await operator.verifiedFinalClick(workspace,'Publish',targetContract).catch(async()=>operator.verifiedFinalClick(workspace,'Yayınla',targetContract).catch(()=>operator.verifiedFinalClick(workspace,'Yayinla',targetContract)));
   if(!clicked.ok){
     writeReceipt(receipt,{...preflight,updatedAt:new Date().toISOString(),action:'DRAFT_PREPARED',state:'draft_prepared',published:false,publishError:'publish_button_not_found'});
     return{ok:false,code:'YOUTUBE_PUBLISH_BUTTON_NOT_FOUND',retryable:true,receipt,message:'YouTube Publish/Yayınla düğmesi bulunamadı. Video PUBLIC yapılmadı.'};
