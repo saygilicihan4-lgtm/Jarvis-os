@@ -40,3 +40,31 @@
   }
   return{createClient};
 });
+
+;(function(root){
+  'use strict';
+  if(!root||!root.document||!/iPhone|iPad|iPod|Android/i.test(String(root.navigator&&root.navigator.userAgent||'')))return;
+  function loadScript(id,src){
+    return new Promise((resolve,reject)=>{
+      if(root.document.getElementById(id)){
+        const ready=id==='jarvisMobileSpeechEvidenceCoreScript'?root.JarvisMobileSpeechEvidenceStatus:root.JarvisMobileSpeechEvidenceUi;
+        if(ready){resolve(true);return}
+      }
+      const script=root.document.createElement('script');script.id=id;script.src=src;script.async=false;
+      script.onload=()=>resolve(true);script.onerror=()=>reject(new Error('script_load_failed:'+src));
+      (root.document.head||root.document.documentElement).appendChild(script);
+    });
+  }
+  async function boot(attempt=0){
+    if(!root.JarvisMobileLanguageChat){
+      if(attempt<20)setTimeout(()=>boot(attempt+1),100);
+      return false;
+    }
+    try{
+      if(!root.JarvisMobileSpeechEvidenceStatus)await loadScript('jarvisMobileSpeechEvidenceCoreScript','/mobile-speech-evidence-status.js');
+      if(!root.JarvisMobileSpeechEvidenceUi)await loadScript('jarvisMobileSpeechEvidenceUiScript','/mobile-speech-evidence-ui.js');
+      return !!(root.JarvisMobileSpeechEvidenceUi&&root.JarvisMobileSpeechEvidenceUi.install(root.document));
+    }catch(_){return false}
+  }
+  setTimeout(()=>boot(0),0);
+})(typeof globalThis==='object'?globalThis:this);
