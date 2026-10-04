@@ -3,14 +3,35 @@
   else root.JarvisLanguageChat=factory();
 })(typeof globalThis==='object'?globalThis:this,function(){
   'use strict';
+  const CORE_IDS=new Set(['jarvis','nova','orion']);
+  const PHASE_STATE={idle:'idle',listening:'listening',thinking:'thinking',consulting:'thinking',synthesizing:'thinking',waiting:'waiting',speaking:'speaking',error:'error'};
   function emitConversationState(state,detail){
     try{
       const host=typeof globalThis==='object'?globalThis:null,doc=host&&host.document;
       if(!doc||typeof host.CustomEvent!=='function')return;
       const mapped=({preparing:'thinking',playing:'speaking',completed:'idle',error:'error',idle:'idle','confirm-language':'waiting'})[state]||state;
-      const consultWith=Array.isArray(detail&&detail.consultWith)?detail.consultWith.filter(x=>['jarvis','nova','orion'].includes(x)).slice(0,2):[];
-      doc.dispatchEvent(new host.CustomEvent('jarvis:conversation-state',{detail:{state:mapped,core:detail&&detail.core||null,role:detail&&detail.role||null,consultWith,authority:detail&&detail.authority||'shared_guardrail_only'}}));
+      const core=CORE_IDS.has(detail&&detail.core)?detail.core:null;
+      const consultWith=Array.isArray(detail&&detail.consultWith)?detail.consultWith.filter(x=>CORE_IDS.has(x)&&x!==core).slice(0,2):[];
+      doc.dispatchEvent(new host.CustomEvent('jarvis:conversation-state',{detail:{state:mapped,core,role:detail&&detail.role||null,consultWith,authority:'shared_guardrail_only'}}));
     }catch(_){}
+  }
+  function cognitiveDetail(value){
+    const src=value&&typeof value==='object'?value:{},core=CORE_IDS.has(src.primary)?src.primary:null,seen=[];
+    for(const id of [...(Array.isArray(src.consulting)?src.consulting:[]),...(Array.isArray(src.completed)?src.completed:[])])if(CORE_IDS.has(id)&&id!==core&&!seen.includes(id)&&seen.length<2)seen.push(id);
+    const state=PHASE_STATE[String(src.phase||'')]||'waiting';
+    return{state,core,consultWith:seen,authority:'shared_guardrail_only',revision:Number.isSafeInteger(Number(src.revision))?Number(src.revision):0};
+  }
+  async function pollCognitiveState(request,sessionId,signal,onUpdate=emitConversationState){
+    let lastRevision=-1;
+    while(!signal.aborted){
+      try{
+        const result=await request({action:'state',sessionId},signal),detail=cognitiveDetail(result&&result.cognitive);
+        if(detail.revision>lastRevision){lastRevision=detail.revision;onUpdate(detail.state,detail)}
+      }catch(error){if(signal.aborted)break}
+      if(signal.aborted)break;
+      await new Promise(resolve=>setTimeout(resolve,160));
+    }
+    return lastRevision;
   }
   function createClient({request,play,onState=()=>{},onReply=()=>{}}){
     let sessionId=null,controller=null,busy=false;
@@ -18,12 +39,15 @@
     async function run(){
       if(busy)return{ok:false,state:'busy'};
       busy=true;controller=new AbortController();const active=controller;
-      let receipt=null,acknowledged=false;
+      let receipt=null,acknowledged=false,stateController=null,statePoll=null;
       state('preparing');
       try{
         if(!sessionId){const created=await request({action:'create'},active.signal);sessionId=created.sessionId;if(!sessionId)throw new Error('session_create_failed')}
         active.signal.throwIfAborted();
+        stateController=new AbortController();const abortState=()=>stateController.abort();active.signal.addEventListener('abort',abortState,{once:true});
+        statePoll=pollCognitiveState(request,sessionId,stateController.signal);
         const result=await request({action:'turn',sessionId},active.signal);
+        stateController.abort();await statePoll.catch(()=>{});active.signal.removeEventListener('abort',abortState);
         receipt=result.receipt||null;
         active.signal.throwIfAborted();
         if(result.state==='confirm-language'){state('confirm-language',result);return result}
@@ -34,10 +58,12 @@
         const completed=await request({action:'acknowledge',sessionId,receipt,played:true},active.signal);
         acknowledged=true;state('completed',{...completed,core:result.core,role:result.role,consultWith:result.consultWith,authority:result.authority});return completed;
       }catch(error){
+        stateController?.abort();if(statePoll)await statePoll.catch(()=>{});
         if(!active.signal.aborted)state('error',{error:String(error.message||error)});
         if(/session_expired|session_not_found/.test(String(error.message||error)))sessionId=null;
         return{ok:false,cancelled:active.signal.aborted,error:String(error.message||error)};
       }finally{
+        stateController?.abort();
         if(receipt&&!acknowledged&&sessionId)try{await request({action:'acknowledge',sessionId,receipt,played:false})}catch(_){}
         if(controller===active){controller=null;busy=false;state('idle')}
       }
@@ -49,7 +75,7 @@
     }
     return{run,cancel,get busy(){return busy}};
   }
-  return{createClient,emitConversationState};
+  return{CORE_IDS,PHASE_STATE,cognitiveDetail,pollCognitiveState,createClient,emitConversationState};
 });
 
 ;(function(root){
@@ -67,10 +93,7 @@
     });
   }
   async function boot(attempt=0){
-    if(!root.JarvisMobileLanguageChat){
-      if(attempt<20)setTimeout(()=>boot(attempt+1),100);
-      return false;
-    }
+    if(!root.JarvisMobileLanguageChat){if(attempt<20)setTimeout(()=>boot(attempt+1),100);return false}
     try{
       if(!root.JarvisMobileSpeechEvidenceStatus)await loadScript('jarvisMobileSpeechEvidenceCoreScript','/mobile-speech-evidence-status.js');
       if(!root.JarvisMobileSpeechEvidenceUi)await loadScript('jarvisMobileSpeechEvidenceUiScript','/mobile-speech-evidence-ui.js');
@@ -120,18 +143,14 @@
   'use strict';
   if(!root||!root.document||!/iPhone|iPad|iPod|Android/i.test(String(root.navigator&&root.navigator.userAgent||'')))return;
   function bootMissionActions(attempt=0){
-    if(root.JarvisMissionActions){
-      try{return !!root.JarvisMissionActions.install(root)}catch(_){return false}
-    }
+    if(root.JarvisMissionActions){try{return !!root.JarvisMissionActions.install(root)}catch(_){return false}}
     let script=root.document.getElementById('jarvisMissionActionsScript');
     if(!script){
-      script=root.document.createElement('script');
-      script.id='jarvisMissionActionsScript';script.src='/mission-actions.js';script.async=false;
+      script=root.document.createElement('script');script.id='jarvisMissionActionsScript';script.src='/mission-actions.js';script.async=false;
       script.onload=()=>{try{root.JarvisMissionActions&&root.JarvisMissionActions.install(root)}catch(_){}};
       (root.document.head||root.document.documentElement).appendChild(script);
     }
-    if(attempt<30)setTimeout(()=>bootMissionActions(attempt+1),100);
-    return false;
+    if(attempt<30)setTimeout(()=>bootMissionActions(attempt+1),100);return false;
   }
   setTimeout(()=>bootMissionActions(0),0);
 })(typeof globalThis==='object'?globalThis:this);
@@ -141,21 +160,12 @@
 ;(function(root){
   'use strict';
   if(!root||!root.document)return;
-  function install(){
-    try{return !!(root.JarvisTriCore&&root.JarvisTriCore.install(root))}catch(_){return false}
-  }
+  function install(){try{return !!(root.JarvisTriCore&&root.JarvisTriCore.install(root))}catch(_){return false}}
   function boot(attempt=0){
     if(install())return true;
     let script=root.document.getElementById('jarvisTriCoreScript');
-    if(!script){
-      script=root.document.createElement('script');
-      script.id='jarvisTriCoreScript';script.src='/tri-core.js';script.async=false;
-      script.onload=()=>install();
-      (root.document.head||root.document.documentElement).appendChild(script);
-    }
-    if(attempt<30)setTimeout(()=>boot(attempt+1),100);
-    return false;
+    if(!script){script=root.document.createElement('script');script.id='jarvisTriCoreScript';script.src='/tri-core.js';script.async=false;script.onload=()=>install();(root.document.head||root.document.documentElement).appendChild(script)}
+    if(attempt<30)setTimeout(()=>boot(attempt+1),100);return false;
   }
-  if(root.document.readyState==='loading')root.document.addEventListener('DOMContentLoaded',()=>boot(0),{once:true});
-  else setTimeout(()=>boot(0),0);
+  if(root.document.readyState==='loading')root.document.addEventListener('DOMContentLoaded',()=>boot(0),{once:true});else setTimeout(()=>boot(0),0);
 })(typeof globalThis==='object'?globalThis:this);
