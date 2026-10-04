@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Repair bounded exchange anchor
+      - name: Repair bounded integration anchors
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -39,7 +39,12 @@ jobs:
           }"""
           if s.count(old)!=1:
               raise SystemExit('expected one exchange patch call')
-          p.write_text(s.replace(old,new,1))
+          s=s.replace(old,new,1)
+          old_route="reminderStorage:dbReady?'postgres':'unavailable'});"
+          new_route="reminderStorage:dbReady?'postgresql':'unavailable',pushStorage:dbReady?'postgresql':'unavailable'});"
+          if s.count(old_route)!=1:
+              raise SystemExit('expected one db status anchor fragment')
+          p.write_text(s.replace(old_route,new_route,1))
           PY
       - name: Apply exact v163 integration
         run: node scripts/apply-v163-session-lifecycle.js
