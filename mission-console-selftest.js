@@ -1,5 +1,6 @@
 const fs=require('fs');
 const assert=require('assert');
+const {execFileSync}=require('child_process');
 
 const worker=fs.readFileSync('./worker.js','utf8');
 const server=fs.readFileSync('./server.js','utf8');
@@ -7,6 +8,7 @@ const html=fs.readFileSync('./public/index.html','utf8');
 const css=fs.readFileSync('./public/style.css','utf8');
 const missionEngine=fs.readFileSync('./jarvis-mission-engine.js','utf8');
 const languageChat=fs.readFileSync('./public/language-chat.js','utf8');
+const missionActions=fs.readFileSync('./public/mission-actions.js','utf8');
 
 assert.ok(worker.includes("const WORKER_VERSION='2.102.0'"),'Worker 2.102.0 required');
 assert.ok(worker.includes("'pc_self_repair_v1'"),'self-repair capability must be preserved');
@@ -53,21 +55,20 @@ assert.ok(css.includes('.status.waiting_dependency'),'waiting dependency styling
 assert.ok(css.includes('.status.paused'),'paused durable mission styling missing');
 assert.ok(html.includes("paused=Number(c.paused||0)"),'paused count is not shown in Mission Console state');
 
-// v170: mobile approval controls are only a user-intent bridge. They must
-// re-read sanitized mission state, bind to the visible 80-bit REQ marker, and
-// hand the action to the existing Worker/mobile-brain approval machinery.
-assert.doesNotThrow(()=>new Function(languageChat),'mobile mission control UI has invalid JavaScript syntax');
-assert.ok(languageChat.includes("const REQ_RE=/\\bREQ\\s+([a-f0-9]{20})\\b/i"),'mobile approval UI must require the v169 80-bit REQ marker');
-assert.ok(languageChat.includes("String(mission&&mission.status||'')==='waiting_dependency'"),'mobile approval UI must require waiting_dependency');
-assert.ok(languageChat.includes("String(step.status||'')==='blocked'"),'mobile approval UI must require a blocked step');
-assert.ok(languageChat.includes("String(err.dependency||step.dependency||'')==='approval'"),'mobile approval UI must require approval dependency');
-assert.ok(languageChat.includes("const state=await jsonFetch('/api/state')"),'mobile approval UI must re-read current server state before acting');
-assert.ok(languageChat.includes('if(rows.length!==1)throw new Error'),'mobile approval UI must fail closed unless exactly one fresh mission matches the REQ marker');
-assert.ok(languageChat.includes("?('onayla '+mission.id+' req '+req)"),'mobile approval command must carry exact mission id + current REQ');
-assert.ok(languageChat.includes("('iptal et '+mission.id+' req '+req)"),'mobile cancel command must carry exact mission id + reviewed REQ');
-assert.ok(languageChat.includes("jsonFetch('/api/mobile-brain'"),'mobile approval must go through the existing Worker/mobile-brain path');
-assert.ok(!languageChat.includes("'/api/tasks/'+")&&!languageChat.includes('/approve'), 'durable mission approval UI must not reuse legacy cloud-task approve endpoint');
-assert.ok(languageChat.includes("textContent='ONAYLA'"),'mobile approval button missing');
-assert.ok(languageChat.includes("textContent='İPTAL'"),'mobile cancel button missing');
+// v171: mobile Mission Control is isolated from language-chat and directly tested.
+assert.doesNotThrow(()=>new Function(languageChat),'language chat bootstrap has invalid JavaScript syntax');
+assert.doesNotThrow(()=>new Function(missionActions),'mobile mission action module has invalid JavaScript syntax');
+assert.ok(languageChat.includes("script.src='/mission-actions.js'"),'mobile mission action module is not loaded');
+assert.ok(languageChat.includes('JarvisMissionActions.install(root)'),'mobile mission action module is not installed');
+assert.ok(!languageChat.includes('const REQ_RE='),'approval authority must not live inside language-chat.js');
+assert.ok(missionActions.includes("const REQ_RE=/\\bREQ\\s+([a-f0-9]{20})\\b/i"),'mobile approval module must require the v169 80-bit REQ marker');
+assert.ok(missionActions.includes("jsonFetch('/api/state'"),'mobile approval module must re-read current server state before acting');
+assert.ok(missionActions.includes("jsonFetch('/api/mobile-brain'"),'mobile approval module must use the Worker/mobile-brain path');
+assert.ok(missionActions.includes("return'onayla '+id+' req '+req"),'approve command must bind mission id + current REQ');
+assert.ok(missionActions.includes("return'iptal et '+id+' req '+req"),'cancel command must bind mission id + current REQ');
+assert.ok(!missionActions.includes("'/api/tasks/'+")&&!missionActions.includes('/approve'),'durable mission controls must not reuse legacy cloud-task approve endpoint');
+assert.ok(missionActions.includes("approve.textContent='ONAYLA'"),'mobile approval button missing');
+assert.ok(missionActions.includes("cancel.textContent='İPTAL'"),'mobile cancel button missing');
 
+execFileSync(process.execPath,['mobile-mission-actions-selftest.js'],{stdio:'inherit'});
 console.log('MISSION CONSOLE SELFTEST PASS');
