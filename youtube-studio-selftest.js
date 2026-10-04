@@ -7,6 +7,7 @@ const yt=require('./jarvis-youtube-studio');
 (async()=>{
   assert.strictEqual(yt.YOUTUBE_STUDIO_VERSION,'1.1');
   assert.strictEqual(yt.STUDIO_URL,'https://studio.youtube.com/');
+  assert.ok(typeof yt.resolveYouTubePublishApproval==='function');
 
   const spec=yt.parseUploadSpec('creator-video/test.mp4 | başlık=Deneme Başlık | açıklama=Kısa açıklama');
   assert.strictEqual(spec.file,'creator-video/test.mp4');
@@ -18,6 +19,8 @@ const yt=require('./jarvis-youtube-studio');
 
   const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'jarvis-youtube-'));
   fs.mkdirSync(path.join(tmp,'creator-video'),{recursive:true});
+  const missionDir=path.join(tmp,'.jarvis-missions');
+  fs.mkdirSync(missionDir,{recursive:true});
   const video=path.join(tmp,'creator-video','demo.mp4');
   fs.writeFileSync(video,Buffer.alloc(2048,1));
   const resolved=yt.resolveWorkspaceVideo(tmp,'creator-video/demo.mp4');
@@ -47,6 +50,57 @@ const yt=require('./jarvis-youtube-studio');
       return{ok:true,text:label};
     }
   };
+
+  function saveMissionApproval(id,approvedAt,opts={}){
+    const receipt=yt.readReceipt(tmp,id);
+    assert.ok(receipt,'draft receipt required for mission fixture');
+    const draftCompletedAt=opts.draftCompletedAt||receipt.updatedAt||receipt.createdAt;
+    const publishStartedAt=opts.publishStartedAt||approvedAt;
+    const mission={
+      schema:1,
+      engine:'JARVIS_MISSION_ENGINE',
+      version:'1.0',
+      id,
+      type:opts.type||'creator_short',
+      status:opts.missionStatus||'running',
+      createdAt:receipt.createdAt,
+      updatedAt:publishStartedAt,
+      completedAt:null,
+      currentStep:opts.currentStep===undefined?1:opts.currentStep,
+      input:{publishYouTube:true},
+      artifacts:{},
+      history:[],
+      steps:[
+        {
+          index:0,
+          name:'youtube_draft',
+          status:opts.draftStatus||'completed',
+          attempts:1,
+          startedAt:receipt.createdAt,
+          completedAt:draftCompletedAt,
+          error:null,
+          artifact:{receipt:yt.missionReceiptFile(tmp,id),published:false},
+          meta:{}
+        },
+        {
+          index:1,
+          name:'youtube_publish',
+          status:opts.publishStatus||'running',
+          attempts:1,
+          startedAt:publishStartedAt,
+          completedAt:null,
+          error:null,
+          artifact:null,
+          meta:{requiresApproval:opts.requiresApproval===undefined?true:opts.requiresApproval,approvedAt}
+        }
+      ]
+    };
+    fs.writeFileSync(path.join(missionDir,id+'.json'),JSON.stringify(mission,null,2),'utf8');
+    return mission;
+  }
+  function approvalRequired(promiseFactory){
+    return assert.rejects(promiseFactory,err=>err&&err.code==='YOUTUBE_EXPLICIT_APPROVAL_REQUIRED');
+  }
 
   const missionId='M-TEST-1234567890';
   const first=await yt.prepareDraft(fakeOperator,tmp,{
@@ -90,7 +144,37 @@ const yt=require('./jarvis-youtube-studio');
   );
   assert.strictEqual(publishClicks,beforeInvalidProofClicks,'invalid approval proof must fail before Publish click');
 
+  // A caller-supplied current timestamp is not enough: the active mission must carry the same approval.
+  const forgedAt=new Date().toISOString();
+  await approvalRequired(()=>yt.publishPreparedDraft(fakeOperator,tmp,{missionId,approvedAt:forgedAt}));
+  assert.strictEqual(publishClicks,beforeInvalidProofClicks,'forged timestamp must fail before Publish click');
+
   const approvedAt=new Date().toISOString();
+  let mission=saveMissionApproval(missionId,approvedAt);
+  let provenance=yt.resolveYouTubePublishApproval(tmp,receipt,missionId,approvedAt);
+  assert.strictEqual(provenance.missionId,missionId);
+  assert.strictEqual(provenance.approvedAt,approvedAt);
+  assert.strictEqual(provenance.draftCompletedAt,mission.steps[0].completedAt);
+  assert.strictEqual(provenance.publishStartedAt,mission.steps[1].startedAt);
+
+  // Exact approval timestamp binding: a nearby but different caller timestamp must not be accepted.
+  const mismatchedAt=new Date(Date.parse(approvedAt)+1).toISOString();
+  await approvalRequired(()=>yt.publishPreparedDraft(fakeOperator,tmp,{missionId,approvedAt:mismatchedAt}));
+  assert.strictEqual(publishClicks,beforeInvalidProofClicks,'timestamp mismatch must fail before Publish click');
+
+  mission=saveMissionApproval(missionId,approvedAt,{requiresApproval:false});
+  await approvalRequired(()=>yt.publishPreparedDraft(fakeOperator,tmp,{missionId,approvedAt}));
+  assert.strictEqual(publishClicks,beforeInvalidProofClicks,'requiresApproval=false must fail closed before Publish click');
+
+  mission=saveMissionApproval(missionId,approvedAt,{draftStatus:'pending'});
+  await approvalRequired(()=>yt.publishPreparedDraft(fakeOperator,tmp,{missionId,approvedAt}));
+  assert.strictEqual(publishClicks,beforeInvalidProofClicks,'incomplete YouTube draft step must fail before Publish click');
+
+  mission=saveMissionApproval(missionId,approvedAt,{publishStatus:'pending'});
+  await approvalRequired(()=>yt.publishPreparedDraft(fakeOperator,tmp,{missionId,approvedAt}));
+  assert.strictEqual(publishClicks,beforeInvalidProofClicks,'non-running YouTube publish step must fail before Publish click');
+
+  saveMissionApproval(missionId,approvedAt);
   const published=await yt.publishPreparedDraft(fakeOperator,tmp,{missionId,approvedAt});
   assert.strictEqual(published.ok,true);
   assert.strictEqual(published.published,true);
@@ -99,8 +183,11 @@ const yt=require('./jarvis-youtube-studio');
   assert.strictEqual(receipt.state,'published');
   assert.strictEqual(receipt.published,true);
   assert.strictEqual(receipt.approvedAt,approvedAt);
+  assert.strictEqual(receipt.approvalMissionId,missionId);
+  assert.strictEqual(receipt.approvalDraftCompletedAt,mission.steps[0].completedAt);
+  assert.strictEqual(receipt.approvalPublishStartedAt,mission.steps[1].startedAt);
 
-  const publishedAgain=await yt.publishPreparedDraft(fakeOperator,tmp,{missionId,approvedAt});
+  const publishedAgain=await yt.publishPreparedDraft(fakeOperator,tmp,{missionId});
   assert.strictEqual(publishedAgain.ok,true);
   assert.strictEqual(publishedAgain.reused,true);
   assert.strictEqual(publishClicks,1,'published mission must never click Publish twice');
@@ -138,8 +225,10 @@ const yt=require('./jarvis-youtube-studio');
     missionId:uncertainId
   });
   assert.strictEqual(uncertainDraft.ok,true);
+  const uncertainApprovedAt=new Date().toISOString();
+  saveMissionApproval(uncertainId,uncertainApprovedAt);
   const beforeUncertainClicks=publishClicks;
-  const uncertain=await yt.publishPreparedDraft(fakeOperator,tmp,{missionId:uncertainId,approvedAt:new Date().toISOString()});
+  const uncertain=await yt.publishPreparedDraft(fakeOperator,tmp,{missionId:uncertainId,approvedAt:uncertainApprovedAt});
   assert.strictEqual(uncertain.ok,false);
   assert.strictEqual(uncertain.code,'YOUTUBE_PUBLISH_UNCERTAIN');
   assert.strictEqual(uncertain.uncertain,true);
@@ -162,6 +251,11 @@ const yt=require('./jarvis-youtube-studio');
   assert.ok(source.includes('YouTube approval mission receipt mismatch'),'approval mission binding missing');
   assert.ok(source.includes('YouTube approval predates draft receipt'),'approval lifecycle lower bound missing');
   assert.ok(source.includes('YouTube approval timestamp is in the future'),'approval lifecycle upper bound missing');
+  assert.ok(source.includes("path.resolve(workspace),'.jarvis-missions'"),'mission-disk approval provenance missing');
+  assert.ok(source.includes("publishStep.meta.requiresApproval===true"),'YouTube publish approval requirement binding missing');
+  assert.ok(source.includes('diskApproved.value!==approved.value'),'caller proof must equal active mission approvedAt');
+  assert.ok(source.includes("draftStep.status!=='completed'"),'completed YouTube draft lifecycle binding missing');
+  assert.ok(source.includes("publishStep.status!=='running'"),'active YouTube publish step binding missing');
   assert.ok(source.includes("input[type=file]"),'file input upload path missing');
   assert.ok(worker.includes("name:'youtube_prepare_draft_upload'"),'native YouTube draft tool missing');
   assert.ok(worker.includes("name:'youtube_studio_status'"),'native YouTube status tool missing');
@@ -170,5 +264,5 @@ const yt=require('./jarvis-youtube-studio');
   assert.ok(worker.includes('"Devam et" tek başına YouTube PUBLIC onayı değildir'),'generic resume must not count as YouTube publish approval');
   assert.ok(server.includes("return'youtube_upload_prepare_v1'"),'server YouTube draft routing missing');
 
-  console.log('YOUTUBE STUDIO APPROVAL SELFTEST PASS · approval proof is timestamped, mission-bound and draft-lifecycle-bound before PUBLIC click');
+  console.log('YOUTUBE STUDIO APPROVAL SELFTEST PASS · PUBLIC click requires exact active mission approval provenance plus mission-bound draft lifecycle');
 })().catch(e=>{console.error(e);process.exit(1)});
