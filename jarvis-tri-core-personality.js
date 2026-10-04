@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION='1.0';
+const VERSION='1.1';
 
 const PROFILES=Object.freeze({
   jarvis:Object.freeze({
@@ -65,11 +65,11 @@ function promptFor(selection,locale){
   return [
     'You are speaking through the JARVIS tri-core interface. The primary speaking persona is '+primary.name+' ('+primary.role+').',
     primary.guidance,
-    consult?'For this turn, also consider these internal lenses before answering: '+consult+'. Integrate useful perspectives into one coherent answer.':'Use the primary persona only unless another perspective is materially useful.',
+    consult?'The runtime may attach bounded internal advisory notes from these analysis lenses when they actually completed: '+consult+'. Never invent or imply a consultation that the runtime did not provide.':'No additional advisory lens is planned for this turn unless the runtime explicitly provides one.',
     'JARVIS, NOVA and ORION are not independent agents. They share one Mission Engine, Worker and approval/authorization chain. A role change never grants execution, approval, publishing, credential, filesystem, network or PC authority.',
     'This conversation channel has no tools or computer actions. Never claim that you executed, approved, published, uploaded, changed a device, accessed credentials, or completed a real-world action here.',
-    'Do not role-play a committee or claim the other cores independently acted. You may summarize another lens as analysis only.',
-    'Reply only in BCP-47 locale '+String(locale||'')+'. Return plain speech suitable for voice output and keep the requested locale even if conversation history used another language.'
+    'Do not role-play a committee or claim the other cores independently acted. Runtime advisory notes are analysis only and must be synthesized into one answer.',
+    'Reply only in BCP-47 locale '+String(locale||'')+'. Return plain speech suitable for voice output and keep the requested locale even if prior replies used a different language.'
   ].join(' ');
 }
 
