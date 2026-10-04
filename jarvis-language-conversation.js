@@ -43,14 +43,13 @@ function createConversation({runtime,output,now=Date.now}={}){
       const generated=await output.generate({text:capture.text,history:row.history,core:selected,...frozen});
       controller.signal.throwIfAborted();
       if(generated.locale!==frozen.context.locale)throw new Error('reply_locale_mismatch');
-      if(generated.core!==selected.core||generated.authority!=='shared_guardrail_only')throw new Error('tri_core_contract_mismatch');
       const rendered=await output.render({reply:generated.reply,...frozen});
       controller.signal.throwIfAborted();
       if(rendered.locale!==frozen.context.locale||rendered.voice!==frozen.speech.voice||!rendered.audio)throw new Error('render_context_mismatch');
       const token=crypto.randomUUID();
       row.receipt={token,turnId:begun.turnId,at:now(),transcript:capture.text,reply:generated.reply};
-      return{ok:true,state:'audio-ready',receipt:token,reply:generated.reply,transcript:capture.text,core:generated.core,role:generated.role,
-        coreSource:generated.coreSource,consultWith:generated.consultWith,authority:'shared_guardrail_only',...rendered};
+      return{ok:true,state:'audio-ready',receipt:token,reply:generated.reply,transcript:capture.text,core:selected.core,role:selected.role,
+        coreSource:selected.source,consultWith:[...(selected.consultWith||[])],authority:'shared_guardrail_only',...rendered};
     }catch(error){
       if(begun?.ok)runtime.complete(id,{turnId:begun.turnId,successful:false});
       else runtime.discardCapture(id,{resetCandidate:true});
