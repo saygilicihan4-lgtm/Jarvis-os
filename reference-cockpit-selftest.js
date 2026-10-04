@@ -6,7 +6,12 @@ const holo=fs.readFileSync('public/tri-core-hologram.js','utf8');
 const asset='public/jarvis-reference-cockpit.jpg';
 
 assert(fs.existsSync(asset),'reference cockpit image missing');
-assert(fs.statSync(asset).size>90000,'reference cockpit image unexpectedly small');
+const jpeg=fs.readFileSync(asset);
+assert(jpeg.length>10000,'reference cockpit image unexpectedly tiny');
+assert.strictEqual(jpeg[0],0xff,'reference cockpit JPEG SOI byte 1 missing');
+assert.strictEqual(jpeg[1],0xd8,'reference cockpit JPEG SOI byte 2 missing');
+assert.strictEqual(jpeg[jpeg.length-2],0xff,'reference cockpit JPEG EOI byte 1 missing');
+assert.strictEqual(jpeg[jpeg.length-1],0xd9,'reference cockpit JPEG EOI byte 2 missing');
 assert(ui.includes("const ASSET='/jarvis-reference-cockpit.jpg'"),'reference image binding missing');
 assert(ui.includes("data-reference-cockpit=\"1\""),'cockpit activation marker missing');
 assert(ui.includes('ref-copy nova')&&ui.includes('ref-copy jarvis')&&ui.includes('ref-copy orion'),'three hologram slices missing');
