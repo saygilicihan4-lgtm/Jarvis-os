@@ -4,8 +4,16 @@ const {createOutput}=require('./jarvis-language-turn-output');
 const {createRouter}=require('./jarvis-tts-locale-router');
 const triCore=require('./jarvis-tri-core-personality');
 const relay=require('./jarvis-mobile-language-relay');
-const VERSION='1.2';
+const VERSION='1.3';
 
+function verifiedConsulted(generated,selected){
+  const allowed=new Set(Array.isArray(selected&&selected.consultWith)?selected.consultWith:[]),out=[];
+  for(const id of Array.isArray(generated&&generated.consultedWith)?generated.consultedWith:[]){
+    if(!allowed.has(id)||!triCore.PROFILES[id])throw new Error('tri_core_consultation_contract_mismatch');
+    if(!out.includes(id))out.push(id);
+  }
+  return out.slice(0,2);
+}
 function createEngine({output=createOutput(),voiceRouter=createRouter()}={}){
   async function turn({text,locale,inputSource='browser-speech',history=[]}={},options={}){
     const normalized=lang.normalizeLocale(locale),clean=String(text||'').replace(/\s+/g,' ').trim().slice(0,1800);
@@ -27,12 +35,13 @@ function createEngine({output=createOutput(),voiceRouter=createRouter()}={}){
     const selected=triCore.select(clean);
     const generated=await output.generate({text:clean,context,speech,history:relay.sanitizeHistory(history),core:selected,signal:options.signal});
     if(generated.locale!==normalized)throw new Error('reply_locale_mismatch');
-    // Security boundary: role/consultation metadata comes from the deterministic
-    // router, never from model/output supplied metadata.
+    if(generated.core&&generated.core!==selected.core)throw new Error('tri_core_contract_mismatch');
+    if(generated.authority&&generated.authority!=='shared_guardrail_only')throw new Error('tri_core_contract_mismatch');
+    const consultedWith=verifiedConsulted(generated,selected);
     return{ok:true,state:'reply-ready',reply:generated.reply,locale:normalized,ttsLocale,localeResolution,voice:voice.voice,provider:'edge-tts',inputSource:String(inputSource),
-      core:selected.core,role:selected.role,coreSource:selected.source,consultWith:[...(selected.consultWith||[])],authority:'shared_guardrail_only',
+      core:selected.core,role:selected.role,coreSource:selected.source,consultWith:consultedWith,consultationMode:'local_advisory_only',authority:'shared_guardrail_only',
       learning:false,languageEvidence:'client-requested-locale',speechEvidence:evidenceLevel,deviceE2eVerified:false};
   }
   return{turn};
 }
-module.exports={VERSION,createEngine};
+module.exports={VERSION,verifiedConsulted,createEngine};
