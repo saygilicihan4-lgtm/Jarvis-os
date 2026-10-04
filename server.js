@@ -52,7 +52,10 @@ const PHONE_SESSION_SECRET=crypto.createHmac('sha256',DEVICE_SECRET||STATE_SECRE
 let phoneCode=String(crypto.randomInt(0,100000000)).padStart(8,'0');
 let phoneCodeExp=Date.now()+5*60*1000;
 let phoneCodeUsed=false;
-function cookieMap(req){return Object.fromEntries(String(req.headers.cookie||'').split(';').map(x=>x.trim().split('=').map(decodeURIComponent)).filter(x=>x.length===2))}
+function cookieMap(req){
+  try{return Object.fromEntries(String(req.headers.cookie||'').split(';').map(x=>x.trim().split('=').map(decodeURIComponent)).filter(x=>x.length===2))}
+  catch{return {}} // Malformed percent encoding is unauthenticated, not a server crash.
+}
 function setJarvisSessionCookie(req,res){
   const exp=Date.now()+30*24*60*60*1000,token=signPhoneSession(req,exp);
   res.setHeader('set-cookie','jarvis_session='+encodeURIComponent(token)+'; Max-Age=2592000; Path=/; HttpOnly; Secure; SameSite=Lax');
@@ -773,21 +776,12 @@ const server=http.createServer((req,res)=>{
   }
 
   if(pathname==='/api/session/lan-bootstrap'&&req.method==='POST'){
-    // Same public egress alone is NOT sufficient. We also require an approved,
-    // recently-online signed PC Worker whose heartbeat came through that same
-    // network tag. This gives convenient home-Wi-Fi entry without making IP
-    // address itself the credential.
-    const tag=ipTag(req);
-    const trusted=Object.values(state.workers.devices).find(w=>
-      w&&w.approved&&w.authMode==='signed'&&workerOnline(w)&&w.networkTag===tag
-    );
-    if(!trusted){
-      log('LAN_SESSION_BOOTSTRAP_DENY','no signed online worker on matching network');
-      return json(res,401,{error:'trusted local network worker required'});
-    }
-    const exp=setJarvisSessionCookie(req,res);
-    log('LAN_SESSION_BOOTSTRAP','same-network signed worker presence accepted');
-    return json(res,200,{ok:true,networkTrusted:true,expiresAt:new Date(exp).toISOString()});
+    // Compatibility route for cached clients. A signed PC heartbeat proves
+    // that PC's identity, never the identity of another browser behind its NAT.
+    // Reuse existing proof only; no IP/Worker-based minting or expiry extension.
+    if(validPhoneSession(req))return json(res,200,{ok:true,existing:true});
+    log('LAN_SESSION_BOOTSTRAP_DENY','browser session proof required');
+    return json(res,401,{error:'trusted session required',pairingRequired:true});
   }
 
   if(pathname==='/api/db/status'&&req.method==='GET'){
