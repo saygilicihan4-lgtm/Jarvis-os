@@ -56,14 +56,52 @@ assert.strictEqual(engine.missionTag('M-ABC-123'),'jarvis_mission_M-ABC-123');
 assert.ok(typeof engine.findProductByMission==='function');
 assert.ok(typeof engine.createDraftForMission==='function');
 assert.ok(typeof engine.resolveShopifyPublishApproval==='function');
+assert.ok(typeof engine.assertActiveProduct==='function');
+assert.ok(typeof engine.assertPublishedOnPublication==='function');
+
+const gid='gid://shopify/Product/123456789';
+const publication={id:'gid://shopify/Publication/987654321',name:'Online Store'};
+const activeProduct=engine.assertActiveProduct({product:{id:gid,title:'V-GAP Organizer',status:'ACTIVE'}},gid);
+assert.strictEqual(activeProduct.id,gid);
+assert.strictEqual(activeProduct.status,'ACTIVE');
+assert.throws(
+  ()=>engine.assertActiveProduct({product:{id:gid,title:'V-GAP Organizer',status:'DRAFT'}},gid),
+  err=>err&&err.code==='SHOPIFY_ACTIVE_POSTCONDITION_FAILED'
+);
+assert.throws(
+  ()=>engine.assertActiveProduct({product:{id:'gid://shopify/Product/999',status:'ACTIVE'}},gid),
+  err=>err&&err.code==='SHOPIFY_ACTIVE_POSTCONDITION_FAILED'
+);
+assert.throws(
+  ()=>engine.assertActiveProduct({},gid),
+  err=>err&&err.code==='SHOPIFY_ACTIVE_POSTCONDITION_FAILED'
+);
+assert.strictEqual(engine.assertPublishedOnPublication({publishable:{publishedOnPublication:true}},publication),true);
+assert.throws(
+  ()=>engine.assertPublishedOnPublication({publishable:{publishedOnPublication:false}},publication),
+  err=>err&&err.code==='SHOPIFY_PUBLICATION_POSTCONDITION_FAILED'
+);
+assert.throws(
+  ()=>engine.assertPublishedOnPublication({publishable:{}},publication),
+  err=>err&&err.code==='SHOPIFY_PUBLICATION_POSTCONDITION_FAILED'
+);
+assert.throws(
+  ()=>engine.assertPublishedOnPublication({publishable:{publishedOnPublication:true}},null),
+  err=>err&&err.code==='SHOPIFY_PUBLICATION_POSTCONDITION_FAILED'
+);
 
 const commerceSource=fs.readFileSync(path.join(__dirname,'jarvis-commerce-engine.js'),'utf8');
 const publishStart=commerceSource.indexOf('async function publishProduct(workspace,productId)');
 const publicationPreflight=commerceSource.indexOf('const publication=await findOnlineStorePublication(creds);',publishStart);
 const activeMutation=commerceSource.indexOf('const active=await graphQLRequest(creds,`mutation JarvisActivateProduct',publishStart);
+const activePostcondition=commerceSource.indexOf('const activeProduct=assertActiveProduct(update,id);',publishStart);
+const publishMutation=commerceSource.indexOf('const pub=await graphQLRequest(creds,`mutation JarvisPublishProduct',publishStart);
+const publicationPostcondition=commerceSource.indexOf('const publicationVerified=assertPublishedOnPublication(out,publication);',publishStart);
+const publishReceipt=commerceSource.indexOf("const receipt=path.join(dirs.receipts,'publish-'",publishStart);
 assert.ok(publishStart>=0&&publicationPreflight>publishStart&&activeMutation>publicationPreflight,'Online Store publication preflight must happen before ACTIVE mutation');
+assert.ok(activePostcondition>activeMutation&&publishMutation>activePostcondition,'ACTIVE response must be verified before publish mutation');
+assert.ok(publicationPostcondition>publishMutation&&publishReceipt>publicationPostcondition,'Publication response must be verified before success receipt');
 
-const gid='gid://shopify/Product/123456789';
 const approvalRoot=fs.mkdtempSync(path.join(os.tmpdir(),'jarvis-commerce-approval-'));
 const missionDir=path.join(approvalRoot,'.jarvis-missions');
 fs.mkdirSync(missionDir,{recursive:true});
