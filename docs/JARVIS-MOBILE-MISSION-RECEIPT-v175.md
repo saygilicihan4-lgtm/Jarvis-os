@@ -14,7 +14,7 @@ URLs, credentials and raw Worker results are never copied into receipts.
 
 The status line includes time and proof/result. Up to eight sanitized receipts
 are stored in `sessionStorage` under `jarvisMissionReceiptsV1`. Storage access,
-parsing and writes are guarded. Reads have a 4 KiB bound, reject invalid schema,
+parsing and writes are guarded. Reads have a 4,096-character bound, reject invalid schema,
 version/date/result combinations, remove malformed data and strip unknown fields
 from stored data. Denied storage and optional queue refresh failures cannot turn
 an already verified decision into a reported failure. Receipt history is local

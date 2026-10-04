@@ -15,6 +15,7 @@
   const RECEIPT_STORAGE_MAX=4096;
   // Display evidence only; never consulted by an authorization path.
   const verifiedProofs=new WeakMap();
+  const receiptViews=new WeakMap();
 
   function reqFromText(text){
     const match=String(text||'').match(REQ_RE);
@@ -277,6 +278,54 @@
       return true;
     }catch(_){return false}
   }
+  function clearVerifiedReceipts(targetRoot=root){
+    try{
+      const storage=targetRoot&&targetRoot.sessionStorage;
+      if(storage)storage.removeItem(RECEIPT_STORAGE_KEY);
+      return true;
+    }catch(_){return false}
+  }
+  function renderReceiptTrail(targetRoot=root){
+    try{
+      const doc=targetRoot&&targetRoot.document,tasks=doc&&doc.getElementById('tasks');
+      if(!tasks||typeof tasks.insertAdjacentElement!=='function'||typeof doc.createElement!=='function')return false;
+      let view=receiptViews.get(targetRoot);
+      if(!view||doc.getElementById('jarvisMissionReceiptTrail')!==view.panel){
+        const previous=doc.getElementById('jarvisMissionReceiptTrail');
+        if(previous)previous.remove();
+        const panel=doc.createElement('section');panel.id='jarvisMissionReceiptTrail';
+        panel.setAttribute('aria-label','Son kararlar');
+        panel.style.cssText='margin-top:14px;border-top:1px solid var(--line);padding-top:12px';
+        const title=doc.createElement('h3');title.className='panel-title';title.textContent='SON KARARLAR';
+        const note=doc.createElement('p');note.textContent='Bu sekmedeki son 8 karar. Kayıtlar işlemin o andaki sonucunu gösterir; anlık görev durumu değildir.';
+        note.style.cssText='font-size:11px;line-height:1.5;color:var(--muted)';
+        const list=doc.createElement('ol');list.setAttribute('aria-label','Oturum karar kayıtları');
+        list.style.cssText='list-style:none;margin:10px 0;padding:0;max-height:260px;overflow:auto';
+        const status=doc.createElement('p');status.setAttribute('role','status');status.style.cssText='font-size:11px';
+        const clear=doc.createElement('button');clear.type='button';clear.className='mini-btn';clear.textContent='KAYITLARI TEMİZLE';
+        clear.addEventListener('click',()=>{
+          if(clearVerifiedReceipts(targetRoot))renderReceiptTrail(targetRoot);
+          else status.textContent='Kayıtlar temizlenemedi.';
+        });
+        panel.append(title,note,list,status,clear);tasks.insertAdjacentElement('afterend',panel);
+        view={panel,list,status,clear,signature:null};receiptViews.set(targetRoot,view);
+      }
+      const rows=readVerifiedReceipts(targetRoot),signature=JSON.stringify(rows);
+      if(view.signature===signature)return true;
+      const items=rows.slice().reverse().map(receipt=>{
+        const item=doc.createElement('li');item.className='task';
+        item.style.cssText='font-size:11px;line-height:1.6;overflow-wrap:anywhere';
+        // Stored display data is never re-verified or treated as live authority.
+        item.textContent=verifiedReceiptText(receipt).replace(/^DOĞRULANDI/,'KAYIT');
+        return item;
+      });
+      view.list.replaceChildren(...items);
+      view.status.textContent=rows.length?rows.length+' karar kaydı · en yeni üstte':'Bu sekmede henüz karar kaydı yok.';
+      view.clear.disabled=rows.length===0;
+      view.signature=signature;
+      return true;
+    }catch(_){return false}
+  }
   function setStatus(text,targetRoot=root){
     const el=targetRoot&&targetRoot.document&&targetRoot.document.getElementById('consoleStatus');
     if(el)el.textContent=String(text||'').slice(0,180);
@@ -297,6 +346,7 @@
       const receipt=buildVerifiedReceipt(action,resolved,verified.proof);
       storeVerifiedReceipt(receipt,targetRoot);
       if(targetRoot&&typeof targetRoot.load==='function')try{await targetRoot.load()}catch(_){}
+      renderReceiptTrail(targetRoot);
       setStatus('MOBILE MISSION · '+verifiedReceiptText(receipt),targetRoot);
       return true;
     }catch(error){
@@ -322,7 +372,7 @@
   }
   function install(targetRoot=root){
     if(!targetRoot||!targetRoot.document)return false;
-    if(targetRoot.__jarvisMissionActionsInstalled){scheduleMissionFocus(targetRoot);return true}
+    if(targetRoot.__jarvisMissionActionsInstalled){renderReceiptTrail(targetRoot);scheduleMissionFocus(targetRoot);return true}
     const target=targetRoot.document.getElementById('tasks');
     if(!target||typeof targetRoot.localMissionCard!=='function')return false;
     if(!targetRoot.__jarvisMissionRendererWrapped){
@@ -331,10 +381,10 @@
       targetRoot.__jarvisMissionRendererWrapped=true;
       if(typeof targetRoot.renderMissionQueue==='function')try{targetRoot.renderMissionQueue()}catch(_){}
     }
-    enhance(targetRoot);scheduleMissionFocus(targetRoot);
+    enhance(targetRoot);renderReceiptTrail(targetRoot);scheduleMissionFocus(targetRoot);
     const Observer=targetRoot.MutationObserver||root&&root.MutationObserver;
     if(typeof Observer==='function'){
-      const observer=new Observer(()=>{enhance(targetRoot);scheduleMissionFocus(targetRoot)});observer.observe(target,{childList:true,subtree:true});
+      const observer=new Observer(()=>{enhance(targetRoot);renderReceiptTrail(targetRoot);scheduleMissionFocus(targetRoot)});observer.observe(target,{childList:true,subtree:true});
     }
     targetRoot.__jarvisMissionActionsInstalled=true;
     return true;
@@ -351,7 +401,7 @@
     REQ_RE,MISSION_ID_RE,RECEIPT_STORAGE_KEY,RECEIPT_LIMIT,RECEIPT_STORAGE_MAX,reqFromText,cleanMissionId,normalizedLabel,labelForMission,renderedCardLabel,approvalDependency,activeMission,missionQueueFromState,
     resolveMissionFromQueue,bindMissionCardHtml,missionIdFromSearch,missionIdFromLocation,resolveFreshMission,focusMissionById,scheduleMissionFocus,
     commandFor,runMobileBrain,collectResultText,workerReceiptMatches,waitForActionProof,runActionWithProof,
-    sanitizeVerifiedReceipt,buildVerifiedReceipt,verifiedReceiptText,readVerifiedReceipts,storeVerifiedReceipt,
+    sanitizeVerifiedReceipt,buildVerifiedReceipt,verifiedReceiptText,readVerifiedReceipts,storeVerifiedReceipt,clearVerifiedReceipts,renderReceiptTrail,
     act,enhance,install,autoInstall
   };
 });
