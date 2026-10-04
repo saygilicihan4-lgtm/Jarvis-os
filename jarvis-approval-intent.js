@@ -36,12 +36,111 @@ function hasNegatedApproval(intent){
   return false;
 }
 
-function classifyApprovalIntent(text){
-  const intent=normalizeApprovalIntent(text);
-  if(!intent)return{approved:false,reason:'missing_explicit_action',intent};
-  if(hasNegatedApproval(intent))return{approved:false,reason:'negated_explicit_action',intent};
-  const approved=hasPositiveApproval(intent);
-  return{approved,reason:approved?'explicit_action':'missing_explicit_action',intent};
+function detectApprovalSurfaces(intent){
+  const text=String(intent||'');
+  const strong=[];
+  if(/(?:^|[^a-z0-9])(?:youtube|you\s*tube|kanal(?:da|ı|i)?)(?=$|[^a-z0-9])/i.test(text))strong.push('youtube');
+  if(/(?:^|[^a-z0-9çğıöşü])(?:shopify|mağaza|magaza)(?=$|[^a-z0-9çğıöşü])/i.test(text))strong.push('shopify');
+  if(/(?:^|[^a-z0-9çğıöşü])(?:browser|tarayıcı|tarayici|form|buton|button|link)(?=$|[^a-z0-9çğıöşü])/i.test(text))strong.push('browser');
+  if(strong.length)return[...new Set(strong)];
+
+  const fallback=[];
+  if(/(?:^|[^a-z0-9çğıöşü])(?:video(?:yu|sunu)?|shorts?|reels?)(?=$|[^a-z0-9çğıöşü])/i.test(text))fallback.push('youtube');
+  if(/(?:^|[^a-z0-9çğıöşü])(?:ürün(?:ü|ünü)?|urun(?:u|unu)?|product)(?=$|[^a-z0-9çğıöşü])/i.test(text))fallback.push('shopify');
+  if(/(?:^|[^a-z0-9çğıöşü])(?:tıkla|tikla|click)(?=$|[^a-z0-9çğıöşü])/i.test(text))fallback.push('browser');
+  return[...new Set(fallback)];
 }
 
-module.exports={normalizeApprovalIntent,classifyApprovalIntent};
+function classifyApprovalIntent(text){
+  const intent=normalizeApprovalIntent(text);
+  if(!intent)return{approved:false,reason:'missing_explicit_action',intent,surfaces:[],surface:null};
+  if(hasNegatedApproval(intent))return{approved:false,reason:'negated_explicit_action',intent,surfaces:[],surface:null};
+  const approved=hasPositiveApproval(intent);
+  const surfaces=approved?detectApprovalSurfaces(intent):[];
+  return{
+    approved,
+    reason:approved?'explicit_action':'missing_explicit_action',
+    intent,
+    surfaces,
+    surface:surfaces.length===1?surfaces[0]:null
+  };
+}
+
+function approvalSurfaceForStepName(stepName){
+  const name=String(stepName||'').trim();
+  if(name==='youtube_publish')return'youtube';
+  if(name==='shopify_publish')return'shopify';
+  if(name==='browser_click')return'browser';
+  return'';
+}
+
+function explicitMissionIds(intent){
+  const matches=String(intent||'').match(/M-[A-Z0-9-]{12,80}/gi)||[];
+  return[...new Set(matches.map(x=>x.toUpperCase()))];
+}
+
+function resolveApprovalTarget({approval,pending=[],requestedMissionId=''}={}){
+  if(!approval||approval.approved!==true){
+    return{ok:false,code:'APPROVAL_NOT_EXPLICIT',message:'Açık kullanıcı onayı bulunamadı.'};
+  }
+  const rows=(Array.isArray(pending)?pending:[])
+    .map(row=>({id:String(row&&row.id||'').trim(),stepName:String(row&&row.stepName||'').trim()}))
+    .filter(row=>row.id&&approvalSurfaceForStepName(row.stepName));
+  if(!rows.length)return{ok:false,code:'NO_PENDING_APPROVAL',message:'Açık onay bekleyen görev yok.'};
+
+  const requested=String(requestedMissionId||'').trim();
+  const mentionedIds=explicitMissionIds(approval.intent);
+  let target=null;
+  let reason='';
+
+  if(mentionedIds.length){
+    if(mentionedIds.length!==1){
+      return{ok:false,code:'AMBIGUOUS_MISSION_ID',message:'Onay metni birden fazla missionId içeriyor; tek bir görev açıkça seçilmeli.'};
+    }
+    target=rows.find(row=>row.id.toUpperCase()===mentionedIds[0])||null;
+    if(!target){
+      return{ok:false,code:'MISSION_ID_NOT_PENDING',message:'Onay metnindeki missionId şu anda onay bekleyen bir göreve ait değil.'};
+    }
+    reason='explicit_mission_id';
+  }else{
+    const surfaces=[...new Set(Array.isArray(approval.surfaces)?approval.surfaces.filter(Boolean):[])];
+    if(surfaces.length>1){
+      return{ok:false,code:'AMBIGUOUS_APPROVAL_SURFACE',message:'Onay metni birden fazla geri döndürülemez hedefi belirtiyor; tek bir hedef seçilmeli.'};
+    }
+    if(surfaces.length===1){
+      const candidates=rows.filter(row=>approvalSurfaceForStepName(row.stepName)===surfaces[0]);
+      if(!candidates.length){
+        return{ok:false,code:'SURFACE_NOT_PENDING',message:'Kullanıcının onayladığı hedef yüzeyinde şu anda onay bekleyen görev yok.'};
+      }
+      if(candidates.length>1){
+        return{ok:false,code:'AMBIGUOUS_SURFACE_MISSIONS',message:'Aynı hedef yüzeyinde birden fazla görev onay bekliyor; kullanıcı mesajında tam missionId belirtilmeli.'};
+      }
+      target=candidates[0];
+      reason='explicit_surface';
+    }else{
+      if(rows.length>1){
+        return{ok:false,code:'AMBIGUOUS_PENDING_APPROVAL',message:'Birden fazla görev onay bekliyor; kullanıcı onay metninde hedef yüzeyi veya tam missionId belirtilmeli.'};
+      }
+      target=rows[0];
+      reason='single_pending';
+    }
+  }
+
+  if(requested&&requested.toUpperCase()!==target.id.toUpperCase()){
+    return{ok:false,code:'REQUESTED_MISSION_MISMATCH',message:'Araç tarafından seçilen missionId kullanıcının açıkça onayladığı hedefle uyuşmuyor.'};
+  }
+  return{
+    ok:true,
+    missionId:target.id,
+    surface:approvalSurfaceForStepName(target.stepName),
+    reason
+  };
+}
+
+module.exports={
+  normalizeApprovalIntent,
+  classifyApprovalIntent,
+  detectApprovalSurfaces,
+  approvalSurfaceForStepName,
+  resolveApprovalTarget
+};
