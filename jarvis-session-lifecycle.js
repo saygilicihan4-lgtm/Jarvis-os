@@ -42,8 +42,9 @@ function createPgSessionStore(db){
     async revokeOthers(currentIdHash,revokedAt){
       await db.query('UPDATE jarvis_admin_sessions SET revoked_at=$2 WHERE id_hash<>$1 AND revoked_at IS NULL AND expires_at>now()',[currentIdHash,revokedAt]);
     },
-    async setLegacyAllowed(allowed){
-      await db.query("UPDATE jarvis_admin_session_policy SET legacy_allowed=$1,updated_at=now() WHERE id='admin'",[!!allowed]);
+    async disableLegacy(){
+      // Monotonic migration: once v2 cookies are disabled, no API path may revive them.
+      await db.query("UPDATE jarvis_admin_session_policy SET legacy_allowed=false,updated_at=now() WHERE id='admin' AND legacy_allowed<>false");
     }
   };
 }
@@ -128,10 +129,14 @@ function createSessionLifecycle({secret,store=null,clock=()=>Date.now()}={}){
     for(const r of records.values())if(r.idHash!==current&&!r.revokedAt&&isoMs(r.expiresAt)>clock()){r.revokedAt=at;count++}
     return{count,revokedAt:at};
   }
-  async function setLegacyAllowed(allowed){
-    requireDurable();await store.setLegacyAllowed(!!allowed);legacyAllowed=!!allowed;return{legacyAllowed,durable:true,legacyPolicy:legacyAllowed?'accept-existing-v2-until-expiry':'disabled'};
+  async function disableLegacy(){
+    requireDurable();
+    if(!legacyAllowed)return{legacyAllowed:false,durable:true,legacyPolicy:'disabled',changed:false};
+    await store.disableLegacy();
+    legacyAllowed=false;
+    return{legacyAllowed:false,durable:true,legacyPolicy:'disabled',changed:true};
   }
-  return{init,issue,validate,acceptsLegacy,status,list,revoke,revokeOthers,setLegacyAllowed,idHash};
+  return{init,issue,validate,acceptsLegacy,status,list,revoke,revokeOthers,disableLegacy,idHash};
 }
 
 module.exports={createSessionLifecycle,createPgSessionStore};
