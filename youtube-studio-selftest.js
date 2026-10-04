@@ -224,12 +224,12 @@ const yt=require('./jarvis-youtube-studio');
   assert.strictEqual(publishedAgain.reused,true);
   assert.strictEqual(publishClicks,beforeStaleClicks+1,'published mission must never click Publish twice');
 
-  // A success-looking string off YouTube Studio origin is not valid PUBLIC evidence.
+  // A suffix/prefix lookalike host with success text is not valid YouTube Studio PUBLIC evidence.
   const offOriginId='M-OFFORIGIN-123456';
   publishSucceeded=false;
   staleSuccessMarker=false;
   allowPublishSuccess=true;
-  publishSuccessUrl='https://example.com/not-youtube';
+  publishSuccessUrl='https://studio.youtube.com.evil.example/not-youtube';
   const offOriginDraft=await yt.prepareDraft(fakeOperator,tmp,{
     file:'creator-video/demo.mp4',
     title:'Off Origin Test',
@@ -305,7 +305,8 @@ const yt=require('./jarvis-youtube-studio');
   assert.ok(source.includes("YOUTUBE_STALE_SUCCESS_MARKER"),'stale success marker guard missing');
   assert.ok(source.includes('publishEvidenceBaselineUrl'),'pre-click publish evidence baseline missing');
   assert.ok(source.includes('publishEvidenceUrl'),'post-click publish evidence URL missing');
-  assert.ok(source.includes("return /studio\\.youtube\\.com/.test(url)&&"),'publish success must be bound to YouTube Studio origin');
+  assert.ok(source.includes("url.hostname.toLowerCase()==='studio.youtube.com'"),'publish success must require exact YouTube Studio hostname');
+  assert.ok(source.includes("url.protocol==='https:'"),'publish success must require HTTPS YouTube Studio origin');
   assert.ok(source.includes('explicit approval proof required for YouTube publish'),'module-level approval proof missing');
   assert.ok(source.includes('valid explicit approval timestamp required for YouTube publish'),'approval timestamp validation missing');
   assert.ok(source.includes('YouTube approval mission receipt mismatch'),'approval mission binding missing');
@@ -324,5 +325,5 @@ const yt=require('./jarvis-youtube-studio');
   assert.ok(worker.includes('"Devam et" tek başına YouTube PUBLIC onayı değildir'),'generic resume must not count as YouTube publish approval');
   assert.ok(server.includes("return'youtube_upload_prepare_v1'"),'server YouTube draft routing missing');
 
-  console.log('YOUTUBE STUDIO APPROVAL SELFTEST PASS · PUBLIC success requires fresh YouTube Studio evidence after exact mission-bound approval');
+  console.log('YOUTUBE STUDIO APPROVAL SELFTEST PASS · PUBLIC success requires fresh exact-origin Studio evidence after mission-bound approval');
 })().catch(e=>{console.error(e);process.exit(1)});
