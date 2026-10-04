@@ -27,9 +27,10 @@ function createEngine({output=createOutput(),voiceRouter=createRouter()}={}){
     const selected=triCore.select(clean);
     const generated=await output.generate({text:clean,context,speech,history:relay.sanitizeHistory(history),core:selected,signal:options.signal});
     if(generated.locale!==normalized)throw new Error('reply_locale_mismatch');
-    if(generated.core!==selected.core||generated.authority!=='shared_guardrail_only')throw new Error('tri_core_contract_mismatch');
+    // Security boundary: role/consultation metadata comes from the deterministic
+    // router, never from model/output supplied metadata.
     return{ok:true,state:'reply-ready',reply:generated.reply,locale:normalized,ttsLocale,localeResolution,voice:voice.voice,provider:'edge-tts',inputSource:String(inputSource),
-      core:generated.core,role:generated.role,coreSource:generated.coreSource,consultWith:generated.consultWith,authority:'shared_guardrail_only',
+      core:selected.core,role:selected.role,coreSource:selected.source,consultWith:[...(selected.consultWith||[])],authority:'shared_guardrail_only',
       learning:false,languageEvidence:'client-requested-locale',speechEvidence:evidenceLevel,deviceE2eVerified:false};
   }
   return{turn};
