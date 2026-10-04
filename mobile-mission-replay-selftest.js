@@ -28,10 +28,12 @@ const fs=require('fs');
 
   helpers.clearMissionActionReplay();
   let networkCalls=0;
-  let release;
+  let release,markStarted;
   const gate=new Promise(resolve=>{release=resolve});
+  const started=new Promise(resolve=>{markStarted=resolve});
   const networkFetch=async request=>{
     networkCalls++;
+    markStarted();
     await gate;
     const body=await request.clone().json();
     return new Response(JSON.stringify({id:'abcd1234-abcd',status:'queued',echo:body.message}),{
@@ -40,7 +42,8 @@ const fs=require('fs');
   };
   const p1=helpers.coalesceMissionActionRequest(makeRequest(approve),networkFetch,1000);
   const p2=helpers.coalesceMissionActionRequest(makeRequest(approve),networkFetch,1001);
-  await Promise.resolve();await Promise.resolve();
+  await started;
+  await new Promise(resolve=>setImmediate(resolve));
   assert.equal(networkCalls,1,'same mission+REQ across clients must create one network request');
   release();
   const [r1,r2]=await Promise.all([p1,p2]);
