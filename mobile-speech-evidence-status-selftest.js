@@ -41,7 +41,9 @@ function storage(seed={}){const m=new Map(Object.entries(seed));return{getItem:k
   const nl=status.summarize('nl',{storage:nlStore,nowMs:now});assert.equal(nl.tts.state,'ambiguous');
   assert(status.format(nl).includes('TTS ! bölge belirsiz'));
 
-  const expiredCapture=status.summarize('tr-TR',{storage:store,nowMs:now+chat.STT_CAPTURE_EVIDENCE_TTL_MS+1});
+  const ttlStore=storage();
+  assert(chat.recordSttCaptureEvidence(ttlStore,'tr-TR','yalnız ttl testi',now));
+  const expiredCapture=status.summarize('tr-TR',{storage:ttlStore,nowMs:now+chat.STT_CAPTURE_EVIDENCE_TTL_MS+1});
   assert.equal(expiredCapture.stt.state,'unknown','expired STT capture receipt must not remain visible');
   assert.equal(expiredCapture.stt.sttVerified,false);
 
