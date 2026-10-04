@@ -116,4 +116,5 @@ assert(!/\bfetch\s*\(/.test(hologramSource),'WebGL renderer must not make networ
 assert(!hologramSource.includes('localStorage')&&!hologramSource.includes('sessionStorage'),'WebGL renderer must not persist sensitive state');
 
 require('./tri-core-deliberation-selftest.js');
-console.log('TRI-CORE v180 PERSONALITY + REAL DELIBERATION + REACTIVE HOLOGRAM SELFTEST PASS');
+require('./tri-core-live-state-selftest.js');
+console.log('TRI-CORE v181 PERSONALITY + REAL DELIBERATION + LIVE COGNITIVE HOLOGRAM SELFTEST PASS');
