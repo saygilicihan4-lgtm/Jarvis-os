@@ -39,7 +39,9 @@ function hasNegatedApproval(intent){
 function detectApprovalSurfaces(intent){
   const text=String(intent||'');
   const strong=[];
-  if(/(?:^|[^a-z0-9])(?:youtube|you\s*tube|kanal(?:da|ı|i)?)(?=$|[^a-z0-9])/i.test(text))strong.push('youtube');
+  // Generic words such as "kanal" are intentionally not enough to select YouTube.
+  // Irreversible routing needs either a provider-specific token or an unambiguous fallback.
+  if(/(?:^|[^a-z0-9])(?:youtube|you\s*tube)(?=$|[^a-z0-9])/i.test(text))strong.push('youtube');
   if(/(?:^|[^a-z0-9çğıöşü])(?:shopify|mağaza|magaza)(?=$|[^a-z0-9çğıöşü])/i.test(text))strong.push('shopify');
   if(/(?:^|[^a-z0-9çğıöşü])(?:browser|tarayıcı|tarayici|form|buton|button|link)(?=$|[^a-z0-9çğıöşü])/i.test(text))strong.push('browser');
   if(strong.length)return[...new Set(strong)];
@@ -90,6 +92,10 @@ function resolveApprovalTarget({approval,pending=[],requestedMissionId=''}={}){
 
   const requested=String(requestedMissionId||'').trim();
   const mentionedIds=explicitMissionIds(approval.intent);
+  const surfaces=[...new Set(Array.isArray(approval.surfaces)?approval.surfaces.filter(Boolean):[])];
+  if(surfaces.length>1){
+    return{ok:false,code:'AMBIGUOUS_APPROVAL_SURFACE',message:'Onay metni birden fazla geri döndürülemez hedefi belirtiyor; tek bir hedef seçilmeli.'};
+  }
   let target=null;
   let reason='';
 
@@ -101,29 +107,26 @@ function resolveApprovalTarget({approval,pending=[],requestedMissionId=''}={}){
     if(!target){
       return{ok:false,code:'MISSION_ID_NOT_PENDING',message:'Onay metnindeki missionId şu anda onay bekleyen bir göreve ait değil.'};
     }
+    if(surfaces.length===1&&approvalSurfaceForStepName(target.stepName)!==surfaces[0]){
+      return{ok:false,code:'MISSION_SURFACE_MISMATCH',message:'Onay metnindeki missionId ile açıkça belirtilen hedef yüzeyi birbiriyle uyuşmuyor.'};
+    }
     reason='explicit_mission_id';
+  }else if(surfaces.length===1){
+    const candidates=rows.filter(row=>approvalSurfaceForStepName(row.stepName)===surfaces[0]);
+    if(!candidates.length){
+      return{ok:false,code:'SURFACE_NOT_PENDING',message:'Kullanıcının onayladığı hedef yüzeyinde şu anda onay bekleyen görev yok.'};
+    }
+    if(candidates.length>1){
+      return{ok:false,code:'AMBIGUOUS_SURFACE_MISSIONS',message:'Aynı hedef yüzeyinde birden fazla görev onay bekliyor; kullanıcı mesajında tam missionId belirtilmeli.'};
+    }
+    target=candidates[0];
+    reason='explicit_surface';
   }else{
-    const surfaces=[...new Set(Array.isArray(approval.surfaces)?approval.surfaces.filter(Boolean):[])];
-    if(surfaces.length>1){
-      return{ok:false,code:'AMBIGUOUS_APPROVAL_SURFACE',message:'Onay metni birden fazla geri döndürülemez hedefi belirtiyor; tek bir hedef seçilmeli.'};
+    if(rows.length>1){
+      return{ok:false,code:'AMBIGUOUS_PENDING_APPROVAL',message:'Birden fazla görev onay bekliyor; kullanıcı onay metninde hedef yüzeyi veya tam missionId belirtilmeli.'};
     }
-    if(surfaces.length===1){
-      const candidates=rows.filter(row=>approvalSurfaceForStepName(row.stepName)===surfaces[0]);
-      if(!candidates.length){
-        return{ok:false,code:'SURFACE_NOT_PENDING',message:'Kullanıcının onayladığı hedef yüzeyinde şu anda onay bekleyen görev yok.'};
-      }
-      if(candidates.length>1){
-        return{ok:false,code:'AMBIGUOUS_SURFACE_MISSIONS',message:'Aynı hedef yüzeyinde birden fazla görev onay bekliyor; kullanıcı mesajında tam missionId belirtilmeli.'};
-      }
-      target=candidates[0];
-      reason='explicit_surface';
-    }else{
-      if(rows.length>1){
-        return{ok:false,code:'AMBIGUOUS_PENDING_APPROVAL',message:'Birden fazla görev onay bekliyor; kullanıcı onay metninde hedef yüzeyi veya tam missionId belirtilmeli.'};
-      }
-      target=rows[0];
-      reason='single_pending';
-    }
+    target=rows[0];
+    reason='single_pending';
   }
 
   if(requested&&requested.toUpperCase()!==target.id.toUpperCase()){
