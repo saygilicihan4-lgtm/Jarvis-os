@@ -132,19 +132,31 @@
       status=null;sessions=[];render(e&&e.status===401?t().unauthorized:(e.message||t().error));
     }finally{busy=false}
   }
+  async function refreshAfterMutation(){busy=false;await refresh()}
   function open(){const root=doc.getElementById(ROOT_ID);if(!root)return;root.dataset.open='1';refresh()}
   function close(){const root=doc.getElementById(ROOT_ID);if(root)root.dataset.open='0'}
   async function mutate(action,id,isCurrent){
     if(busy)return;const d=t();
     if(action==='revoke'){
       if(!host.confirm(isCurrent?d.confirmCurrent:d.confirmRevoke))return;
-      busy=true;try{await request('/api/sessions/'+id+'/revoke',{method:'POST',body:JSON.stringify({confirmCurrent:!!isCurrent})});if(isCurrent){close();host.location.reload();return}await refresh()}catch(e){render(e.message||d.error)}finally{busy=false}return;
+      busy=true;
+      try{
+        await request('/api/sessions/'+id+'/revoke',{method:'POST',body:JSON.stringify({confirmCurrent:!!isCurrent})});
+        if(isCurrent){close();host.location.reload();return}
+        await refreshAfterMutation();
+      }catch(e){busy=false;render(e.message||d.error)}
+      return;
     }
     if(action==='revoke-others'){
-      if(!host.confirm(d.confirmOthers))return;busy=true;try{await request('/api/sessions/revoke-others',{method:'POST',body:'{}'});busy=false;await refresh()}catch(e){busy=false;render(e.message||d.error)}return;
+      if(!host.confirm(d.confirmOthers))return;
+      busy=true;
+      try{await request('/api/sessions/revoke-others',{method:'POST',body:'{}'});await refreshAfterMutation()}catch(e){busy=false;render(e.message||d.error)}
+      return;
     }
     if(action==='legacy-disable'){
-      if(!host.confirm(d.confirmLegacy))return;busy=true;try{await request('/api/sessions/legacy/disable',{method:'POST',body:JSON.stringify({confirm:'DISABLE_LEGACY_SESSIONS'})});busy=false;await refresh()}catch(e){busy=false;render(e.message||d.error)}
+      if(!host.confirm(d.confirmLegacy))return;
+      busy=true;
+      try{await request('/api/sessions/legacy/disable',{method:'POST',body:JSON.stringify({confirm:'DISABLE_LEGACY_SESSIONS'})});await refreshAfterMutation()}catch(e){busy=false;render(e.message||d.error)}
     }
   }
   function legacySettings(){
