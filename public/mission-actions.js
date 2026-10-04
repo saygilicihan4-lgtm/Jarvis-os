@@ -32,10 +32,29 @@
     const missions=state&&state.workers&&state.workers.pc&&state.workers.pc.missions;
     return missions&&Array.isArray(missions.queue)?missions.queue:[];
   }
-  function resolveMissionFromQueue(queue,req){
+  function normalizedLabel(value){return String(value||'').replace(/\s+/g,' ').trim()}
+  function renderedCardLabel(card){
+    const node=card&&card.querySelector&&card.querySelector('.task-head b');
+    return normalizedLabel(node&&node.textContent||'');
+  }
+  function missionForCard(queue,card,targetRoot=root){
+    if(!card||!targetRoot||!targetRoot.document)return null;
+    const cards=[...targetRoot.document.querySelectorAll('.local-mission')];
+    const index=cards.indexOf(card);
+    if(index<0||index>=queue.length)return null;
+    const mission=queue[index];
+    if(!activeMission(mission))return null;
+    const expected=normalizedLabel(mission.label||mission.type||'JARVIS mission');
+    const rendered=renderedCardLabel(card);
+    if(!rendered||expected!==rendered)return null;
+    return{mission,id:cleanMissionId(mission.id),index};
+  }
+  function resolveMissionFromQueue(queue,req,expectedMissionId=''){
     const fingerprint=String(req||'').toLowerCase();
     if(!/^[a-f0-9]{20}$/.test(fingerprint))throw new Error('mission_approval_fingerprint_invalid');
-    const rows=(Array.isArray(queue)?queue:[]).filter(m=>approvalDependency(m)&&reqFromText(m&&m.label)===fingerprint);
+    const expected=expectedMissionId?cleanMissionId(expectedMissionId):'';
+    if(expectedMissionId&&!expected)throw new Error('mission_id_invalid');
+    const rows=(Array.isArray(queue)?queue:[]).filter(m=>approvalDependency(m)&&reqFromText(m&&m.label)===fingerprint&&(!expected||cleanMissionId(m&&m.id)===expected));
     if(rows.length!==1)throw new Error(rows.length?'mission_approval_ambiguous':'mission_approval_stale');
     const mission=rows[0],id=cleanMissionId(mission&&mission.id);
     if(!id)throw new Error('mission_id_invalid');
@@ -52,9 +71,60 @@
     if(!response.ok)throw new Error(data.error||('HTTP '+response.status));
     return data;
   }
-  async function resolveFreshMission(req,{fetchImpl}={}){
+  async function resolveFreshMission(req,{fetchImpl,card=null,targetRoot=root}={}){
     const state=await jsonFetch('/api/state',{},fetchImpl);
-    return resolveMissionFromQueue(missionQueueFromState(state),req);
+    const queue=missionQueueFromState(state);
+    if(card){
+      const bound=missionForCard(queue,card,targetRoot);
+      if(!bound||!approvalDependency(bound.mission)||reqFromText(bound.mission.label)!==String(req||'').toLowerCase())throw new Error('mission_approval_stale');
+      return resolveMissionFromQueue(queue,req,bound.id);
+    }
+    return resolveMissionFromQueue(queue,req);
+  }
+  function missionIdFromSearch(search){
+    try{
+      const id=String(new URLSearchParams(String(search||'')).get('mission')||'').toUpperCase();
+      return cleanMissionId(id);
+    }catch(_){return''}
+  }
+  function missionIdFromLocation(targetRoot=root){
+    return missionIdFromSearch(targetRoot&&targetRoot.location&&targetRoot.location.search||'');
+  }
+  async function focusMissionById(id,{fetchImpl,targetRoot=root}={}){
+    const requested=cleanMissionId(id);
+    if(!requested)throw new Error('mission_deeplink_id_invalid');
+    if(!targetRoot||!targetRoot.document)throw new Error('mission_deeplink_dom_unavailable');
+    const state=await jsonFetch('/api/state',{},fetchImpl);
+    const queue=missionQueueFromState(state);
+    const index=queue.findIndex(m=>cleanMissionId(m&&m.id)===requested&&activeMission(m));
+    if(index<0)throw new Error('mission_deeplink_stale');
+    const cards=[...targetRoot.document.querySelectorAll('.local-mission')];
+    const card=cards[index];
+    const bound=missionForCard(queue,card,targetRoot);
+    if(!bound||bound.id!==requested)throw new Error('mission_deeplink_card_mismatch');
+    card.dataset.jarvisMissionId=requested;
+    card.dataset.jarvisMissionFocused='1';
+    if(card.style){card.style.outline='2px solid currentColor';card.style.outlineOffset='3px'}
+    try{card.scrollIntoView({behavior:'smooth',block:'center'})}catch(_){try{card.scrollIntoView()}catch(__){}}
+    setStatus('MOBILE MISSION · BİLDİRİMDEN İLGİLİ GÖREV AÇILDI · '+requested.slice(-8),targetRoot);
+    if(targetRoot.setTimeout)targetRoot.setTimeout(()=>{try{if(card.style){card.style.outline='';card.style.outlineOffset=''}}catch(_){}},8000);
+    return{mission:bound.mission,id:requested,index,card};
+  }
+  function scheduleMissionFocus(targetRoot=root,attempt=0){
+    if(!targetRoot||!targetRoot.document)return false;
+    const requested=missionIdFromLocation(targetRoot);
+    if(!requested)return false;
+    if(targetRoot.__jarvisMissionFocusedId===requested)return true;
+    if(targetRoot.__jarvisMissionFocusPending)return false;
+    targetRoot.__jarvisMissionFocusPending=true;
+    focusMissionById(requested,{fetchImpl:targetRoot.fetch&&targetRoot.fetch.bind(targetRoot),targetRoot})
+      .then(()=>{targetRoot.__jarvisMissionFocusedId=requested})
+      .catch(()=>{
+        if(attempt<24&&targetRoot.setTimeout)targetRoot.setTimeout(()=>scheduleMissionFocus(targetRoot,attempt+1),250);
+        else setStatus('MOBILE MISSION · BİLDİRİM HEDEFİ ARTIK AKTİF DEĞİL',targetRoot);
+      })
+      .finally(()=>{targetRoot.__jarvisMissionFocusPending=false});
+    return false;
   }
   function commandFor(action,resolved){
     const id=cleanMissionId(resolved&&resolved.id),req=String(resolved&&resolved.req||'').toLowerCase();
@@ -93,7 +163,8 @@
     buttons.forEach(button=>button.disabled=true);
     try{
       setStatus('MOBILE MISSION · GÜNCEL HEDEF DOĞRULANIYOR',targetRoot);
-      const resolved=await resolveFreshMission(req,{fetchImpl:targetRoot&&targetRoot.fetch&&targetRoot.fetch.bind(targetRoot)});
+      const resolved=await resolveFreshMission(req,{fetchImpl:targetRoot&&targetRoot.fetch&&targetRoot.fetch.bind(targetRoot),card,targetRoot});
+      if(card&&card.dataset)card.dataset.jarvisMissionId=resolved.id;
       const message=commandFor(action,resolved);
       setStatus(action==='approve'?'MOBILE MISSION · AÇIK ONAY WORKER’A GÖNDERİLDİ':'MOBILE MISSION · İPTAL İSTEĞİ WORKER’A GÖNDERİLDİ',targetRoot);
       const result=await runMobileBrain(message,{fetchImpl:targetRoot&&targetRoot.fetch&&targetRoot.fetch.bind(targetRoot)});
@@ -120,12 +191,12 @@
   }
   function install(targetRoot=root){
     if(!targetRoot||!targetRoot.document)return false;
-    if(targetRoot.__jarvisMissionActionsInstalled)return true;
+    if(targetRoot.__jarvisMissionActionsInstalled){scheduleMissionFocus(targetRoot);return true}
     const target=targetRoot.document.getElementById('tasks');if(!target)return false;
-    enhance(targetRoot);
+    enhance(targetRoot);scheduleMissionFocus(targetRoot);
     const Observer=targetRoot.MutationObserver||root&&root.MutationObserver;
     if(typeof Observer==='function'){
-      const observer=new Observer(()=>enhance(targetRoot));observer.observe(target,{childList:true,subtree:true});
+      const observer=new Observer(()=>{enhance(targetRoot);scheduleMissionFocus(targetRoot)});observer.observe(target,{childList:true,subtree:true});
     }
     targetRoot.__jarvisMissionActionsInstalled=true;
     return true;
@@ -138,5 +209,5 @@
   }
 
   if(root&&root.document&&/iPhone|iPad|iPod|Android/i.test(String(root.navigator&&root.navigator.userAgent||'')))root.setTimeout(()=>autoInstall(root,0),0);
-  return{REQ_RE,MISSION_ID_RE,reqFromText,cleanMissionId,approvalDependency,activeMission,missionQueueFromState,resolveMissionFromQueue,resolveFreshMission,commandFor,runMobileBrain,act,enhance,install,autoInstall};
+  return{REQ_RE,MISSION_ID_RE,reqFromText,cleanMissionId,approvalDependency,activeMission,missionQueueFromState,normalizedLabel,renderedCardLabel,missionForCard,resolveMissionFromQueue,resolveFreshMission,missionIdFromSearch,missionIdFromLocation,focusMissionById,scheduleMissionFocus,commandFor,runMobileBrain,act,enhance,install,autoInstall};
 });
