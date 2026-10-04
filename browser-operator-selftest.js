@@ -8,6 +8,7 @@ const browserSource=fs.readFileSync('./jarvis-browser-operator.js','utf8');
 const workerSource=fs.readFileSync('./worker.js','utf8');
 
 assert.strictEqual(op.BROWSER_OPERATOR_VERSION,'1.1');
+assert.strictEqual(op.BROWSER_AUTOFILL_VERSION,'1.0');
 assert.deepStrictEqual(op.allowedHosts(),['*']);
 assert.ok(op.hostAllowed('studio.youtube.com'));
 assert.ok(op.hostAllowed('admin.shopify.com'));
@@ -20,8 +21,47 @@ assert.throws(()=>op.safeUrl('file:///C:/Windows/System32/'),/http\/https/);
 assert.throws(()=>op.safeUrl('javascript:alert(1)'),/http\/https/);
 assert.ok(workerSource.includes("syncRepoRuntimeFile('jarvis-browser-operator.js',\"BROWSER_OPERATOR_VERSION='1.0'\")"),'Worker 2.102 legacy browser sync probe changed unexpectedly');
 assert.ok(browserSource.includes("Runtime rollout compatibility for Worker 2.102.0 sync probe only: BROWSER_OPERATOR_VERSION='1.0'"),'Browser 1.1 must remain retrievable by Worker 2.102 legacy sync probe during rollout');
+assert.ok(browserSource.includes("autocomplete:el.getAttribute('autocomplete')||''"),'page snapshot must expose autocomplete hints');
+const navigateBlock=browserSource.slice(browserSource.indexOf('async function navigate('),browserSource.indexOf('async function clickByText('));
+assert.ok(!navigateBlock.includes('autofillSafeProfile'),'navigation alone must never disclose saved profile data');
+
+assert.strictEqual(op.classifyAutofillField('E-posta adresi'),'email');
+assert.strictEqual(op.classifyAutofillField('Cep telefonu'),'phone');
+assert.strictEqual(op.classifyAutofillField('Şirket adı'),'company');
+assert.strictEqual(op.classifyAutofillField('Pozisyon'),'job_title');
+assert.strictEqual(op.classifyAutofillField('autocomplete=organization-title'),'job_title');
+assert.strictEqual(op.classifyAutofillField('autocomplete=given-name'),'first_name');
+assert.strictEqual(op.classifyAutofillField('autocomplete=family-name'),'last_name');
+assert.strictEqual(op.classifyAutofillField('autocomplete=address-level2'),'city');
+assert.strictEqual(op.classifyAutofillField('autocomplete=country-name'),'country');
+assert.strictEqual(op.classifyAutofillField('Şifre'),null);
+assert.strictEqual(op.classifyAutofillField('Kart numarası'),null);
+assert.strictEqual(op.classifyAutofillField('IBAN'),null);
+assert.strictEqual(op.classifyAutofillField('T.C. Kimlik No'),null);
+assert.strictEqual(op.classifyAutofillField('Pasaport numarası'),null);
+assert.strictEqual(op.classifyAutofillField('Doğum tarihi'),null);
 
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'jarvis-browser-op-'));
 const profile=op.profileDir(tmp);
 assert.ok(fs.existsSync(profile));
-console.log('BROWSER OPERATOR SELFTEST PASS');
+
+assert.deepStrictEqual(op.autofillProfileSummary(tmp).keys,[]);
+assert.strictEqual(op.learnAutofillValue(tmp,'E-posta','test@example.com').stored,true);
+assert.strictEqual(op.learnAutofillValue(tmp,'Şirket','Example Ltd').stored,true);
+assert.strictEqual(op.learnAutofillValue(tmp,'Şifre','should-not-persist').stored,false);
+assert.strictEqual(op.learnAutofillValue(tmp,'IBAN','TR000000000000').stored,false);
+let saved=op.readAutofillProfile(tmp);
+assert.strictEqual(saved.fields.email.value,'test@example.com');
+assert.strictEqual(saved.fields.company.value,'Example Ltd');
+assert.ok(!JSON.stringify(saved).includes('should-not-persist'));
+assert.ok(!JSON.stringify(saved).includes('TR000000000000'));
+let summary=op.autofillProfileSummary(tmp);
+assert.strictEqual(summary.count,2);
+assert.deepStrictEqual(summary.keys.sort(),['company','email']);
+assert.strictEqual(op.forgetAutofillField(tmp,'company').removed,true);
+assert.strictEqual(op.autofillProfileSummary(tmp).count,1);
+op.clearAutofillProfile(tmp);
+assert.strictEqual(op.autofillProfileSummary(tmp).count,0);
+
+fs.rmSync(tmp,{recursive:true,force:true});
+console.log('BROWSER OPERATOR SELFTEST PASS · any-site navigation + task-triggered safe local autofill profile');
