@@ -9,6 +9,7 @@
   const TERMINAL=new Set(['completed','failed','cancelled']);
   const POLL_MS=350;
   const TIMEOUT_MS=30000;
+  const PROOF_TIMEOUT_MS=18000;
 
   function reqFromText(text){
     const match=String(text||'').match(REQ_RE);
@@ -82,6 +83,59 @@
     }
     throw new Error('mission_action_timeout');
   }
+  function collectResultText(value,depth=0,out=[]){
+    if(depth>5||out.length>40||value==null)return out;
+    if(typeof value==='string'){
+      out.push(value.slice(0,1200));
+      return out;
+    }
+    if(Array.isArray(value)){
+      for(const item of value.slice(0,12))collectResultText(item,depth+1,out);
+      return out;
+    }
+    if(typeof value==='object'){
+      for(const [key,item] of Object.entries(value)){
+        if(['reply','message','error','result','actionResult','actionResults'].includes(key))collectResultText(item,depth+1,out);
+      }
+    }
+    return out;
+  }
+  function workerReceiptMatches(result,action){
+    const text=collectResultText(result).join(' · ');
+    if(action==='approve')return /AÇIK ONAY UYGULANDI/i.test(text);
+    if(action==='cancel')return /MISSION İPTAL EDİLDİ/i.test(text);
+    return false;
+  }
+  async function waitForActionProof(action,id,req,{fetchImpl,wait,now,timeoutMs=PROOF_TIMEOUT_MS}={}){
+    const op=String(action||'').trim().toLowerCase();
+    const missionId=cleanMissionId(id),fingerprint=String(req||'').toLowerCase();
+    if(!['approve','cancel'].includes(op)||!missionId||!/^[a-f0-9]{20}$/.test(fingerprint))throw new Error('mission_action_proof_target_invalid');
+    const pause=wait||((ms)=>new Promise(resolve=>setTimeout(resolve,ms)));
+    const clock=now||Date.now;
+    const deadline=clock()+Math.max(1000,Number(timeoutMs)||PROOF_TIMEOUT_MS);
+    while(clock()<deadline){
+      const state=await jsonFetch('/api/state',{},fetchImpl);
+      const queue=missionQueueFromState(state);
+      const sameId=queue.filter(m=>cleanMissionId(m&&m.id)===missionId);
+      if(op==='cancel'){
+        if(sameId.length===0)return{ok:true,state:'mission_closed'};
+      }else{
+        const oldApproval=sameId.filter(m=>approvalDependency(m)&&reqFromText(m&&m.label)===fingerprint);
+        if(oldApproval.length===0)return{ok:true,state:'approval_request_consumed',missionPresent:sameId.length>0};
+      }
+      await pause(POLL_MS);
+    }
+    throw new Error(op==='approve'?'mission_approval_state_unconfirmed':'mission_cancel_state_unconfirmed');
+  }
+  async function runActionWithProof(action,resolved,{fetchImpl,wait,now,relayTimeoutMs=TIMEOUT_MS,proofTimeoutMs=PROOF_TIMEOUT_MS}={}){
+    const op=String(action||'').trim().toLowerCase();
+    const id=cleanMissionId(resolved&&resolved.id),req=String(resolved&&resolved.req||'').toLowerCase();
+    const message=commandFor(op,resolved);
+    const result=await runMobileBrain(message,{fetchImpl,wait,now,timeoutMs:relayTimeoutMs});
+    if(!workerReceiptMatches(result,op))throw new Error('mission_action_worker_receipt_missing');
+    const proof=await waitForActionProof(op,id,req,{fetchImpl,wait,now,timeoutMs:proofTimeoutMs});
+    return{ok:true,result,proof};
+  }
   function setStatus(text,targetRoot=root){
     const el=targetRoot&&targetRoot.document&&targetRoot.document.getElementById('consoleStatus');
     if(el)el.textContent=String(text||'').slice(0,180);
@@ -93,11 +147,13 @@
     buttons.forEach(button=>button.disabled=true);
     try{
       setStatus('MOBILE MISSION · GÜNCEL HEDEF DOĞRULANIYOR',targetRoot);
-      const resolved=await resolveFreshMission(req,{fetchImpl:targetRoot&&targetRoot.fetch&&targetRoot.fetch.bind(targetRoot)});
-      const message=commandFor(action,resolved);
-      setStatus(action==='approve'?'MOBILE MISSION · AÇIK ONAY WORKER’A GÖNDERİLDİ':'MOBILE MISSION · İPTAL İSTEĞİ WORKER’A GÖNDERİLDİ',targetRoot);
-      const result=await runMobileBrain(message,{fetchImpl:targetRoot&&targetRoot.fetch&&targetRoot.fetch.bind(targetRoot)});
-      setStatus('MOBILE MISSION · '+String(result&&result.reply||result&&result.message||'WORKER YANITI ALINDI').replace(/\s+/g,' ').slice(0,130),targetRoot);
+      const fetchImpl=targetRoot&&targetRoot.fetch&&targetRoot.fetch.bind(targetRoot);
+      const resolved=await resolveFreshMission(req,{fetchImpl});
+      setStatus('MOBILE MISSION · WORKER RECEIPT + STATE PROOF BEKLENİYOR',targetRoot);
+      await runActionWithProof(action,resolved,{fetchImpl});
+      setStatus(action==='approve'
+        ?'MOBILE MISSION · ONAY DOĞRULANDI · ESKİ REQ TÜKETİLDİ'
+        :'MOBILE MISSION · İPTAL DOĞRULANDI · GÖREV AÇIK KUYRUKTAN ÇIKTI',targetRoot);
       if(targetRoot&&typeof targetRoot.load==='function')await targetRoot.load().catch(()=>{});
       return true;
     }catch(error){
@@ -138,5 +194,9 @@
   }
 
   if(root&&root.document&&/iPhone|iPad|iPod|Android/i.test(String(root.navigator&&root.navigator.userAgent||'')))root.setTimeout(()=>autoInstall(root,0),0);
-  return{REQ_RE,MISSION_ID_RE,reqFromText,cleanMissionId,approvalDependency,activeMission,missionQueueFromState,resolveMissionFromQueue,resolveFreshMission,commandFor,runMobileBrain,act,enhance,install,autoInstall};
+  return{
+    REQ_RE,MISSION_ID_RE,reqFromText,cleanMissionId,approvalDependency,activeMission,missionQueueFromState,
+    resolveMissionFromQueue,resolveFreshMission,commandFor,runMobileBrain,collectResultText,workerReceiptMatches,
+    waitForActionProof,runActionWithProof,act,enhance,install,autoInstall
+  };
 });
