@@ -7057,6 +7057,9 @@ async function runDurableMission(id){
         });
         if(!out.ok){
           if(out.code==='YOUTUBE_AUTH_REQUIRED'){
+            step.meta={...(step.meta||{}),approvalRevokedAt:new Date().toISOString(),approvalRevokedReason:'youtube_auth_required'};
+            delete step.meta.approvedAt;
+            delete step.meta.approvalKind;
             mission=engine.failStep(WORKSPACE,id,{code:out.code,message:out.message,retryable:true,dependency:'youtube_auth'});
             return mission;
           }
