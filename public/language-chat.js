@@ -8,7 +8,8 @@
       const host=typeof globalThis==='object'?globalThis:null,doc=host&&host.document;
       if(!doc||typeof host.CustomEvent!=='function')return;
       const mapped=({preparing:'thinking',playing:'speaking',completed:'idle',error:'error',idle:'idle','confirm-language':'waiting'})[state]||state;
-      doc.dispatchEvent(new host.CustomEvent('jarvis:conversation-state',{detail:{state:mapped,core:detail&&detail.core||null,role:detail&&detail.role||null,authority:detail&&detail.authority||'shared_guardrail_only'}}));
+      const consultWith=Array.isArray(detail&&detail.consultWith)?detail.consultWith.filter(x=>['jarvis','nova','orion'].includes(x)).slice(0,2):[];
+      doc.dispatchEvent(new host.CustomEvent('jarvis:conversation-state',{detail:{state:mapped,core:detail&&detail.core||null,role:detail&&detail.role||null,consultWith,authority:detail&&detail.authority||'shared_guardrail_only'}}));
     }catch(_){}
   }
   function createClient({request,play,onState=()=>{},onReply=()=>{}}){
@@ -31,7 +32,7 @@
         await play(result,active.signal);
         active.signal.throwIfAborted();
         const completed=await request({action:'acknowledge',sessionId,receipt,played:true},active.signal);
-        acknowledged=true;state('completed',{...completed,core:result.core,role:result.role,authority:result.authority});return completed;
+        acknowledged=true;state('completed',{...completed,core:result.core,role:result.role,consultWith:result.consultWith,authority:result.authority});return completed;
       }catch(error){
         if(!active.signal.aborted)state('error',{error:String(error.message||error)});
         if(/session_expired|session_not_found/.test(String(error.message||error)))sessionId=null;
@@ -99,27 +100,13 @@
   setTimeout(()=>bootMissionActions(0),0);
 })(typeof globalThis==='object'?globalThis:this);
 
-// v179: load the local tri-core role/state router and its zero-cost WebGL renderer.
-// Both are presentation/personality surfaces only; neither can execute or approve actions.
+// v179: load one local tri-core role/state router. The router owns the single
+// zero-cost hologram renderer and neither surface can execute or approve actions.
 ;(function(root){
   'use strict';
   if(!root||!root.document)return;
-  function installWebgl(){
-    try{if(root.JarvisTriCoreWebGL)return !!root.JarvisTriCoreWebGL.install(root)}catch(_){return false}
-    let script=root.document.getElementById('jarvisTriCoreWebglScript');
-    if(!script){
-      script=root.document.createElement('script');script.id='jarvisTriCoreWebglScript';script.src='/tri-core-webgl.js';script.async=false;
-      script.onload=()=>{try{root.JarvisTriCoreWebGL&&root.JarvisTriCoreWebGL.install(root)}catch(_){}};
-      (root.document.head||root.document.documentElement).appendChild(script);
-    }
-    return false;
-  }
   function install(){
-    try{
-      const ok=!!(root.JarvisTriCore&&root.JarvisTriCore.install(root));
-      if(ok)installWebgl();
-      return ok;
-    }catch(_){return false}
+    try{return !!(root.JarvisTriCore&&root.JarvisTriCore.install(root))}catch(_){return false}
   }
   function boot(attempt=0){
     if(install())return true;
