@@ -89,6 +89,16 @@ assert.ok(serviceWorker.includes('function coalesceMissionActionRequest('),'miss
 assert.ok(serviceWorker.includes("url.pathname!=='/api/mobile-brain'"),'replay coalescing must be scoped to mobile-brain only');
 assert.ok(serviceWorker.includes('MISSION_ACTION_REPLAY_TTL_MS=45000'),'mission replay cache must be short-lived and bounded');
 
+// v175: verified receipts are derived only after Worker receipt + state proof,
+// contain bounded suffixes only, and stay in a short session-local ledger.
+assert.ok(missionActions.includes("const RECEIPT_STORAGE_KEY='jarvisMissionReceiptsV1'"),'verified receipt session key missing');
+assert.ok(missionActions.includes('const RECEIPT_LIMIT=8'),'verified receipt ledger must be bounded');
+assert.ok(missionActions.includes('function buildVerifiedReceipt('),'verified receipt builder missing');
+assert.ok(missionActions.includes('function sanitizeVerifiedReceipt('),'verified receipt sanitizer missing');
+assert.ok(missionActions.includes('const verified=await runActionWithProof(action,resolved,{fetchImpl})'),'receipt must follow full action proof');
+assert.ok(missionActions.includes('const receipt=buildVerifiedReceipt(action,resolved,verified.proof)'),'verified proof is not bound to receipt');
+
 execFileSync(process.execPath,['mobile-mission-actions-selftest.js'],{stdio:'inherit'});
 execFileSync(process.execPath,['mobile-mission-replay-selftest.js'],{stdio:'inherit'});
+execFileSync(process.execPath,['mobile-mission-receipt-selftest.js'],{stdio:'inherit'});
 console.log('MISSION CONSOLE SELFTEST PASS');
