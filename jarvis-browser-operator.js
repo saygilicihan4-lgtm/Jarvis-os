@@ -5,7 +5,7 @@ const finalTarget=require('./jarvis-final-target-verification');
 let base=null,baseLoadError=null;
 try{base=require('./jarvis-browser-operator-v191-base')}catch(error){baseLoadError=error}
 
-const BROWSER_OPERATOR_VERSION='1.2';
+const BROWSER_OPERATOR_VERSION='1.3';
 // Runtime rollout compatibility for Worker 2.102.0 sync probe only: BROWSER_OPERATOR_VERSION='1.0'
 const DEFAULT_PORT=base&&base.DEFAULT_PORT||9222;
 
@@ -55,10 +55,15 @@ async function pageSnapshot(workspace,{port=DEFAULT_PORT,page=null}={}){
   const chosen=page||await pinnedPage(port),value=evalOnPage(chosen,snapshotExpression());
   return{ok:true,...value,tabEvidence:{targetId:String(chosen.id||'')}};
 }
-function clickExpression(text){
+function elementFingerprintExpression(text){
   const needle=String(text||'').trim();if(!needle)throw new Error('text required');
   const deep=needBase().deepSurfacePrelude();
-  return["(()=>{",deep,"const surface=JARVIS_SURFACE();","const n="+JSON.stringify(needle)+".toLocaleLowerCase('tr-TR');","const els=surface.query('button,a,[role=\\\"button\\\"],input[type=\\\"submit\\\"]');","const label=x=>String(x.innerText||x.value||x.getAttribute('aria-label')||'').trim().toLocaleLowerCase('tr-TR');","const e=els.find(x=>label(x)===n)||els.find(x=>label(x).includes(n));","if(!e)return{ok:false,surfaceEvidence:{sameOriginFrames:surface.sameOriginFrames,openShadowRoots:surface.openShadowRoots}};","e.scrollIntoView({block:'center'});e.click();","return{ok:true,tag:e.tagName,text:String(e.innerText||e.value||'').slice(0,160),surfaceEvidence:{sameOriginFrames:surface.sameOriginFrames,openShadowRoots:surface.openShadowRoots}}","})()"].join('');
+  return ["(()=>{",deep,"const surface=JARVIS_SURFACE();","const n="+JSON.stringify(needle)+".toLocaleLowerCase('tr-TR');","const els=surface.query('button,a,[role=\\\"button\\\"],input[type=\\\"submit\\\"]');","const label=x=>String(x.innerText||x.value||x.getAttribute('aria-label')||'').trim().toLocaleLowerCase('tr-TR');","const matches=els.filter(x=>label(x)===n);const candidates=matches.length?matches:els.filter(x=>label(x).includes(n));","if(candidates.length!==1)return{ok:false,reason:candidates.length?'FINAL_ELEMENT_AMBIGUOUS':'FINAL_ELEMENT_NOT_FOUND',count:candidates.length};","const e=candidates[0],r=e.getBoundingClientRect();const raw=[e.tagName,e.type||'',e.id||'',e.name||'',e.getAttribute('role')||'',e.getAttribute('aria-label')||'',label(e),Math.round(r.left),Math.round(r.top),Math.round(r.width),Math.round(r.height)].join('\\u001f');","let h=2166136261;for(let i=0;i<raw.length;i++){h^=raw.charCodeAt(i);h=Math.imul(h,16777619)};return{ok:true,elementHash:('00000000'+(h>>>0).toString(16)).slice(-8),tag:e.tagName,text:String(e.innerText||e.value||'').slice(0,160)}","})()"].join('');
+}
+function clickBoundElementExpression(text,expectedHash){
+  const needle=String(text||'').trim(),hash=String(expectedHash||'');if(!needle||!hash)throw new Error('text/hash required');
+  const deep=needBase().deepSurfacePrelude();
+  return ["(()=>{",deep,"const surface=JARVIS_SURFACE();","const n="+JSON.stringify(needle)+".toLocaleLowerCase('tr-TR');const expected="+JSON.stringify(hash)+";","const els=surface.query('button,a,[role=\\\"button\\\"],input[type=\\\"submit\\\"]');","const label=x=>String(x.innerText||x.value||x.getAttribute('aria-label')||'').trim().toLocaleLowerCase('tr-TR');","const matches=els.filter(x=>label(x)===n);const candidates=matches.length?matches:els.filter(x=>label(x).includes(n));","if(candidates.length!==1)return{ok:false,reason:candidates.length?'FINAL_ELEMENT_AMBIGUOUS':'FINAL_ELEMENT_NOT_FOUND',count:candidates.length};","const e=candidates[0],r=e.getBoundingClientRect();const raw=[e.tagName,e.type||'',e.id||'',e.name||'',e.getAttribute('role')||'',e.getAttribute('aria-label')||'',label(e),Math.round(r.left),Math.round(r.top),Math.round(r.width),Math.round(r.height)].join('\\u001f');","let h=2166136261;for(let i=0;i<raw.length;i++){h^=raw.charCodeAt(i);h=Math.imul(h,16777619)};const actual=('00000000'+(h>>>0).toString(16)).slice(-8);if(actual!==expected)return{ok:false,reason:'FINAL_ELEMENT_CHANGED'};","e.scrollIntoView({block:'center'});e.click();return{ok:true,tag:e.tagName,text:String(e.innerText||e.value||'').slice(0,160),elementHash:actual}","})()"].join('');
 }
 async function verifiedFinalClick(workspace,text,contract,{port=DEFAULT_PORT,receipt=null}={}){
   needBase();
@@ -68,10 +73,13 @@ async function verifiedFinalClick(workspace,text,contract,{port=DEFAULT_PORT,rec
   const samePage=await pinnedPage(port,targetId);
   const fresh=await pageSnapshot(workspace,{port,page:samePage});
   finalTarget.assertReceipt(proof,contract,fresh);
-  const result=evalOnPage(samePage,clickExpression(text));
-  return{...result,verification:{bindingHash:proof.bindingHash,tabHash:proof.tabHash||hashTabId(targetId),verifiedAt:proof.verifiedAt,expiresAt:proof.expiresAt,approvalGranted:false}};
+  const elementProof=evalOnPage(samePage,elementFingerprintExpression(text));
+  if(!elementProof||!elementProof.ok){const e=new Error(elementProof&&elementProof.reason||'FINAL_ELEMENT_NOT_FOUND');e.code=elementProof&&elementProof.reason||'FINAL_ELEMENT_NOT_FOUND';throw e}
+  const result=evalOnPage(samePage,clickBoundElementExpression(text,elementProof.elementHash));
+  if(!result||!result.ok){const e=new Error(result&&result.reason||'FINAL_ELEMENT_CHANGED');e.code=result&&result.reason||'FINAL_ELEMENT_CHANGED';throw e}
+  return{...result,verification:{bindingHash:proof.bindingHash,tabHash:proof.tabHash||hashTabId(targetId),verifiedAt:proof.verifiedAt,expiresAt:proof.expiresAt,approvalGranted:false,elementHash:elementProof.elementHash}};
 }
 async function status(workspace,port=DEFAULT_PORT){const out=await needBase().status(workspace,port);return{...out,version:BROWSER_OPERATOR_VERSION,tabPinning:true}}
 async function start(workspace,opts={}){const out=await needBase().start(workspace,opts);return{...out,version:BROWSER_OPERATOR_VERSION,tabPinning:true}}
 
-module.exports={...(base||{}),BROWSER_OPERATOR_VERSION,DEFAULT_PORT,status,start,pageSnapshot,verifiedFinalClick,hashTabId,pinnedPage};
+module.exports={...(base||{}),BROWSER_OPERATOR_VERSION,DEFAULT_PORT,status,start,pageSnapshot,verifiedFinalClick,hashTabId,pinnedPage,elementFingerprintExpression,clickBoundElementExpression};
