@@ -4,7 +4,7 @@ const p=spawn(process.execPath,['server.js'],{env:{...process.env,PORT:'3199'}})
 function finish(ok){
   try{p.kill()}catch(_){}
   if(!ok){console.log('SELFTEST FAIL');process.exit(1)}
-  for(const file of ['session-lifecycle-selftest.js','session-lifecycle-http-selftest.js','session-control-ui-selftest.js','session-bootstrap-selftest.js','mobile-explicit-locale-selftest.js','mobile-runtime-locale-selftest.js','mobile-runtime-catalog-selftest.js','mobile-stt-capture-evidence-selftest.js','mobile-speech-evidence-status-selftest.js','mobile-speech-evidence-ui-selftest.js']){
+  for(const file of ['final-target-verification-selftest.js','session-lifecycle-selftest.js','session-lifecycle-http-selftest.js','session-control-ui-selftest.js','session-bootstrap-selftest.js','mobile-explicit-locale-selftest.js','mobile-runtime-locale-selftest.js','mobile-runtime-catalog-selftest.js','mobile-stt-capture-evidence-selftest.js','mobile-speech-evidence-status-selftest.js','mobile-speech-evidence-ui-selftest.js']){
     const result=spawnSync(process.execPath,[file],{stdio:'inherit'});
     if(result.status!==0){console.log('SELFTEST FAIL · '+file);process.exit(1)}
   }
