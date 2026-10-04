@@ -27,4 +27,10 @@ assert(src.includes("migrationRequired"),'legacy-v2 migration state must be owne
 assert(src.includes("legacySessionsAccepted"),'legacy acceptance state must be owner-visible');
 assert(src.includes("current.ipChanged"),'mobile IP-change risk indicator must remain visible without binding authorization to IP');
 
-console.log('MOBILE SESSION SECURITY v195 SELFTEST PASS · owner-visible hashed inventory + explicit revocation/migration + no secret persistence or authority escalation');
+assert(src.includes('async function refreshAfterMutation(){busy=false;await refresh()}'),'post-mutation refresh must clear the busy gate before calling refresh');
+assert((src.match(/await refreshAfterMutation\(\)/g)||[]).length===3,'all three successful mutation paths must use the busy-safe refresh helper');
+const revokeBlock=src.slice(src.indexOf("if(action==='revoke')"),src.indexOf("if(action==='revoke-others')"));
+assert(revokeBlock.includes('await refreshAfterMutation()'),'individual non-current revoke must actually refresh the owner-visible inventory');
+assert(!revokeBlock.includes('await refresh()}'),'individual revoke must not call refresh while busy is still true');
+
+console.log('MOBILE SESSION SECURITY v195 SELFTEST PASS · owner-visible hashed inventory + explicit revocation/migration + busy-safe refresh + no secret persistence or authority escalation');
