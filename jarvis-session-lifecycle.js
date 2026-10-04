@@ -43,7 +43,7 @@ function createPgSessionStore(db){
       await db.query('UPDATE jarvis_admin_sessions SET revoked_at=$2 WHERE id_hash<>$1 AND revoked_at IS NULL AND expires_at>now()',[currentIdHash,revokedAt]);
     },
     async setLegacyAllowed(allowed){
-      await db.query("UPDATE jarvis_admin_session_policy SET legacy_allowed=$2,updated_at=now() WHERE id='admin'",['admin',!!allowed]);
+      await db.query("UPDATE jarvis_admin_session_policy SET legacy_allowed=$1,updated_at=now() WHERE id='admin'",[!!allowed]);
     }
   };
 }
@@ -54,6 +54,7 @@ function createSessionLifecycle({secret,store=null,clock=()=>Date.now()}={}){
   const configured=!!store;
   let ready=!configured;
   let durable=false;
+  // Configured durable stores fail closed until the persisted migration policy is loaded.
   let legacyAllowed=!configured;
 
   function idHash(sid){
@@ -83,6 +84,8 @@ function createSessionLifecycle({secret,store=null,clock=()=>Date.now()}={}){
     const issuedAtMs=clock(),expiresAtMs=issuedAtMs+Math.max(60_000,Math.min(30*24*60*60*1000,Number(ttlMs)||0));
     const sid=crypto.randomBytes(32).toString('base64url'),hash=idHash(sid);
     const record={idHash:hash,issuedAt:new Date(issuedAtMs).toISOString(),expiresAt:new Date(expiresAtMs).toISOString(),revokedAt:null,source:cleanSource(source),ipTag:ipTag?String(ipTag).slice(0,32):null,lastSeenAt:null};
+    // Persist before exposing the signed cookie: a configured store never creates an
+    // untracked session if durable storage is unavailable.
     if(configured)await store.create(record);
     records.set(hash,record);purge();
     return{sid,idHash:hash,issuedAtMs,expiresAtMs,durable:configured&&durable,source:record.source};
@@ -95,7 +98,16 @@ function createSessionLifecycle({secret,store=null,clock=()=>Date.now()}={}){
     return{idHash:hash,source:r.source,issuedAt:r.issuedAt,expiresAt:r.expiresAt,durable:configured&&durable};
   }
   function acceptsLegacy(){return ready&&legacyAllowed}
-  function status(){return{configured,ready,durable:configured&&durable,legacyAllowed:ready&&legacyAllowed,managedSessions:records.size}}
+  function status(){
+    return{
+      configured,
+      ready,
+      durable:configured&&durable,
+      legacyAllowed:ready&&legacyAllowed,
+      legacyPolicy:!ready?'unavailable':(legacyAllowed?'accept-existing-v2-until-expiry':'disabled'),
+      managedSessions:records.size
+    };
+  }
   function list(currentIdHash=null){
     purge();const t=clock();
     return [...records.values()].sort((a,b)=>isoMs(b.issuedAt)-isoMs(a.issuedAt)).map(r=>({
@@ -106,7 +118,9 @@ function createSessionLifecycle({secret,store=null,clock=()=>Date.now()}={}){
   async function revoke(idHashValue){
     requireDurable();const r=records.get(String(idHashValue||''));if(!r)return{found:false,changed:false};
     if(r.revokedAt)return{found:true,changed:false};
-    const at=new Date(clock()).toISOString();await store.revoke(r.idHash,at);r.revokedAt=at;return{found:true,changed:true,revokedAt:at};
+    const at=new Date(clock()).toISOString();
+    // Write durable revocation first; only then change the in-memory authorization view.
+    await store.revoke(r.idHash,at);r.revokedAt=at;return{found:true,changed:true,revokedAt:at};
   }
   async function revokeOthers(currentIdHash){
     requireDurable();const current=String(currentIdHash||'');if(!current||!records.has(current))throw new Error('current managed session required');
@@ -115,7 +129,7 @@ function createSessionLifecycle({secret,store=null,clock=()=>Date.now()}={}){
     return{count,revokedAt:at};
   }
   async function setLegacyAllowed(allowed){
-    requireDurable();await store.setLegacyAllowed(!!allowed);legacyAllowed=!!allowed;return{legacyAllowed,durable:true};
+    requireDurable();await store.setLegacyAllowed(!!allowed);legacyAllowed=!!allowed;return{legacyAllowed,durable:true,legacyPolicy:legacyAllowed?'accept-existing-v2-until-expiry':'disabled'};
   }
   return{init,issue,validate,acceptsLegacy,status,list,revoke,revokeOthers,setLegacyAllowed,idHash};
 }
