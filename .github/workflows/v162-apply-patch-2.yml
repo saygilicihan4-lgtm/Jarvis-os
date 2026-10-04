@@ -1,0 +1,112 @@
+name: Apply v162 guarded restore patch retry
+
+on:
+  push:
+    branches: [ jarvis-state-restore-revocation-v162 ]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, 'apply guarded restore authority fix v162') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: jarvis-state-restore-revocation-v162
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Apply guarded replacements
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          p=Path('server.js')
+          s=p.read_text()
+          old_fn="""function restoreSnapshot(s){
+            const p=verifySnapshot(s);
+            if(p.revision<state.stateRevision)throw new Error('stale snapshot refused');
+            state.tasks=p.tasks.slice(-500);
+            state.audit=Array.isArray(p.audit)?p.audit.slice(-300):[];
+            state.accountPolicies=p.accountPolicies||{};
+            state.stateRevision=p.revision;
+            for(const [id,d] of Object.entries(p.devices)){
+              const live=state.workers.devices[id]||{};
+              state.workers.devices[id]={...live,name:d.name||live.name||id,approved:!!d.approved,roles:Array.isArray(d.roles)?d.roles:[],allowedCapabilities:Array.isArray(d.allowedCapabilities)?d.allowedCapabilities:[]};
+            }
+          }
+          """
+          new_fn="""// STATE_RESTORE_AUTHORITY_V162: backup integrity is never caller authority.
+          function restoreSnapshot(s){
+            const p=verifySnapshot(s);
+            if(!p.devices||Array.isArray(p.devices)||!p.accountPolicies||Array.isArray(p.accountPolicies))throw new Error('invalid signed snapshot');
+            const nextTasks=p.tasks.slice(-500);
+            const nextAudit=Array.isArray(p.audit)?p.audit.slice(-300):[];
+            const nextDevices=Object.fromEntries(Object.entries(state.workers.devices).map(([id,w])=>[id,{...w}]));
+            let restoredDisabled=0;
+            for(const [id,d] of Object.entries(p.devices)){
+              if(!/^[A-Za-z0-9_.-]{1,80}$/.test(id)||!d||typeof d!=='object'||Array.isArray(d))throw new Error('invalid signed snapshot device');
+              const live=nextDevices[id];
+              if(live){
+                nextDevices[id]={...live,name:String(live.name||d.name||id).slice(0,100)};
+              }else{
+                nextDevices[id]={name:String(d.name||id).slice(0,100),version:null,lastSeen:null,capabilities:[],memory:null,approved:false,roles:[],allowedCapabilities:[],authMode:'restored-unapproved',credentialIssuedAt:null};
+                restoredDisabled++;
+              }
+            }
+            const droppedPolicies=Object.keys(p.accountPolicies).length;
+            state.tasks=nextTasks;
+            state.audit=nextAudit;
+            state.accountPolicies={};
+            state.workers.devices=nextDevices;
+            state.stateRevision=Math.max(state.stateRevision,p.revision);
+            return{restoredDisabled,droppedPolicies};
+          }
+          """
+          new_route="""  if(pathname==='/api/state/restore'&&req.method==='POST'){
+            return readJson(req,(err,d)=>{
+              if(err)return json(res,400,{error:'bad json'});
+              const deviceId=String(req.headers['x-jarvis-device-id']||'');
+              const ident=workerIdentity(req);
+              if(!ident||ident.exp<=Date.now()||!/^[A-Za-z0-9_.-]{1,80}$/.test(deviceId)||deviceId!==ident.deviceId)return json(res,401,{error:'signed device identity required'});
+              const live=deviceWorker(deviceId);
+              if(!live||live.approved!==true)return json(res,403,{error:'currently approved device required'});
+              const otherApproved=Object.entries(state.workers.devices).some(([id,w])=>id!==deviceId&&w&&w.approved===true);
+              const restoreTargetEmpty=state.tasks.length===0&&Object.keys(state.accountPolicies).length===0&&!otherApproved;
+              if(!restoreTargetEmpty)return json(res,409,{error:'cloud state not empty; restore refused'});
+              try{
+                const result=restoreSnapshot(d);
+                log('STATE_RESTORE',deviceId+' authenticated restore; backup authority disabled');
+                touchState();
+                return json(res,200,{ok:true,bootstrap:false,authorityRestored:false,tasks:state.tasks.length,policies:0,devicesRestoredDisabled:result.restoredDisabled,policiesRequireReapproval:result.droppedPolicies,revision:state.stateRevision});
+              }catch(e){return json(res,400,{error:e.message})}
+            });
+          }
+          """
+          if s.count(old_fn)!=1:
+              raise SystemExit(f'restoreSnapshot target count={s.count(old_fn)}; refusing patch')
+          route_pattern=re.compile(r"  if\(pathname==='/api/state/restore'&&req\.method==='POST'\)\{\n.*?\n  \}\n\n  const deviceApprove=",re.S)
+          matches=list(route_pattern.finditer(s))
+          if len(matches)!=1:
+              raise SystemExit(f'restore route marker count={len(matches)}; refusing patch')
+          s=s.replace(old_fn,new_fn)
+          s=route_pattern.sub(new_route+"\n\n  const deviceApprove=",s,count=1)
+          p.write_text(s)
+      - name: Verify production-handler regression
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          node --check server.js
+          node --check state-restore-security-selftest.js
+          node state-restore-security-selftest.js
+          node session-bootstrap-selftest.js
+      - name: Commit only verified patch
+        run: |
+          git rm -f .github/workflows/v162-apply-patch.yml .github/workflows/v162-apply-patch-2.yml
+          git config user.name "jarvis-security-bot"
+          git config user.email "jarvis-security-bot@users.noreply.github.com"
+          git add server.js state-restore-security-selftest.js .github/workflows/state-restore-security-ci.yml
+          git commit -m "security: apply guarded restore authority fix v162"
+          git push origin HEAD:jarvis-state-restore-revocation-v162
