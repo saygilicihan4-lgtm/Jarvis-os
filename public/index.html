@@ -100,6 +100,19 @@
     </aside>
   </section>
 
+  <section id="sessionControlPanel" class="activity" hidden>
+    <div class="activity-panel">
+      <div class="panel-title">SESSION CONTROL</div>
+      <div id="sessionControlStatus" class="agent-state" role="status">Secure session inventory unavailable.</div>
+      <div id="sessionList"><div class="task"><small>No managed sessions loaded.</small></div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button id="sessionRefreshBtn" type="button" onclick="loadSessionControl()">REFRESH SESSIONS</button>
+        <button id="sessionRevokeOthersBtn" type="button" onclick="revokeOtherSessions()">REVOKE OTHER SESSIONS</button>
+        <button id="sessionDisableLegacyBtn" type="button" onclick="disableLegacySessions()">DISABLE LEGACY ACCESS</button>
+      </div>
+    </div>
+  </section>
+
   <section class="activity">
     <div class="activity-panel">
       <div class="panel-title">MISSION QUEUE</div>
@@ -302,6 +315,71 @@ if(window.notifyBtn){
 }
 setInterval(checkLocalReminders,30000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkLocalReminders()});
+
+function sessionEscape(value){
+  return String(value==null?'':value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+function sessionTime(value){
+  const d=new Date(value);return Number.isNaN(d.getTime())?'—':d.toLocaleString();
+}
+async function sessionRequest(path,options={}){
+  const r=await fetch(path,{credentials:'same-origin',...options,headers:{'content-type':'application/json',...(options.headers||{})}});
+  const data=await r.json().catch(()=>({}));
+  if(!r.ok){const e=new Error(data.error||('HTTP '+r.status));e.status=r.status;throw e}
+  return data;
+}
+function renderSessionControl(data,status){
+  const panel=document.getElementById('sessionControlPanel'),list=document.getElementById('sessionList'),state=document.getElementById('sessionControlStatus');
+  if(!panel||!list||!state)return;
+  panel.hidden=false;
+  const legacy=String((status&&status.legacyPolicy)||data.legacyPolicy||'unknown');
+  state.textContent='Managed sessions: '+String((data.sessions||[]).length)+' · Legacy: '+legacy;
+  list.innerHTML=(data.sessions||[]).map(item=>{
+    const id=String(item.id||'');
+    const label=(item.current?'CURRENT · ':'')+String(item.source||'unknown').toUpperCase();
+    const risk=item.status==='active'?'ACTIVE':String(item.status||'unknown').toUpperCase();
+    return '<div class="task" data-session-row="'+sessionEscape(id.slice(0,12))+'"><div><b>'+sessionEscape(label)+'</b><small>'+sessionEscape(risk)+' · '+sessionEscape(sessionTime(item.issuedAt))+' → '+sessionEscape(sessionTime(item.expiresAt))+'</small></div><button type="button" data-session-id="'+sessionEscape(id)+'" data-session-current="'+(item.current?'1':'0')+'" onclick="revokeManagedSession(this.dataset.sessionId,this.dataset.sessionCurrent===\'1\')">'+(item.current?'SIGN OUT THIS SESSION':'REVOKE')+'</button></div>';
+  }).join('')||'<div class="task"><small>No managed sessions.</small></div>';
+  const legacyBtn=document.getElementById('sessionDisableLegacyBtn');
+  if(legacyBtn){const disabled=legacy==='disabled';legacyBtn.disabled=disabled;legacyBtn.textContent=disabled?'LEGACY ACCESS DISABLED':'DISABLE LEGACY ACCESS';}
+}
+async function loadSessionControl(){
+  const panel=document.getElementById('sessionControlPanel'),state=document.getElementById('sessionControlStatus');
+  try{
+    const status=await sessionRequest('/api/sessions/status');
+    if(panel)panel.hidden=false;
+    if(status.current&&status.current.legacy){
+      if(state)state.textContent='Legacy session detected · sign in with passkey or one-time code to manage sessions.';
+      const list=document.getElementById('sessionList');if(list)list.innerHTML='<div class="task"><small>Managed v3 session required before session identifiers are exposed.</small></div>';
+      return status;
+    }
+    const data=await sessionRequest('/api/sessions');renderSessionControl(data,status);return data;
+  }catch(e){
+    if(e.status===401){if(panel)panel.hidden=true;return null}
+    if(panel)panel.hidden=false;if(state)state.textContent='SESSION CONTROL · '+String(e.message||e).slice(0,120);return null;
+  }
+}
+async function revokeManagedSession(id,isCurrent){
+  if(!/^[a-f0-9]{64}$/.test(String(id||'')))return;
+  if(isCurrent&&!confirm('Bu JARVIS oturumunu kapatmak istediğinize emin misiniz?'))return;
+  try{
+    await sessionRequest('/api/sessions/'+id+'/revoke',{method:'POST',body:JSON.stringify(isCurrent?{confirmCurrent:true}:{})});
+    if(isCurrent){location.reload();return}
+    await loadSessionControl();
+  }catch(e){const state=document.getElementById('sessionControlStatus');if(state)state.textContent='REVOKE FAILED · '+String(e.message||e).slice(0,100)}
+}
+async function revokeOtherSessions(){
+  if(!confirm('Bu oturum dışındaki tüm aktif JARVIS oturumları kapatılsın mı?'))return;
+  try{await sessionRequest('/api/sessions/revoke-others',{method:'POST',body:'{}'});await loadSessionControl()}
+  catch(e){const state=document.getElementById('sessionControlStatus');if(state)state.textContent='REVOKE OTHERS FAILED · '+String(e.message||e).slice(0,100)}
+}
+async function disableLegacySessions(){
+  if(!confirm('Eski v2 oturum erişimi kalıcı olarak kapatılsın mı? Bu işlem geri alınamaz.'))return;
+  try{await sessionRequest('/api/sessions/legacy/disable',{method:'POST',body:JSON.stringify({confirm:'DISABLE_LEGACY_SESSIONS'})});await loadSessionControl()}
+  catch(e){const state=document.getElementById('sessionControlStatus');if(state)state.textContent='LEGACY DISABLE FAILED · '+String(e.message||e).slice(0,100)}
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)loadSessionControl()});
+setTimeout(loadSessionControl,1200);
 
 const LANGUAGE_NAMES={tr:'Türkçe',en:'English',de:'Deutsch',fr:'Français',es:'Español',it:'Italiano',pt:'Português',ru:'Русский',ar:'العربية',ja:'日本語',ko:'한국어',zh:'中文',nl:'Nederlands',pl:'Polski'};
 function normalizeJarvisSpeech(text){
