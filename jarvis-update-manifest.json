@@ -11,7 +11,7 @@
     },
     {
       "path": "jarvis-creator-engine.js",
-      "signature": "ENGINE_VERSION='1.0'",
+      "signature": "ENGINE_VERSION='1.4'",
       "kind": "node",
       "min_bytes": 6000
     },
@@ -23,7 +23,7 @@
     },
     {
       "path": "jarvis-youtube-studio.js",
-      "signature": "YOUTUBE_STUDIO_VERSION='1.0'",
+      "signature": "YOUTUBE_STUDIO_VERSION='1.1'",
       "kind": "node",
       "min_bytes": 7000
     },
@@ -146,6 +146,18 @@
       "signature": "JARVIS_LANGUAGE_SAPI_V1",
       "kind": "powershell",
       "min_bytes": 600
+    },
+    {
+      "path": "jarvis-approval-intent.js",
+      "signature": "module.exports=",
+      "kind": "node",
+      "min_bytes": 1000
+    },
+    {
+      "path": "jarvis-approval-lifecycle.js",
+      "signature": "module.exports=",
+      "kind": "node",
+      "min_bytes": 1000
     }
   ]
 }

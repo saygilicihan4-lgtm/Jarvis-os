@@ -356,6 +356,7 @@ function resolveShopifyPublishApproval(workspace,productId,{nowMs=Date.now()}={}
     const publishStep=mission.steps[currentIndex];
     if(!publishStep||publishStep.name!=='shopify_publish'||publishStep.status!=='running')continue;
     if(!(publishStep.meta&&publishStep.meta.requiresApproval===true))continue;
+    if(!require('./jarvis-approval-lifecycle').validateApproval(mission,{nowMs:now}).ok)continue;
     const approved=canonicalUtcIso(publishStep.meta.approvedAt);
     const publishStarted=canonicalUtcIso(publishStep.startedAt);
     if(!approved||!publishStarted||approved.ms>now||approved.ms>publishStarted.ms)continue;
@@ -370,6 +371,8 @@ function resolveShopifyPublishApproval(workspace,productId,{nowMs=Date.now()}={}
       missionId:mission.id,
       productId:id,
       approvedAt:approved.value,
+      approvalRequestId:publishStep.meta.approvalRequestId,
+      approvalPayloadSha256:publishStep.meta.approvalPayloadSha256,
       draftCompletedAt:draftCompleted.value,
       publishStartedAt:publishStarted.value
     });
@@ -412,6 +415,15 @@ async function publishProduct(workspace,productId){
   const publication=await findOnlineStorePublication(creds);
   if(!publication)throw new Error('Online Store publication bulunamadı');
 
+  function recheckApproval(){
+    const current=resolveShopifyPublishApproval(workspace,id);
+    if(current.missionId!==approval.missionId||current.approvedAt!==approval.approvedAt||
+      current.approvalRequestId!==approval.approvalRequestId||current.approvalPayloadSha256!==approval.approvalPayloadSha256){
+      throw shopifyApprovalError('Shopify onayı işlem sırasında değişti.');
+    }
+  }
+  recheckApproval();
+
   const active=await graphQLRequest(creds,`mutation JarvisActivateProduct($product: ProductUpdateInput!) {
     productUpdate(product: $product) {
       product { id title status }
@@ -422,6 +434,8 @@ async function publishProduct(workspace,productId){
   const updateErrors=summarizeErrors(update.userErrors);
   if(updateErrors.length)throw new Error('Ürün ACTIVE yapılamadı: '+updateErrors.map(x=>x.message).join(' | '));
   const activeProduct=assertActiveProduct(update,id);
+
+  try{recheckApproval()}catch(e){e.uncertain=true;throw e} // ACTIVE already returned; do not auto-replay.
 
   const pub=await graphQLRequest(creds,`mutation JarvisPublishProduct($id: ID!, $input: [PublicationInput!]!, $publicationId: ID!) {
     publishablePublish(id: $id, input: $input) {

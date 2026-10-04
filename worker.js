@@ -3061,7 +3061,7 @@ function nativeToolSignature(name,args){
   try{packed=JSON.stringify(args||{})}catch(_){packed=String(args||'')}
   return String(name||'')+'|'+packed;
 }
-async function executeNativeAgentTool(name,args,{userText=''}={}){
+async function executeNativeAgentTool(name,args,{userText='',approvalUserText=userText,approvalContext=null}={}){
   const n=String(name||'').trim();
   const a=args&&typeof args==='object'?args:{};
   let command='';
@@ -3274,12 +3274,12 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
     const out=await runDurableMission(latest.id);
     return{ok:out.status==='completed',message:missionSummaryText(out)};
   }else if(n==='approve_mission_action'){
-    const approvalIntent=require('./jarvis-approval-intent').classifyApprovalIntent(userText);
+    const approvalIntent=require('./jarvis-approval-intent').classifyApprovalIntent(approvalUserText);
     if(!approvalIntent.approved){
       return{ok:false,message:'Geri döndürülemez görev adımı için bu turda açık onay/yayınla ifadesi gerekli.'};
     }
     try{
-      const approved=approveMissionGate({missionId:String(a.missionId||'').trim(),approvalIntent,userText});
+      const approved=approveMissionGate({missionId:String(a.missionId||'').trim(),approvalIntent,userText:approvalUserText,approvalContext});
       const out=await runDurableMission(approved.id);
       return{ok:out.status==='completed',message:'AÇIK ONAY UYGULANDI · '+missionSummaryText(out)};
     }catch(e){
@@ -3538,6 +3538,7 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
   return result||{ok:false,message:'Araç sonucu alınamadı.'};
 }
 async function runNativeAgent(message,{maxRounds=4,signal=null}={}){
+  const approvalContext=captureApprovalTurn();
   const cancelledResult=(actions=[],rounds=0)=>({
     ok:false,error:'CANCELLED',cancelled:true,model:LOCAL_BRAIN_MODEL,
     actions:Array.isArray(actions)?actions:[],rounds,nativeTools:true
@@ -3745,7 +3746,7 @@ async function runNativeAgent(message,{maxRounds=4,signal=null}={}){
         result={ok:false,message:'Aynı araç çağrısı tekrarlandı; döngüyü önlemek için engellendi.'};
       }else{
         seenCalls.add(signature);
-        result=await executeNativeAgentTool(name,args,{userText:text});
+        result=await executeNativeAgentTool(name,args,{userText:text,approvalUserText:originalText,approvalContext});
       }
       if(signal&&signal.aborted){
         actions.push({tool:name,args,ok:!!(result&&result.ok),result:String(result&&result.message||'Araç sonucu yok.').slice(0,900)});
@@ -6185,6 +6186,7 @@ function applyPendingMissionControl(mission){
   if(['completed','failed','cancelled'].includes(String(mission.status||'')))return mission;
   const engine=getMissionEngine();
   const at=new Date().toISOString();
+  require('./jarvis-approval-lifecycle').revokeApproval(mission,'mission_'+action);
   if(action==='pause'){
     const currentStatus=String(mission.status||'queued');
     const resumeStatus=['waiting_dependency','needs_verification'].includes(currentStatus)?currentStatus:'queued';
@@ -6237,6 +6239,7 @@ function requestMissionControl({missionId='',action=''}={}){
     return mission;
   }
   if(['completed','failed','cancelled'].includes(status))throw new Error('Tamamlanmış/sonlanmış görev kontrol edilemez.');
+  require('./jarvis-approval-lifecycle').revokeApproval(mission,'mission_'+op);
   if(op==='cancel'&&status==='paused'){
     mission.control={...(mission.control||{}),requested:'cancel',requestedAt:new Date().toISOString()};
     mission=engine.saveMission(WORKSPACE,mission);
@@ -6254,7 +6257,26 @@ function requestMissionControl({missionId='',action=''}={}){
   return mission;
 }
 
-function approveMissionGate({missionId='',approvalIntent=null,userText=''}={}){
+function captureApprovalTurn(){
+  const context={consumed:false,requests:new Map()};
+  try{
+    const engine=getMissionEngine();
+    for(const row of engine.listMissions(WORKSPACE,{limit:50})){
+      const step=engine.currentStep(row);
+      if(row.status==='waiting_dependency'&&step&&step.error&&step.error.dependency==='approval'){
+        context.requests.set(row.id,step.meta&&step.meta.approvalRequestId||'');
+      }
+    }
+  }catch(_){} // Unavailable state cannot create approval authority.
+  return context;
+}
+function approveMissionGate({missionId='',approvalIntent=null,userText='',approvalContext=null}={}){
+  if(!approvalContext||approvalContext.consumed||!(approvalContext.requests instanceof Map)){
+    throw new Error('Bu işlem için yeni bir açık kullanıcı onayı gerekli.');
+  }
+  // One attempt per real user turn; a model retry cannot approve a refreshed
+  // request or a second mission using the same words.
+  approvalContext.consumed=true;
   const engine=getMissionEngine();
   const approvalModule=require('./jarvis-approval-intent');
   const pending=engine.listMissions(WORKSPACE,{limit:50}).filter(row=>{
@@ -6271,21 +6293,18 @@ function approveMissionGate({missionId='',approvalIntent=null,userText=''}={}){
     requestedMissionId:String(missionId||'').trim()
   });
   if(!resolved.ok)throw new Error(resolved.message||'Onay hedefi güvenli biçimde çözümlenemedi.');
-  const mission=engine.loadMission(WORKSPACE,resolved.missionId);
-  if(!mission)throw new Error('Onaylanacak görev bulunamadı: '+resolved.missionId);
-  const step=engine.currentStep(mission);
-  if(!step||mission.status!=='waiting_dependency'||!step.error||step.error.dependency!=='approval'){
-    throw new Error('Bu görev şu anda açık kullanıcı onayı beklemiyor.');
+  const current=engine.loadMission(WORKSPACE,resolved.missionId);
+  const currentStep=engine.currentStep(current);
+  const expected=approvalContext.requests.get(resolved.missionId);
+  if(expected===''&&currentStep&&currentStep.meta&&!currentStep.meta.approvalRequestId){
+    // Upgrade an old waiting request, but never grant it using this same turn.
+    engine.failStep(WORKSPACE,resolved.missionId,{code:'EXPLICIT_APPROVAL_REQUIRED',
+      message:'Eski onay isteği güncellendi; görevi inceleyip yeni açık onay verin.',retryable:true,dependency:'approval'});
   }
-  step.meta={...(step.meta||{}),approvedAt:new Date().toISOString(),approvalKind:'explicit_user',approvalSurface:resolved.surface||null,approvalTargetReason:resolved.reason||null};
-  step.status='pending';
-  step.error=null;
-  mission.status='queued';
-  if(Array.isArray(mission.history)){
-    mission.history.push({at:new Date().toISOString(),event:'step_explicitly_approved',step:step.name});
-    if(mission.history.length>200)mission.history=mission.history.slice(-200);
+  if(!expected||!currentStep||!currentStep.meta||currentStep.meta.approvalRequestId!==expected){
+    throw new Error('Onay isteği bu kullanıcı mesajından sonra oluşturuldu veya yenilendi; yeni kullanıcı onayı gerekli.');
   }
-  return engine.saveMission(WORKSPACE,mission);
+  return engine.approveStep(WORKSPACE,resolved.missionId,{surface:resolved.surface,targetReason:resolved.reason});
 }
 function missionSummaryText(m){
   if(!m)return'Kayıtlı görev bulunamadı.';
@@ -6539,7 +6558,7 @@ async function verifyUncertainCampaignStep(mission){
       });
     }
     if(receipt&&receipt.state==='draft_prepared'){
-      return engine.resolveUncertainStep(WORKSPACE,mission.id,{completed:false,note:'Publish click did not start; safe retry with existing approval'});
+      return engine.resolveUncertainStep(WORKSPACE,mission.id,{completed:false,note:'Publish click did not start; require fresh approval before retry'});
     }
     return mission;
   }
@@ -6547,6 +6566,7 @@ async function verifyUncertainCampaignStep(mission){
 }
 async function runDurableMission(id){
   const engine=getMissionEngine();
+  const approvalLifecycle=require('./jarvis-approval-lifecycle');
   let mission=engine.loadMission(WORKSPACE,id);
   if(!mission)throw new Error('Mission not found: '+id);
 
@@ -6573,6 +6593,15 @@ async function runDurableMission(id){
     if(!step)throw new Error('Mission current step missing');
 
     try{
+      if(approvalLifecycle.isApprovalStep(step)){
+        const checked=approvalLifecycle.validateApproval(mission);
+        if(!checked.ok){
+          mission=engine.failStep(WORKSPACE,id,{code:'EXPLICIT_APPROVAL_REQUIRED',
+            message:'Bu işlem için güncel içerikle bağlı, süresi geçmemiş açık kullanıcı onayı gerekli: '+checked.code,
+            retryable:true,dependency:'approval'});
+          return mission;
+        }
+      }
       if(/^creator_batch_render_\d+$/.test(step.name)){
         const index=Math.max(0,Number(step.meta&&step.meta.itemIndex)||0);
         let child;
@@ -6828,6 +6857,15 @@ async function runDurableMission(id){
             return mission;
           }
         }
+        // Form preparation awaits may outlive a grant or a pause/cancel request.
+        const current=engine.loadMission(WORKSPACE,id);
+        const checked=approvalLifecycle.validateApproval(current);
+        if(!checked.ok||approvalLifecycle.payloadHash(current)!==approvalLifecycle.payloadHash(mission)){
+          mission=engine.failStep(WORKSPACE,id,{code:'EXPLICIT_APPROVAL_REQUIRED',
+            message:'Son tıklamadan önce görev/onay değişti veya süresi doldu; yeniden açık onay gerekli.',
+            retryable:true,dependency:'approval'});
+          return mission;
+        }
         const clicked=await browser.clickByText(WORKSPACE,clickText);
         if(!clicked||clicked.ok!==true){
           mission=engine.failStep(WORKSPACE,id,{code:'BROWSER_CLICK_TARGET_NOT_FOUND',message:'Onaylanan browser tıklama hedefi bulunamadı: '+clickText,retryable:false});
@@ -7059,9 +7097,7 @@ async function runDurableMission(id){
         });
         if(!out.ok){
           if(out.code==='YOUTUBE_AUTH_REQUIRED'){
-            step.meta={...(step.meta||{}),approvalRevokedAt:new Date().toISOString(),approvalRevokedReason:'youtube_auth_required'};
-            delete step.meta.approvedAt;
-            delete step.meta.approvalKind;
+            // failStep revokes on the disk-loaded mission before saving it.
             mission=engine.failStep(WORKSPACE,id,{code:out.code,message:out.message,retryable:true,dependency:'youtube_auth'});
             return mission;
           }
@@ -7268,6 +7304,11 @@ async function runDurableMission(id){
       return mission;
     }catch(e){
       let message=String(e&&e.message||e).slice(0,1000);
+      if(['SHOPIFY_EXPLICIT_APPROVAL_REQUIRED','YOUTUBE_EXPLICIT_APPROVAL_REQUIRED'].includes(e&&e.code)){
+        mission=engine.failStep(WORKSPACE,id,{code:e.code,message,
+          uncertain:e.uncertain===true,retryable:e.uncertain!==true,dependency:e.uncertain===true?null:'approval'});
+        return mission;
+      }
       if(mission&&mission.type==='developer_patch'){
         const rollback=rollbackDeveloperPatchMission(engine.loadMission(WORKSPACE,id));
         message=(message+' · rollback='+(rollback.ok?'ok':'check')).slice(0,1000);
@@ -7492,6 +7533,8 @@ async function repairLocalRuntime(){
     ['jarvis-commerce-engine.js',"ENGINE_VERSION='1.0'"],
     ['jarvis-shopify-connect.ps1','SHOPIFY SECURE CONNECT'],
     ['jarvis-youtube-studio.js',"YOUTUBE_STUDIO_VERSION='1.1'"],
+    ['jarvis-approval-intent.js','module.exports='],
+    ['jarvis-approval-lifecycle.js','module.exports='],
     ['jarvis-mission-engine.js',"MISSION_ENGINE_VERSION='1.0'"],
     ['jarvis-workspace-file-engine.js',"WORKSPACE_FILE_ENGINE_VERSION='1.0'"],
     ['JARVIS-PC-ACCEPTANCE.ps1','JARVIS PC ACCEPTANCE V1']
@@ -7672,6 +7715,8 @@ function bootstrapRuntimeUpgrade(){
     ['jarvis-commerce-engine.js',"ENGINE_VERSION='1.0'"],
     ['jarvis-shopify-connect.ps1','SHOPIFY SECURE CONNECT'],
     ['jarvis-youtube-studio.js',"YOUTUBE_STUDIO_VERSION='1.1'"],
+    ['jarvis-approval-intent.js','module.exports='],
+    ['jarvis-approval-lifecycle.js','module.exports='],
     ['jarvis-mission-engine.js',"MISSION_ENGINE_VERSION='1.0'"],
     ['jarvis-workspace-file-engine.js',"WORKSPACE_FILE_ENGINE_VERSION='1.0'"],
     ['JARVIS-PC-ACCEPTANCE.ps1','JARVIS PC ACCEPTANCE V1']

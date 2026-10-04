@@ -11,8 +11,8 @@ assert.ok(worker.includes("'approval_gate_v1'"),'approval gate capability missin
 assert.ok(worker.includes("'shopify_publish_approval_v1'"),'Shopify publish approval capability missing');
 assert.ok(worker.includes('function approveMissionGate('),'approval helper missing');
 assert.ok(worker.includes('approvalModule.resolveApprovalTarget('),'approval gate must resolve the target from user intent');
-assert.ok(worker.includes("approveMissionGate({missionId:String(a.missionId||'').trim(),approvalIntent,userText})"),'approval handler must pass actual user intent into target binding');
-assert.ok(worker.includes('approvalSurface:resolved.surface||null'),'approval proof must retain the resolved surface without storing user text');
+assert.ok(worker.includes("approveMissionGate({missionId:String(a.missionId||'').trim(),approvalIntent,userText:approvalUserText,approvalContext})"),'approval handler must pass actual user intent into target binding');
+assert.ok(worker.includes('engine.approveStep(WORKSPACE,resolved.missionId,{surface:resolved.surface,targetReason:resolved.reason})'),'approval must persist the resolved target with a bounded payload grant');
 assert.ok(worker.includes("publishRequested=args.publish===true"),'Shopify publish intent missing');
 assert.ok(worker.includes("steps.push({name:'shopify_publish',meta:{requiresApproval:true}})"),'Shopify PUBLIC approval-gated step missing');
 assert.ok(worker.includes("steps.push({name:'youtube_publish',meta:{requiresApproval:true}})"),'YouTube PUBLIC approval-gated step missing');
@@ -24,7 +24,7 @@ assert.ok(worker.includes("step.meta&&step.meta.approvedAt"),'publish step appro
 assert.ok(worker.includes("getCommerceEngine().publishProduct(WORKSPACE,productId)"),'approved Shopify publish execution missing');
 assert.ok(worker.includes("name:'approve_mission_action'"),'approval native tool missing');
 assert.ok(worker.includes("else if(n==='approve_mission_action')"),'approval native handler missing');
-assert.ok(worker.includes("require('./jarvis-approval-intent').classifyApprovalIntent(userText)"),'approval handler must use shared fail-closed intent classifier');
+assert.ok(worker.includes("require('./jarvis-approval-intent').classifyApprovalIntent(approvalUserText)"),'approval handler must use shared fail-closed intent classifier');
 assert.ok(worker.includes('"Devam et" tek başına yayınlama onayı değildir'),'generic resume must not count as publish approval');
 assert.ok(worker.includes('"Devam et" tek başına YouTube PUBLIC onayı değildir'),'generic resume must not count as YouTube approval');
 assert.ok(worker.includes("publish:{type:'boolean'"),'Shopify publish request schema missing');
@@ -46,11 +46,8 @@ const youtubeAuthStart=youtubePublishBlock.indexOf("if(out.code==='YOUTUBE_AUTH_
 const youtubeUncertainStart=youtubePublishBlock.indexOf("if(out.code==='YOUTUBE_PUBLISH_UNCERTAIN'){",youtubeAuthStart);
 assert.ok(youtubeAuthStart>=0&&youtubeUncertainStart>youtubeAuthStart,'YouTube PUBLIC auth retry boundary missing');
 const youtubeAuthBlock=youtubePublishBlock.slice(youtubeAuthStart,youtubeUncertainStart);
-assert.ok(youtubeAuthBlock.includes("approvalRevokedReason:'youtube_auth_required'"),'YouTube auth failure must record approval revocation reason');
-assert.ok(youtubeAuthBlock.includes('delete step.meta.approvedAt;'),'YouTube auth failure must revoke approvedAt');
-assert.ok(youtubeAuthBlock.includes('delete step.meta.approvalKind;'),'YouTube auth failure must revoke approvalKind');
-assert.ok(/delete step\.meta\.approvedAt;[\s\S]*dependency\s*:\s*['\"]youtube_auth['\"]/.test(youtubeAuthBlock),'approval proof must be revoked before auth dependency is persisted');
-assert.strictEqual((worker.match(/approvalRevokedReason:'youtube_auth_required'/g)||[]).length,1,'approval revocation must be scoped only to the PUBLIC publish auth retry branch');
+assert.ok(youtubeAuthBlock.includes("engine.failStep(WORKSPACE,id,{code:out.code"),'YouTube auth failure must use persistent engine revocation');
+require('./approval-lifecycle-selftest');
 
 const positiveCases=[
   ['shopify','mağazada yayınla'],

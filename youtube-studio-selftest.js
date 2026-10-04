@@ -33,6 +33,7 @@ const yt=require('./jarvis-youtube-studio');
   let allowPublishSuccess=true;
   let staleSuccessMarker=false;
   let publishSuccessUrl='https://studio.youtube.com/video/test/edit';
+  let duringEvaluate=null;
   const fakeOperator={
     status:async()=>({running:true,profile:'test',browser:'fake'}),
     navigate:async()=>({ok:true}),
@@ -41,9 +42,10 @@ const yt=require('./jarvis-youtube-studio');
       if(staleSuccessMarker)return{ok:true,url:'https://studio.youtube.com/video/test/edit',title:'Studio',text:'Ayrıntılar Görünürlük Visibility Public · Video yayınlandı'};
       return{ok:true,url:'https://studio.youtube.com/video/test/edit',title:'Studio',text:'Ayrıntılar Görünürlük Visibility Public'};
     },
-    evaluate:async(_workspace,expression)=>String(expression||'').includes("document.querySelector('input[type=file]')")
-      ?true
-      :({ok:true,text:'Public'}),
+    evaluate:async(_workspace,expression)=>{
+      if(duringEvaluate)duringEvaluate();
+      return String(expression||'').includes("document.querySelector('input[type=file]')")?true:({ok:true,text:'Public'});
+    },
     uploadFile:async()=>{uploads++;return{ok:true}},
     setField:async()=>({ok:true}),
     clickByText:async(_workspace,label)=>{
@@ -99,6 +101,18 @@ const yt=require('./jarvis-youtube-studio');
         }
       ]
     };
+    // Build the same local payload grant as production, then retain each invalid
+    // fixture's requested status/flags for the existing negative tests.
+    const lifecycle=require('./jarvis-approval-lifecycle');
+    const index=mission.currentStep,priorStatus=mission.status;
+    const step=mission.steps[1],priorStepStatus=step.status,requires=step.meta.requiresApproval;
+    mission.currentStep=1;mission.status='waiting_dependency';
+    step.status='blocked';step.error={dependency:'approval'};step.meta.requiresApproval=true;
+    const at=Date.parse(approvedAt);
+    lifecycle.requestApproval(mission,at);
+    assert.strictEqual(lifecycle.grantApproval(mission,{surface:'youtube',targetReason:'explicit_surface',nowMs:at}).ok,true);
+    mission.currentStep=index;mission.status=priorStatus;
+    step.status=priorStepStatus;step.error=null;step.meta.requiresApproval=requires;
     fs.writeFileSync(path.join(missionDir,id+'.json'),JSON.stringify(mission,null,2),'utf8');
     return mission;
   }
@@ -177,6 +191,16 @@ const yt=require('./jarvis-youtube-studio');
   mission=saveMissionApproval(missionId,approvedAt,{publishStatus:'pending'});
   await approvalRequired(()=>yt.publishPreparedDraft(fakeOperator,tmp,{missionId,approvedAt}));
   assert.strictEqual(publishClicks,beforeInvalidProofClicks,'non-running YouTube publish step must fail before Publish click');
+
+  mission=saveMissionApproval(missionId,approvedAt);
+  duringEvaluate=()=>{
+    mission.input.changedAfterApproval=true;
+    fs.writeFileSync(path.join(missionDir,missionId+'.json'),JSON.stringify(mission),'utf8');
+  };
+  await approvalRequired(()=>yt.publishPreparedDraft(fakeOperator,tmp,{missionId,approvedAt}));
+  duringEvaluate=null;
+  assert.strictEqual(publishClicks,beforeInvalidProofClicks,'payload change during browser awaits must stop Publish');
+
 
   // Stale success text visible before the click must never be accepted as evidence for this publish attempt.
   const staleId='M-STALE-123456789';
