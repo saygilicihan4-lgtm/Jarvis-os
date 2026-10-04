@@ -55,5 +55,101 @@ assert.ok(fs.existsSync(draft.file));
 assert.strictEqual(engine.missionTag('M-ABC-123'),'jarvis_mission_M-ABC-123');
 assert.ok(typeof engine.findProductByMission==='function');
 assert.ok(typeof engine.createDraftForMission==='function');
+assert.ok(typeof engine.resolveShopifyPublishApproval==='function');
 
-console.log('COMMERCE ENGINE SELFTEST PASS');
+const gid='gid://shopify/Product/123456789';
+const approvalRoot=fs.mkdtempSync(path.join(os.tmpdir(),'jarvis-commerce-approval-'));
+const missionDir=path.join(approvalRoot,'.jarvis-missions');
+fs.mkdirSync(missionDir,{recursive:true});
+const missionFile=path.join(missionDir,'M-ABCDEF123456.json');
+function missionFixture(){
+  return{
+    schema:1,
+    engine:'JARVIS_MISSION_ENGINE',
+    version:'1.0',
+    id:'M-ABCDEF123456',
+    type:'shopify_product',
+    status:'running',
+    createdAt:'2026-10-04T00:00:00.000Z',
+    updatedAt:'2026-10-04T00:02:00.000Z',
+    completedAt:null,
+    currentStep:1,
+    input:{publishRequested:true},
+    artifacts:{},
+    history:[],
+    steps:[
+      {
+        index:0,
+        name:'shopify_draft',
+        status:'completed',
+        attempts:1,
+        startedAt:'2026-10-04T00:00:10.000Z',
+        completedAt:'2026-10-04T00:01:00.000Z',
+        error:null,
+        artifact:{product:{id:gid,title:'V-GAP Organizer',status:'DRAFT'}},
+        meta:{}
+      },
+      {
+        index:1,
+        name:'shopify_publish',
+        status:'running',
+        attempts:1,
+        startedAt:'2026-10-04T00:02:00.000Z',
+        completedAt:null,
+        error:null,
+        artifact:null,
+        meta:{requiresApproval:true,approvedAt:'2026-10-04T00:01:30.000Z'}
+      }
+    ]
+  };
+}
+function saveMission(mission){
+  fs.writeFileSync(missionFile,JSON.stringify(mission,null,2),'utf8');
+}
+function requiresApproval(fn){
+  assert.throws(fn,err=>err&&err.code==='SHOPIFY_EXPLICIT_APPROVAL_REQUIRED');
+}
+
+requiresApproval(()=>engine.resolveShopifyPublishApproval(approvalRoot,gid,{nowMs:Date.parse('2026-10-04T00:03:00.000Z')}));
+
+let mission=missionFixture();
+saveMission(mission);
+let proof=engine.resolveShopifyPublishApproval(approvalRoot,gid,{nowMs:Date.parse('2026-10-04T00:03:00.000Z')});
+assert.strictEqual(proof.missionId,'M-ABCDEF123456');
+assert.strictEqual(proof.productId,gid);
+assert.strictEqual(proof.approvedAt,'2026-10-04T00:01:30.000Z');
+
+mission=missionFixture();
+mission.steps[1].meta.approvedAt='yes';
+saveMission(mission);
+requiresApproval(()=>engine.resolveShopifyPublishApproval(approvalRoot,gid,{nowMs:Date.parse('2026-10-04T00:03:00.000Z')}));
+
+mission=missionFixture();
+mission.steps[1].meta.approvedAt='2026-10-04T00:00:30.000Z';
+saveMission(mission);
+requiresApproval(()=>engine.resolveShopifyPublishApproval(approvalRoot,gid,{nowMs:Date.parse('2026-10-04T00:03:00.000Z')}));
+
+mission=missionFixture();
+mission.steps[1].meta.approvedAt='2026-10-04T00:04:00.000Z';
+saveMission(mission);
+requiresApproval(()=>engine.resolveShopifyPublishApproval(approvalRoot,gid,{nowMs:Date.parse('2026-10-04T00:03:00.000Z')}));
+
+mission=missionFixture();
+mission.steps[1].status='completed';
+mission.status='completed';
+saveMission(mission);
+requiresApproval(()=>engine.resolveShopifyPublishApproval(approvalRoot,gid,{nowMs:Date.parse('2026-10-04T00:03:00.000Z')}));
+
+mission=missionFixture();
+mission.steps[0].artifact.product.id='gid://shopify/Product/999999999';
+saveMission(mission);
+requiresApproval(()=>engine.resolveShopifyPublishApproval(approvalRoot,gid,{nowMs:Date.parse('2026-10-04T00:03:00.000Z')}));
+
+const noProofRoot=fs.mkdtempSync(path.join(os.tmpdir(),'jarvis-commerce-no-proof-'));
+(async()=>{
+  await assert.rejects(
+    engine.publishProduct(noProofRoot,gid),
+    err=>err&&err.code==='SHOPIFY_EXPLICIT_APPROVAL_REQUIRED'
+  );
+  console.log('COMMERCE ENGINE SELFTEST PASS');
+})().catch(err=>{console.error(err);process.exitCode=1});
