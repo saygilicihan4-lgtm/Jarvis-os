@@ -54,6 +54,34 @@
   async function parseJson(response){
     try{return await response.json()}catch(_){return{}}
   }
+  async function fetchCurrentMissions(fetchImpl){
+    const send=fetchImpl||(root&&root.fetch&&root.fetch.bind(root));
+    if(typeof send!=='function')throw new Error('mission_action_fetch_unavailable');
+    const response=await send('/api/state',{credentials:'same-origin',cache:'no-store'});
+    const state=await parseJson(response);
+    if(!response.ok)throw new Error(state.error||('mission_state_'+response.status));
+    const missions=state&&state.workers&&state.workers.pc&&state.workers.pc.missions;
+    return missions&&Array.isArray(missions.queue)?missions.queue:[];
+  }
+  async function resolveFreshApproval(id,req,{fetchImpl}={}){
+    const cleanId=cleanMissionId(id),cleanReq=String(req||'').toLowerCase();
+    if(!cleanId||!/^[a-f0-9]{20}$/.test(cleanReq))throw new Error('mission_approval_fingerprint_invalid');
+    const queue=await fetchCurrentMissions(fetchImpl);
+    const matches=queue.filter(m=>{
+      const d=approvalDescriptor(m);
+      return d&&d.id===cleanId&&d.req===cleanReq;
+    });
+    if(matches.length!==1)throw new Error(matches.length?'mission_approval_ambiguous':'mission_approval_stale');
+    return approvalDescriptor(matches[0]);
+  }
+  async function resolveFreshCancel(id,{fetchImpl}={}){
+    const cleanId=cleanMissionId(id);
+    if(!cleanId)throw new Error('mission_cancel_id_invalid');
+    const queue=await fetchCurrentMissions(fetchImpl);
+    const matches=queue.filter(m=>cleanMissionId(m&&m.id)===cleanId&&!TERMINAL.has(String(m&&m.status||'').trim().toLowerCase()));
+    if(matches.length!==1)throw new Error(matches.length?'mission_cancel_ambiguous':'mission_cancel_stale');
+    return cancelDescriptor(matches[0]);
+  }
   async function relayMessage(message,{fetchImpl,now=Date.now,wait=delay,timeoutMs=TIMEOUT_MS}={}){
     const send=fetchImpl||(root&&root.fetch&&root.fetch.bind(root));
     if(typeof send!=='function')throw new Error('mission_action_fetch_unavailable');
@@ -110,11 +138,13 @@
     if(action==='approve'){
       const req=String(el.getAttribute('data-jarvis-mission-req')||'').toLowerCase();
       if(!/^[a-f0-9]{20}$/.test(req))throw new Error('mission_approval_fingerprint_invalid');
-      await executeDescriptor({id,req,message:'onayla '+id+' req '+req},el,targetRoot);
+      const fresh=await resolveFreshApproval(id,req,{fetchImpl:targetRoot&&targetRoot.fetch&&targetRoot.fetch.bind(targetRoot)});
+      await executeDescriptor(fresh,el,targetRoot);
       return true;
     }
     if(action==='cancel'){
-      await executeDescriptor({id,message:'görevi iptal et '+id},el,targetRoot);
+      const fresh=await resolveFreshCancel(id,{fetchImpl:targetRoot&&targetRoot.fetch&&targetRoot.fetch.bind(targetRoot)});
+      await executeDescriptor(fresh,el,targetRoot);
       return true;
     }
     return false;
@@ -146,6 +176,9 @@
     cancelDescriptor,
     actionMarkup,
     decorateMissionCard,
+    fetchCurrentMissions,
+    resolveFreshApproval,
+    resolveFreshCancel,
     relayMessage,
     install,
     autoInstall
