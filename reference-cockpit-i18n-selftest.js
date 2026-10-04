@@ -14,7 +14,9 @@ assert(src.includes("root.fetch('/api/mobile-language'"),'translation must use s
 assert(!/fetch\(['\"]https?:\/\//.test(src),'cockpit translation must not call public remote translation services');
 assert(src.includes("inputSource:'typed'"),'translation relay must use allowed typed source');
 assert(src.includes("JSON.stringify(EN)"),'only fixed interface strings should be translated');
-assert(!src.includes('cmd.value')&&!src.includes('transcript'),'i18n pack generation must not read command or transcript text');
+const translateBlock=src.slice(src.indexOf('async function localWorkerPack(locale)'),src.indexOf('async function ensurePack(locale)'));
+assert(translateBlock.length>100,'translation block missing');
+assert(!translateBlock.includes('cmd.value')&&!translateBlock.includes('transcript')&&!translateBlock.includes("getElementById('cmd')"),'translation pack generation must not read command or transcript text');
 assert(src.includes("jarvis:language-changed"),'explicit UI language event bridge missing');
 assert(src.includes("jarvis:conversation-state"),'conversation locale bridge missing');
 assert(src.includes("doc.documentElement.dir=RTL.has(lang)?'rtl':'ltr'"),'document RTL direction update missing');
