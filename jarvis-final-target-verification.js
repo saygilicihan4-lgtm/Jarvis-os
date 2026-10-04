@@ -14,6 +14,11 @@ function exactEvidence(haystack,expected){
   if(Array.isArray(haystack))return haystack.some(x=>normalize(x)===want);
   return normalize(haystack)===want;
 }
+function evidenceHash(value){const v=normalize(value);return v?crypto.createHash('sha256').update(v).digest('hex'):''}
+function evidenceFingerprint(snapshot={}){
+  const e=safeEvidence(snapshot);
+  return{accountHash:e.account[0]?evidenceHash(e.account[0]):'',targetHash:e.target[0]?evidenceHash(e.target[0]):''};
+}
 function safeEvidence(snapshot={}){
   const e=snapshot.targetEvidence||{};
   return{
@@ -30,9 +35,11 @@ function verifyFinalTarget(contract={},snapshot={},opts={}){
   if(!action)return fail('action_missing',{provider,host});
   const ev=safeEvidence(snapshot);
   if(contract.expectedAccount&&!exactEvidence(ev.account,contract.expectedAccount))return fail('account_mismatch',{provider,host,action});
+  if(contract.expectedAccountHash&&!ev.account.some(x=>evidenceHash(x)===contract.expectedAccountHash))return fail('account_mismatch',{provider,host,action});
   if(contract.expectedTarget&&!exactEvidence(ev.target,contract.expectedTarget))return fail('target_mismatch',{provider,host,action});
+  if(contract.expectedTargetHash&&!ev.target.some(x=>evidenceHash(x)===contract.expectedTargetHash))return fail('target_mismatch',{provider,host,action});
   const now=Number.isFinite(opts.nowMs)?opts.nowMs:Date.now(),ttl=Math.max(1000,Math.min(Number(opts.ttlMs)||DEFAULT_TTL_MS,30000));
-  const binding={provider,host,action,account:normalize(contract.expectedAccount),target:normalize(contract.expectedTarget),url:clean(snapshot.url,2000)};
+  const binding={provider,host,action,account:normalize(contract.expectedAccount)||clean(contract.expectedAccountHash,64),target:normalize(contract.expectedTarget)||clean(contract.expectedTargetHash,64),url:clean(snapshot.url,2000)};
   const digest=crypto.createHash('sha256').update(JSON.stringify(binding)).digest('hex');
   return{ok:true,version:FINAL_TARGET_VERIFICATION_VERSION,provider,host,action,bindingHash:digest,verifiedAt:new Date(now).toISOString(),expiresAt:new Date(now+ttl).toISOString(),approvalGranted:false};
 }
@@ -46,4 +53,4 @@ function assertReceipt(receipt,contract={},snapshot={},opts={}){
   return true;
 }
 function codeError(code){const e=new Error(code);e.code=code;return e}
-module.exports={FINAL_TARGET_VERIFICATION_VERSION,DEFAULT_TTL_MS,verifyFinalTarget,assertReceipt};
+module.exports={FINAL_TARGET_VERIFICATION_VERSION,DEFAULT_TTL_MS,evidenceFingerprint,verifyFinalTarget,assertReceipt};
