@@ -1,0 +1,26 @@
+'use strict';
+const fs=require('fs');
+const assert=require('assert');
+const src=fs.readFileSync('public/reference-cockpit-i18n.js','utf8');
+const holo=fs.readFileSync('public/tri-core-hologram.js','utf8');
+
+assert(src.includes("const PREF_KEY='jarvisMobileLanguagePreferenceV1'"),'cockpit must follow existing language preference');
+assert(src.includes("Intl.getCanonicalLocales"),'arbitrary BCP-47 locale canonicalization missing');
+assert(src.includes("new Set(['ar','fa','he','ur','ps','sd','ug','yi'])"),'RTL locale support missing');
+assert(src.includes("packs.set('en'")&&src.includes("packs.set('tr'"),'offline EN/TR base packs missing');
+assert(src.includes('browserTranslatorPack(locale)'),'on-device browser translation path missing');
+assert(src.includes('localWorkerPack(locale)'),'zero-cost local Worker translation path missing');
+assert(src.includes("root.fetch('/api/mobile-language'"),'translation must use same-origin language relay');
+assert(!/fetch\(['\"]https?:\/\//.test(src),'cockpit translation must not call public remote translation services');
+assert(src.includes("inputSource:'typed'"),'translation relay must use allowed typed source');
+assert(src.includes("JSON.stringify(EN)"),'only fixed interface strings should be translated');
+assert(!src.includes('cmd.value')&&!src.includes('transcript'),'i18n pack generation must not read command or transcript text');
+assert(src.includes("jarvis:language-changed"),'explicit UI language event bridge missing');
+assert(src.includes("jarvis:conversation-state"),'conversation locale bridge missing');
+assert(src.includes("doc.documentElement.dir=RTL.has(lang)?'rtl':'ltr'"),'document RTL direction update missing');
+assert(src.includes('Intl.DateTimeFormat'),'localized date/time missing');
+assert(src.includes('ref-i18n-layer'),'dynamic text overlay missing');
+for(const cls of ['brand-tag','listen-label','clock','online','core-label','nova-cap','jarvis-cap','orion-cap','quick','prompt','actions','tasks','notes','links'])assert(src.includes(cls),'localized surface missing: '+cls);
+assert(src.includes('repairModalClicks()'),'cockpit modal interaction repair missing');
+assert(holo.includes("script.src='/reference-cockpit-i18n.js'"),'hologram loader must boot multilingual cockpit layer');
+console.log('REFERENCE COCKPIT I18N v184 SELFTEST PASS · arbitrary locale bridge + local translation + RTL + fixed-string privacy boundary');
