@@ -5,23 +5,24 @@ const fs=require('fs');
 const vm=require('vm');
 const {EventEmitter}=require('events');
 let handler;
+let clockNow=null;
 const context=vm.createContext({
   require(name){
     if(name==='http')return {createServer(fn){handler=fn;return {listen(){}};}};
     if(['web-push','pg','@simplewebauthn/server'].includes(name))return {};
     return require(name);
   },
-  __dirname,Buffer,URL,console:{log(){},error(){}},
-  process:{env:{JARVIS_TOKEN:'selftest-only-token',JARVIS_DEVICE_SECRET:'selftest-only-device-secret'}},
+  __dirname,Buffer,URL,Date:class extends Date{static now(){return clockNow===null?Date.now():clockNow;}},console:{log(){},error(){}},
+  process:{env:{JARVIS_TOKEN:'selftest-only-token',JARVIS_DEVICE_SECRET:'selftest-only-device-secret',JARVIS_BOOTSTRAP_DEVICE_ID:'env-pc',JARVIS_BOOTSTRAP_DEVICE_EXP:String(Date.now()+600000)}},
   setInterval(){return 0;},clearInterval(){},setTimeout,clearTimeout
 });
 vm.runInContext(fs.readFileSync(require.resolve('./server.js'),'utf8'),context,{filename:'server.js'});
-function request(url,{method='GET',headers={},ip='192.0.2.10',body}={}){
+function request(url,{method='GET',headers={},ip='192.0.2.10',body,beforeBody}={}){
   return new Promise((resolve,reject)=>{
     const req=new EventEmitter();Object.assign(req,{url,method,headers:{host:'jarvis.test',...headers},socket:{remoteAddress:ip},destroy(){reject(Error('request destroyed'));}});
     const result={headers:{}};
     const res={setHeader(k,v){result.headers[k.toLowerCase()]=v;},writeHead(status,h){result.status=status;Object.assign(result.headers,h);},end(b){result.body=JSON.parse(b);resolve(result);}};
-    try{handler(req,res);if(body!==undefined)req.emit('data',JSON.stringify(body));req.emit('end');}catch(e){reject(e);}
+    try{handler(req,res);if(beforeBody)beforeBody();if(body!==undefined)req.emit('data',JSON.stringify(body));req.emit('end');}catch(e){reject(e);}
   });
 }
 function cookie(exp=Date.now()+60000){
@@ -88,6 +89,47 @@ async function run(){
   assert.strictEqual((await request('/api/session/create',{method:'POST',headers:xHeaders})).status,200,'alternate signed header stays supported');
   code=await create();vm.runInContext('delete state.workers.devices.pc',context);
   const deletedIssuer=await exchange(code);assert.strictEqual(deletedIssuer.status,403);assert(!deletedIssuer.headers['set-cookie']);
+  vm.runInContext("state.workers.devices.pc={approved:true,credentialIssuedAt:'original'};state.workers.devices.other={approved:true,credentialIssuedAt:'other-original'}",context);
+  const cookieToken=await request('/api/worker/device-token',{method:'POST',headers:{cookie:valid,'x-jarvis-device-id':'pc'},body:{deviceId:'pc'}});
+  const crossToken=await request('/api/worker/device-token',{method:'POST',headers:deviceHeaders('pc'),body:{deviceId:'other'}});
+  vm.runInContext('state.workers.devices.pc.approved=false',context);
+  const revive=await request('/api/worker/device-token',{method:'POST',headers:deviceHeaders('pc',Date.now()+60000,{bootstrapUntil:Date.now()+60000}),body:{deviceId:'pc'}});
+  console.log('Credential boundary status:',JSON.stringify({browser:cookieToken.status,crossDevice:crossToken.status,revokedBootstrap:revive.status}));
+  assert.strictEqual(cookieToken.status,401,'browser cookie must not mint a PC credential');
+  assert.strictEqual(crossToken.status,401,'signed PC cannot mint another device credential');
+  assert.strictEqual(revive.status,403,'bootstrap claim cannot override an explicit revocation');
+  assert.strictEqual(vm.runInContext('state.workers.devices.pc.approved',context),false);
+  assert.strictEqual(vm.runInContext('state.workers.devices.other.credentialIssuedAt',context),'other-original');
+  const tokenRequest=(headers,body={deviceId:'pc'},beforeBody)=>request('/api/worker/device-token',{method:'POST',headers,body,beforeBody});
+  vm.runInContext("state.workers.devices.pc={approved:true,credentialIssuedAt:'original'}",context);
+  const pcHeaders=deviceHeaders();
+  for(const [headers,body] of [
+    [{...pcHeaders,'x-jarvis-device-id':'pc!'},{deviceId:'pc'}],
+    [pcHeaders,{deviceId:'pc!'}],[pcHeaders,{deviceId:42}],
+    [{...pcHeaders,'x-jarvis-device-id':'other'},{deviceId:'other'}],
+    [{authorization:'Device invalid','x-jarvis-token':'selftest-only-token','x-jarvis-device-id':'pc'},{deviceId:'pc'}]
+  ]){const r=await tokenRequest(headers,body);assert.strictEqual(r.status,401);assert(!r.body.token);}
+  assert.strictEqual(vm.runInContext('state.workers.devices.pc.credentialIssuedAt',context),'original','denied requests never rotate credentials');
+  for(const headers of [pcHeaders,{'x-jarvis-device-token':pcHeaders.authorization.slice(7),'x-jarvis-device-id':'pc'},{authorization:'Bearer selftest-only-token','x-jarvis-device-id':'pc'},{'x-jarvis-token':'selftest-only-token','x-jarvis-device-id':'pc'}]){
+    const r=await tokenRequest(headers);assert.strictEqual(r.status,200,'self-renewal and explicit legacy-admin migration remain supported');
+    context.issuedTestToken=r.body.token;
+    assert.strictEqual(vm.runInContext('verifyDeviceToken(issuedTestToken).deviceId',context),'pc');
+    assert(!vm.runInContext('JSON.stringify(state.audit)',context).includes(r.body.token),'audit never stores credential');
+  }
+  const revokedDuringBody=await tokenRequest(pcHeaders,{deviceId:'pc'},()=>vm.runInContext('state.workers.devices.pc.approved=false',context));
+  assert.strictEqual(revokedDuringBody.status,403);assert(!revokedDuringBody.body.token);
+  vm.runInContext('state.workers.devices.pc.approved=true',context);
+  const expires=Date.now()+60000;
+  try{
+    const expiredDuringBody=await tokenRequest(deviceHeaders('pc',expires),{deviceId:'pc'},()=>{clockNow=expires;});
+    assert.strictEqual(expiredDuringBody.status,401);assert(!expiredDuringBody.body.token);
+  }finally{clockNow=null;}
+  const fresh=deviceHeaders('new-pc',Date.now()+60000,{bootstrapUntil:Date.now()+60000});
+  assert.strictEqual((await tokenRequest(fresh,{deviceId:'new-pc'})).status,200,'absent-state bootstrap still works');
+  vm.runInContext('state.workers.devices["env-pc"]={approved:false}',context);
+  assert.strictEqual((await tokenRequest(deviceHeaders('env-pc'),{deviceId:'env-pc'})).status,403,'environment bootstrap cannot override denial');
+  vm.runInContext('delete state.workers.devices["env-pc"]',context);
+  assert.strictEqual((await tokenRequest(deviceHeaders('env-pc'),{deviceId:'env-pc'})).status,200,'environment bootstrap recovers absent state');
   const html=fs.readFileSync(require.resolve('./public/index.html'),'utf8');
   const bootstrap=html.slice(html.indexOf('async function bootstrapSession(){'),html.indexOf('async function languageConversationRequest'));
   assert(!bootstrap.includes('/api/session/lan-bootstrap'),'UI must not treat network presence as login');

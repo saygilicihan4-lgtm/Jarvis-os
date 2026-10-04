@@ -815,13 +815,14 @@ const server=http.createServer((req,res)=>{
     const ident=workerIdentity(req),workerRoute=pathname.startsWith('/api/worker/')||pathname==='/api/state/snapshot'||pathname==='/api/state/restore'||pathname==='/api/session/create';
     if(workerRoute&&ident){
       const signedWorker=deviceWorker(ident.deviceId);if(signedWorker)signedWorker.authMode='signed';
-      const headerId=String(req.headers['x-jarvis-device-id']||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80);
+      const headerId=String(req.headers['x-jarvis-device-id']||'');
       if(headerId!==ident.deviceId)return json(res,401,{error:'device identity mismatch'});
       if(pathname!=='/api/state/restore'){
         let dw=deviceWorker(ident.deviceId);
         const claimBootstrap=Number.isFinite(ident.bootstrapUntil)&&Date.now()<ident.bootstrapUntil;
         const envBootstrap=BOOTSTRAP_DEVICE_ID===ident.deviceId&&Date.now()<BOOTSTRAP_DEVICE_EXP;
-        if((!dw||!dw.approved)&&(claimBootstrap||envBootstrap)){
+        // Bootstrap recovers absent state; it never overrides an explicit denial.
+        if(!dw&&(claimBootstrap||envBootstrap)){
           state.workers.devices[ident.deviceId]={name:ident.deviceId,version:null,lastSeen:null,capabilities:[],memory:null,approved:true,roles:['DEVELOPER'],allowedCapabilities:[],authMode:'signed',credentialIssuedAt:now()};
           dw=deviceWorker(ident.deviceId);touchState();log('DEVICE_BOOTSTRAP',ident.deviceId+' signed bootstrap approval restored');
         }
@@ -1393,8 +1394,19 @@ const server=http.createServer((req,res)=>{
   if(pathname==='/api/worker/device-token'&&req.method==='POST'){
     return readJson(req,(err,d)=>{
       if(err)return json(res,400,{error:'bad json'});
-      const deviceId=String(d.deviceId||req.headers['x-jarvis-device-id']||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80),w=deviceWorker(deviceId);
-      if(!w||!w.approved)return json(res,403,{error:'approved device required'});
+      const headerId=String(req.headers['x-jarvis-device-id']||''),deviceId=d.deviceId===undefined?headerId:d.deviceId;
+      if(typeof deviceId!=='string'||!/^[A-Za-z0-9_.-]{1,80}$/.test(deviceId)||headerId!==deviceId)return json(res,401,{error:'device identity mismatch'});
+      // Re-evaluate proof after reading the body: no cookie/dev-mode fallback,
+      // cross-device deputy, or expired signed credential -> admin downgrade.
+      const signedAttempt=String(req.headers.authorization||'').startsWith('Device ')||!!req.headers['x-jarvis-device-token'];
+      if(signedAttempt){
+        const ident=workerIdentity(req);
+        if(!ident||ident.exp<=Date.now()||ident.deviceId!==deviceId)return json(res,401,{error:'device identity mismatch'});
+      }else if(!TOKEN||(req.headers.authorization!==('Bearer '+TOKEN)&&req.headers['x-jarvis-token']!==TOKEN)){
+        return json(res,401,{error:'signed device or configured admin credential required'});
+      }
+      const w=deviceWorker(deviceId);
+      if(!w||w.approved!==true)return json(res,403,{error:'approved device required'});
       if(!DEVICE_SECRET)return json(res,503,{error:'device identity unavailable'});
       const token=signDevicePayload(deviceTokenPayload(deviceId));
       w.authMode='signed';w.credentialIssuedAt=now();

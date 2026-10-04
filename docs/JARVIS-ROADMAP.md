@@ -41,6 +41,15 @@ kod akışı bütünü için "bağımsız yeniden kimlik doğrulama" iddiası ya
 Üretim sırları değiştirilmedi; #214 bu çalışmalar ve kontrollü eski oturum geçişi
 tamamlanana kadar açık kalır.
 
+v161 / #217, `/api/worker/device-token` yolundaki doğrudan tarayıcı çereziyle
+PC kimlik bilgisi üretimini kapatır. İmzalı cihaz yalnız kendi kimliğini yeniler;
+başlık/gövde/aktör tam eşleşir. Eski Worker geçişi için açıkça yapılandırılmış
+yönetici sırrı yolu korunur; çerez veya boş-token geliştirme modu yeterli değildir.
+İstek gövdesinden sonra süre/yetki tekrar kontrol edilir. Başlangıç kurtarması
+yalnız eksik cihaz kaydını oluşturur, mevcut onaysız/iptal edilmiş kaydı onaylamaz.
+Bu, yeniden başlatmalar arasında kalıcı iptal kanıtı değildir: snapshot geri
+yükleme, eşleştirme ve passkey kaydı ayrıca incelenmelidir. #214 açık kalır.
+
 ## İnternet görevlerinin davranışı
 
 - "Bu siteyi incele": izin verilen kapsamı okur, kaynakları korur, birbiriyle çelişen
