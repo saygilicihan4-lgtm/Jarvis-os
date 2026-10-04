@@ -2,9 +2,12 @@ const fs=require('fs');
 const path=require('path');
 const childProcess=require('child_process');
 const https=require('https');
+const crypto=require('crypto');
 
 const ENGINE_VERSION='1.0';
 const DEFAULT_API_VERSION='2026-10';
+const SHOPIFY_FINAL_TARGET_VERSION=1;
+const SHOPIFY_PUBLIC_ACTION='PUBLISH_PRODUCT';
 
 function ensureDir(dir){fs.mkdirSync(dir,{recursive:true});return dir}
 function safeName(name){
@@ -106,11 +109,7 @@ function productSetPayload(product,{status='DRAFT'}={}){
   if(p.handle)input.handle=p.handle;
   if(p.tags.length)input.tags=p.tags;
   if(p.images.length){
-    input.files=p.images.map(x=>({
-      originalSource:x.url,
-      alt:x.alt||p.title,
-      contentType:'IMAGE'
-    }));
+    input.files=p.images.map(x=>({originalSource:x.url,alt:x.alt||p.title,contentType:'IMAGE'}));
   }
   if(p.variants.length){
     const optionMap=new Map();
@@ -122,9 +121,7 @@ function productSetPayload(product,{status='DRAFT'}={}){
     }
     if(optionMap.size){
       input.productOptions=[...optionMap.entries()].map(([name,values],i)=>({
-        name,
-        position:i+1,
-        values:[...values].map(name=>({name}))
+        name,position:i+1,values:[...values].map(name=>({name}))
       }));
     }
     input.variants=p.variants.map(v=>{
@@ -138,9 +135,7 @@ function productSetPayload(product,{status='DRAFT'}={}){
   }
   return{normalized:p,input};
 }
-function readJson(file){
-  try{return JSON.parse(fs.readFileSync(file,'utf8'))}catch(_){return null}
-}
+function readJson(file){try{return JSON.parse(fs.readFileSync(file,'utf8'))}catch(_){return null}}
 function loadConfig(workspace){
   const dirs=commerceDirs(workspace);
   const file=path.join(dirs.secrets,'shopify.json');
@@ -170,15 +165,10 @@ function graphQLRequest({shop,apiVersion,token},query,variables={}){
   if(!shop||!token)throw new Error('SHOPIFY_NOT_CONNECTED');
   const body=JSON.stringify({query,variables});
   const options={
-    hostname:shop,
-    port:443,
+    hostname:shop,port:443,
     path:'/admin/api/'+encodeURIComponent(apiVersion||DEFAULT_API_VERSION)+'/graphql.json',
     method:'POST',
-    headers:{
-      'Content-Type':'application/json',
-      'Content-Length':Buffer.byteLength(body),
-      'X-Shopify-Access-Token':token
-    },
+    headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(body),'X-Shopify-Access-Token':token},
     timeout:25000
   };
   return new Promise((resolve,reject)=>{
@@ -189,14 +179,8 @@ function graphQLRequest({shop,apiVersion,token},query,variables={}){
         const raw=Buffer.concat(chunks).toString('utf8');
         let json;
         try{json=JSON.parse(raw)}catch(_){return reject(new Error('Shopify geçersiz JSON döndürdü'))}
-        if(res.statusCode<200||res.statusCode>=300){
-          const e=new Error('Shopify HTTP '+res.statusCode);
-          e.statusCode=res.statusCode;e.payload=json;return reject(e);
-        }
-        if(Array.isArray(json.errors)&&json.errors.length){
-          const e=new Error('Shopify GraphQL: '+json.errors.map(x=>x.message).join(' | '));
-          e.payload=json;return reject(e);
-        }
+        if(res.statusCode<200||res.statusCode>=300){const e=new Error('Shopify HTTP '+res.statusCode);e.statusCode=res.statusCode;e.payload=json;return reject(e)}
+        if(Array.isArray(json.errors)&&json.errors.length){const e=new Error('Shopify GraphQL: '+json.errors.map(x=>x.message).join(' | '));e.payload=json;return reject(e)}
         resolve(json.data||{});
       });
     });
@@ -208,22 +192,96 @@ function graphQLRequest({shop,apiVersion,token},query,variables={}){
 function summarizeErrors(errors){
   return (Array.isArray(errors)?errors:[]).map(x=>({
     field:Array.isArray(x.field)?x.field.join('.'):String(x.field||''),
-    message:String(x.message||''),
-    code:String(x.code||'')
+    message:String(x.message||''),code:String(x.code||'')
   }));
+}
+function privacyHash(value){
+  const s=String(value==null?'':value).trim().normalize('NFKC').toLowerCase();
+  return s?crypto.createHash('sha256').update(s,'utf8').digest('hex'):'';
+}
+function validProductGid(id){return /^gid:\/\/shopify\/Product\/\d+$/.test(String(id||'').trim())}
+function validPublicationGid(id){return /^gid:\/\/shopify\/Publication\/\d+$/.test(String(id||'').trim())}
+function targetError(code,detail=''){
+  const e=new Error(code+(detail?': '+detail:''));e.code=code;e.detail=detail;return e;
+}
+function shopifyPublishUncertainError(stage,cause){
+  const reason=String(cause&&cause.code||cause&&cause.message||cause||'unknown').slice(0,180);
+  const e=new Error('SHOPIFY_PUBLISH_UNCERTAIN: irreversible '+String(stage||'unknown')+' adımı başlatıldı; otomatik tekrar engellendi ve salt-okunur doğrulama gerekli. '+reason);
+  // Worker v166 maps this legacy code + uncertain=true to needs_verification.
+  e.code='SHOPIFY_EXPLICIT_APPROVAL_REQUIRED';
+  e.reasonCode='SHOPIFY_PUBLISH_UNCERTAIN';
+  e.stage=String(stage||'unknown');
+  e.uncertain=true;
+  return e;
+}
+function safeShopifyFinalTargetProof(lock,{verifiedAt=new Date().toISOString()}={}){
+  if(!lock||!lock.bindingHash)throw targetError('SHOPIFY_FINAL_TARGET_UNVERIFIED');
+  return{
+    version:SHOPIFY_FINAL_TARGET_VERSION,
+    action:lock.action,
+    bindingHash:lock.bindingHash,
+    storeHash:privacyHash(lock.shop),
+    productHash:privacyHash(lock.productId),
+    publicationHash:privacyHash(lock.publicationId),
+    missionId:lock.missionId,
+    approvalPayloadSha256:lock.approvalPayloadSha256,
+    verifiedAt,
+    approvalGranted:false
+  };
+}
+function buildShopifyFinalTargetLock({shop,productId,publicationId,action=SHOPIFY_PUBLIC_ACTION,approval,draftShopHash}={}){
+  const normalizedShop=normalizeShopDomain(shop);
+  const id=String(productId||'').trim();
+  const pub=String(publicationId||'').trim();
+  const act=String(action||'').trim();
+  const approved=approval||{};
+  const storedHash=String(draftShopHash||approved.draftShopHash||'').trim();
+  if(!normalizedShop)throw targetError('SHOPIFY_FINAL_TARGET_STORE_MISSING');
+  if(!validProductGid(id))throw targetError('SHOPIFY_FINAL_TARGET_PRODUCT_MISMATCH');
+  if(!validPublicationGid(pub))throw targetError('SHOPIFY_FINAL_TARGET_PUBLICATION_MISMATCH');
+  if(act!==SHOPIFY_PUBLIC_ACTION)throw targetError('SHOPIFY_FINAL_TARGET_ACTION_MISMATCH');
+  if(!storedHash||storedHash!==privacyHash(normalizedShop))throw targetError('SHOPIFY_FINAL_TARGET_STORE_MISMATCH');
+  if(!/^M-[A-Z0-9-]{12,80}$/.test(String(approved.missionId||''))||
+    !String(approved.approvalRequestId||'').trim()||!String(approved.approvalPayloadSha256||'').trim()){
+    throw targetError('SHOPIFY_FINAL_TARGET_APPROVAL_UNBOUND');
+  }
+  const binding={
+    version:SHOPIFY_FINAL_TARGET_VERSION,
+    shop:normalizedShop,productId:id,publicationId:pub,action:act,
+    missionId:String(approved.missionId),
+    approvalRequestId:String(approved.approvalRequestId),
+    approvalPayloadSha256:String(approved.approvalPayloadSha256),
+    draftShopHash:storedHash
+  };
+  const bindingHash=crypto.createHash('sha256').update(JSON.stringify(binding),'utf8').digest('hex');
+  return{...binding,bindingHash};
+}
+function assertShopifyFinalTargetLock(lock,current={}){
+  if(!lock||!lock.bindingHash)throw targetError('SHOPIFY_FINAL_TARGET_UNVERIFIED');
+  const shop=normalizeShopDomain(current.shop||'');
+  const productId=String(current.productId||'').trim();
+  const publicationId=String(current.publicationId||'').trim();
+  const action=String(current.action||'').trim();
+  const approval=current.approval||{};
+  if(shop!==lock.shop||privacyHash(shop)!==lock.draftShopHash)throw targetError('SHOPIFY_FINAL_TARGET_STORE_CHANGED');
+  if(productId!==lock.productId)throw targetError('SHOPIFY_FINAL_TARGET_PRODUCT_CHANGED');
+  if(publicationId!==lock.publicationId)throw targetError('SHOPIFY_FINAL_TARGET_PUBLICATION_CHANGED');
+  if(action!==lock.action||action!==SHOPIFY_PUBLIC_ACTION)throw targetError('SHOPIFY_FINAL_TARGET_ACTION_CHANGED');
+  if(String(approval.missionId||'')!==lock.missionId||
+    String(approval.approvalRequestId||'')!==lock.approvalRequestId||
+    String(approval.approvalPayloadSha256||'')!==lock.approvalPayloadSha256){
+    throw targetError('SHOPIFY_FINAL_TARGET_APPROVAL_CHANGED');
+  }
+  const rebuilt=buildShopifyFinalTargetLock({shop,productId,publicationId,action,approval,draftShopHash:lock.draftShopHash});
+  if(rebuilt.bindingHash!==lock.bindingHash)throw targetError('SHOPIFY_FINAL_TARGET_BINDING_CHANGED');
+  return true;
 }
 async function status(workspace){
   const creds=resolveCredentials(workspace);
-  if(!creds.ready)return{
-    ok:false,connected:false,shop:creds.shop||null,apiVersion:creds.apiVersion,
-    message:'Shopify yerel bağlantısı kurulmamış. Bir kez jarvis-shopify-connect.ps1 çalıştırılmalı.'
-  };
+  if(!creds.ready)return{ok:false,connected:false,shop:creds.shop||null,apiVersion:creds.apiVersion,message:'Shopify yerel bağlantısı kurulmamış. Bir kez jarvis-shopify-connect.ps1 çalıştırılmalı.'};
   try{
     const data=await graphQLRequest(creds,`query JarvisShopStatus { shop { name myshopifyDomain currencyCode } }`);
-    return{
-      ok:true,connected:true,shop:data.shop||null,apiVersion:creds.apiVersion,
-      message:'Shopify bağlantısı hazır · '+String(data.shop&&data.shop.name||creds.shop)+' · '+String(data.shop&&data.shop.currencyCode||'')
-    };
+    return{ok:true,connected:true,shop:data.shop||null,apiVersion:creds.apiVersion,message:'Shopify bağlantısı hazır · '+String(data.shop&&data.shop.name||creds.shop)+' · '+String(data.shop&&data.shop.currencyCode||'')};
   }catch(err){
     return{ok:false,connected:false,shop:creds.shop||null,apiVersion:creds.apiVersion,message:'Shopify bağlantı testi başarısız: '+err.message};
   }
@@ -233,14 +291,7 @@ function saveLocalDraft(workspace,product){
   const payload=productSetPayload(product,{status:'DRAFT'});
   const id=safeName(payload.normalized.title)+'-'+Date.now();
   const file=path.join(dirs.drafts,id+'.json');
-  const data={
-    schema:1,
-    engine:'JARVIS_COMMERCE_ENGINE',
-    version:ENGINE_VERSION,
-    createdAt:new Date().toISOString(),
-    mode:'DRAFT',
-    product:payload.normalized
-  };
+  const data={schema:1,engine:'JARVIS_COMMERCE_ENGINE',version:ENGINE_VERSION,createdAt:new Date().toISOString(),mode:'DRAFT',product:payload.normalized};
   fs.writeFileSync(file,JSON.stringify(data,null,2),'utf8');
   return{ok:true,file,data,message:'Yerel ürün taslağı hazır: '+file};
 }
@@ -261,10 +312,7 @@ async function updateDefaultVariant(creds,productId,variantId,p){
   const data=await graphQLRequest(creds,query,{productId,variants:[variant]});
   const out=data.productVariantsBulkUpdate||{};
   const errors=summarizeErrors(out.userErrors);
-  if(errors.length){
-    const e=new Error('Varyant güncellenemedi: '+errors.map(x=>x.message).join(' | '));
-    e.userErrors=errors;throw e;
-  }
+  if(errors.length){const e=new Error('Varyant güncellenemedi: '+errors.map(x=>x.message).join(' | '));e.userErrors=errors;throw e}
   return out.productVariants&&out.productVariants[0]||null;
 }
 async function createDraft(workspace,product){
@@ -273,79 +321,54 @@ async function createDraft(workspace,product){
   const payload=productSetPayload(product,{status:'DRAFT'});
   const query=`mutation JarvisProductDraft($input: ProductSetInput!) {
     productSet(synchronous: true, input: $input) {
-      product {
-        id
-        title
-        handle
-        status
-        vendor
-        variants(first: 25) { nodes { id title price compareAtPrice sku } }
-      }
+      product { id title handle status vendor variants(first: 25) { nodes { id title price compareAtPrice sku } } }
       userErrors { code field message }
     }
   }`;
   const data=await graphQLRequest(creds,query,{input:payload.input});
   const out=data.productSet||{};
   const errors=summarizeErrors(out.userErrors);
-  if(errors.length){
-    const e=new Error('Shopify ürün taslağı oluşturulamadı: '+errors.map(x=>x.message).join(' | '));
-    e.userErrors=errors;throw e;
-  }
+  if(errors.length){const e=new Error('Shopify ürün taslağı oluşturulamadı: '+errors.map(x=>x.message).join(' | '));e.userErrors=errors;throw e}
   if(!out.product||!out.product.id)throw new Error('Shopify ürün ID döndürmedi');
-
   if(!payload.normalized.variants.length){
     const defaultVariant=out.product.variants&&out.product.variants.nodes&&out.product.variants.nodes[0];
     const updated=await updateDefaultVariant(creds,out.product.id,defaultVariant&&defaultVariant.id,payload.normalized);
     if(updated&&out.product.variants&&out.product.variants.nodes)out.product.variants.nodes[0]=updated;
   }
-
+  // JARVIS-only metadata. This object is a local artifact and is never sent back as ProductSetInput.
+  out.product._jarvisStoreHash=privacyHash(creds.shop);
   const dirs=commerceDirs(workspace);
   const receipt=path.join(dirs.receipts,'draft-'+safeName(out.product.title)+'-'+Date.now()+'.json');
   fs.writeFileSync(receipt,JSON.stringify({
-    engine:'JARVIS_COMMERCE_ENGINE',
-    version:ENGINE_VERSION,
-    createdAt:new Date().toISOString(),
-    shop:creds.shop,
-    apiVersion:creds.apiVersion,
-    action:'CREATE_DRAFT_PRODUCT',
-    product:out.product
+    engine:'JARVIS_COMMERCE_ENGINE',version:ENGINE_VERSION,createdAt:new Date().toISOString(),
+    shopHash:privacyHash(creds.shop),apiVersion:creds.apiVersion,action:'CREATE_DRAFT_PRODUCT',product:out.product
   },null,2),'utf8');
-
-  return{
-    ok:true,
-    product:out.product,
-    receipt,
-    message:'Shopify taslak ürün oluşturuldu · '+out.product.title+' · '+out.product.id
-  };
+  return{ok:true,product:out.product,shopHash:privacyHash(creds.shop),receipt,message:'Shopify taslak ürün oluşturuldu · '+out.product.title+' · '+out.product.id};
 }
-async function findOnlineStorePublication(creds){
-  const data=await graphQLRequest(creds,`query JarvisPublications { publications(first: 50) { nodes { id name } } }`);
+async function findOnlineStorePublication(creds,request=graphQLRequest){
+  const data=await request(creds,`query JarvisPublications { publications(first: 50) { nodes { id name } } }`);
   const nodes=data.publications&&data.publications.nodes||[];
-  return nodes.find(x=>/online store/i.test(String(x.name||'')))||null;
+  const matches=nodes.filter(x=>/^online store$/i.test(String(x.name||'').trim())&&validPublicationGid(x.id));
+  if(matches.length!==1)return null;
+  return matches[0];
 }
 function canonicalUtcIso(value){
   const s=String(value||'').trim();
   if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(s))return null;
-  const ms=Date.parse(s);
-  if(!Number.isFinite(ms))return null;
+  const ms=Date.parse(s);if(!Number.isFinite(ms))return null;
   try{if(new Date(ms).toISOString()!==s)return null}catch(_){return null}
   return{value:s,ms};
 }
 function shopifyApprovalError(message='Shopify PUBLIC yayınlama için aynı ürün ve aktif mission ile bağlı açık kullanıcı onayı gerekli.'){
-  const e=new Error('SHOPIFY_EXPLICIT_APPROVAL_REQUIRED');
-  e.code='SHOPIFY_EXPLICIT_APPROVAL_REQUIRED';
-  e.detail=message;
-  return e;
+  const e=new Error('SHOPIFY_EXPLICIT_APPROVAL_REQUIRED');e.code='SHOPIFY_EXPLICIT_APPROVAL_REQUIRED';e.detail=message;return e;
 }
 function resolveShopifyPublishApproval(workspace,productId,{nowMs=Date.now()}={}){
   const id=String(productId||'').trim();
-  if(!/^gid:\/\/shopify\/Product\/\d+$/.test(id))throw new Error('Geçersiz Shopify Product GID');
+  if(!validProductGid(id))throw new Error('Geçersiz Shopify Product GID');
   const missionRoot=path.join(path.resolve(workspace),'.jarvis-missions');
   let names=[];
   try{names=fs.readdirSync(missionRoot).filter(x=>/^M-[A-Z0-9-]{12,80}\.json$/.test(x))}catch(_){throw shopifyApprovalError()}
-  const clock=Number(nowMs);
-  const now=Number.isFinite(clock)?clock:Date.now();
-  const matches=[];
+  const clock=Number(nowMs);const now=Number.isFinite(clock)?clock:Date.now();const matches=[];
   for(const name of names){
     const mission=readJson(path.join(missionRoot,name));
     if(!mission||mission.schema!==1||mission.engine!=='JARVIS_MISSION_ENGINE'||mission.type!=='shopify_product')continue;
@@ -366,15 +389,13 @@ function resolveShopifyPublishApproval(workspace,productId,{nowMs=Date.now()}={}
     if(!draftCompleted||approved.ms<draftCompleted.ms)continue;
     const artifact=draftStep.artifact||(mission.artifacts&&mission.artifacts.shopify_draft)||null;
     const draftProductId=String(artifact&&artifact.product&&artifact.product.id||'').trim();
-    if(draftProductId!==id)continue;
+    const draftShopHash=String(artifact&&artifact.product&&artifact.product._jarvisStoreHash||artifact&&artifact.shopHash||'').trim();
+    if(draftProductId!==id||!/^[a-f0-9]{64}$/.test(draftShopHash))continue;
     matches.push({
-      missionId:mission.id,
-      productId:id,
-      approvedAt:approved.value,
-      approvalRequestId:publishStep.meta.approvalRequestId,
+      missionId:mission.id,productId:id,draftShopHash,
+      approvedAt:approved.value,approvalRequestId:publishStep.meta.approvalRequestId,
       approvalPayloadSha256:publishStep.meta.approvalPayloadSha256,
-      draftCompletedAt:draftCompleted.value,
-      publishStartedAt:publishStarted.value
+      draftCompletedAt:draftCompleted.value,publishStartedAt:publishStarted.value
     });
   }
   if(matches.length!==1){
@@ -384,98 +405,109 @@ function resolveShopifyPublishApproval(workspace,productId,{nowMs=Date.now()}={}
   return matches[0];
 }
 function assertActiveProduct(update,productId){
-  const id=String(productId||'').trim();
-  const product=update&&update.product||null;
+  const id=String(productId||'').trim();const product=update&&update.product||null;
   if(!product||String(product.id||'')!==id||String(product.status||'').toUpperCase()!=='ACTIVE'){
-    const e=new Error('SHOPIFY_ACTIVE_POSTCONDITION_FAILED');
-    e.code='SHOPIFY_ACTIVE_POSTCONDITION_FAILED';
-    e.productId=id;
-    throw e;
+    const e=new Error('SHOPIFY_ACTIVE_POSTCONDITION_FAILED');e.code='SHOPIFY_ACTIVE_POSTCONDITION_FAILED';e.productId=id;throw e;
   }
   return product;
 }
 function assertPublishedOnPublication(out,publication){
   const publicationId=String(publication&&publication.id||'').trim();
   const published=!!(out&&out.publishable&&out.publishable.publishedOnPublication===true);
-  if(!publicationId||!published){
-    const e=new Error('SHOPIFY_PUBLICATION_POSTCONDITION_FAILED');
-    e.code='SHOPIFY_PUBLICATION_POSTCONDITION_FAILED';
-    e.publicationId=publicationId||null;
-    throw e;
-  }
+  if(!publicationId||!published){const e=new Error('SHOPIFY_PUBLICATION_POSTCONDITION_FAILED');e.code='SHOPIFY_PUBLICATION_POSTCONDITION_FAILED';e.publicationId=publicationId||null;throw e}
   return true;
 }
-async function publishProduct(workspace,productId){
+async function verifyShopifyFinalTargetOnline(creds,lock,{request=graphQLRequest}={}){
+  assertShopifyFinalTargetLock(lock,{
+    shop:creds&&creds.shop,productId:lock.productId,publicationId:lock.publicationId,
+    action:lock.action,approval:{missionId:lock.missionId,approvalRequestId:lock.approvalRequestId,approvalPayloadSha256:lock.approvalPayloadSha256}
+  });
+  const data=await request(creds,`query JarvisShopifyFinalTarget($productId: ID!) {
+    shop { myshopifyDomain }
+    product(id: $productId) { id }
+    publications(first: 50) { nodes { id name } }
+  }`,{productId:lock.productId});
+  const remoteShop=normalizeShopDomain(data&&data.shop&&data.shop.myshopifyDomain||'');
+  const remoteProduct=String(data&&data.product&&data.product.id||'').trim();
+  const publications=data&&data.publications&&data.publications.nodes||[];
+  const remotePublication=publications.find(x=>String(x&&x.id||'').trim()===lock.publicationId)||null;
+  if(remoteShop!==lock.shop)throw targetError('SHOPIFY_FINAL_TARGET_STORE_MISMATCH');
+  if(remoteProduct!==lock.productId)throw targetError('SHOPIFY_FINAL_TARGET_PRODUCT_MISMATCH');
+  if(!remotePublication||!/^online store$/i.test(String(remotePublication.name||'').trim()))throw targetError('SHOPIFY_FINAL_TARGET_PUBLICATION_MISMATCH');
+  return safeShopifyFinalTargetProof(lock);
+}
+async function publishProduct(workspace,productId,opts={}){
   const id=String(productId||'').trim();
-  if(!/^gid:\/\/shopify\/Product\/\d+$/.test(id))throw new Error('Geçersiz Shopify Product GID');
-  const approval=resolveShopifyPublishApproval(workspace,id);
-  const creds=resolveCredentials(workspace);
-  if(!creds.ready)throw new Error('SHOPIFY_NOT_CONNECTED');
-
-  const publication=await findOnlineStorePublication(creds);
-  if(!publication)throw new Error('Online Store publication bulunamadı');
-
+  if(!validProductGid(id))throw new Error('Geçersiz Shopify Product GID');
+  const request=typeof opts.request==='function'?opts.request:graphQLRequest;
+  const resolveCreds=typeof opts.resolveCredentials==='function'?opts.resolveCredentials:resolveCredentials;
+  const clock=()=>Number.isFinite(opts.nowMs)?Number(opts.nowMs):Date.now();
+  const approval=resolveShopifyPublishApproval(workspace,id,{nowMs:clock()});
+  const creds=resolveCreds(workspace);
+  if(!creds||!creds.ready)throw new Error('SHOPIFY_NOT_CONNECTED');
+  const publication=await findOnlineStorePublication(creds,request);
+  if(!publication)throw targetError('SHOPIFY_FINAL_TARGET_PUBLICATION_MISSING','Online Store publication tekil olarak doğrulanamadı');
+  const lock=buildShopifyFinalTargetLock({
+    shop:creds.shop,productId:id,publicationId:publication.id,action:SHOPIFY_PUBLIC_ACTION,
+    approval,draftShopHash:approval.draftShopHash
+  });
   function recheckApproval(){
-    const current=resolveShopifyPublishApproval(workspace,id);
-    if(current.missionId!==approval.missionId||current.approvedAt!==approval.approvedAt||
-      current.approvalRequestId!==approval.approvalRequestId||current.approvalPayloadSha256!==approval.approvalPayloadSha256){
-      throw shopifyApprovalError('Shopify onayı işlem sırasında değişti.');
-    }
+    const current=resolveShopifyPublishApproval(workspace,id,{nowMs:clock()});
+    assertShopifyFinalTargetLock(lock,{shop:lock.shop,productId:id,publicationId:publication.id,action:SHOPIFY_PUBLIC_ACTION,approval:current});
+    return current;
   }
-  recheckApproval();
+  async function recheckFinalTarget(){
+    const currentApproval=recheckApproval();
+    const currentCreds=resolveCreds(workspace);
+    if(!currentCreds||!currentCreds.ready)throw targetError('SHOPIFY_FINAL_TARGET_STORE_CHANGED');
+    assertShopifyFinalTargetLock(lock,{shop:currentCreds.shop,productId:id,publicationId:publication.id,action:SHOPIFY_PUBLIC_ACTION,approval:currentApproval});
+    await verifyShopifyFinalTargetOnline(currentCreds,lock,{request});
+    return currentCreds;
+  }
 
-  const active=await graphQLRequest(creds,`mutation JarvisActivateProduct($product: ProductUpdateInput!) {
-    productUpdate(product: $product) {
-      product { id title status }
-      userErrors { field message }
-    }
-  }`,{product:{id,status:'ACTIVE'}});
+  let active;
+  const activeCreds=await recheckFinalTarget();
+  try{
+    active=await request(activeCreds,`mutation JarvisActivateProduct($product: ProductUpdateInput!) {
+      productUpdate(product: $product) {
+        product { id title status }
+        userErrors { field message }
+      }
+    }`,{product:{id,status:'ACTIVE'}});
+  }catch(err){throw shopifyPublishUncertainError('productUpdate_ACTIVE',err)}
   const update=active.productUpdate||{};
   const updateErrors=summarizeErrors(update.userErrors);
   if(updateErrors.length)throw new Error('Ürün ACTIVE yapılamadı: '+updateErrors.map(x=>x.message).join(' | '));
-  const activeProduct=assertActiveProduct(update,id);
+  let activeProduct;
+  try{activeProduct=assertActiveProduct(update,id)}catch(err){throw shopifyPublishUncertainError('productUpdate_ACTIVE_postcondition',err)}
 
-  try{recheckApproval()}catch(e){e.uncertain=true;throw e} // ACTIVE already returned; do not auto-replay.
+  let publishCreds;
+  try{publishCreds=await recheckFinalTarget()}catch(err){throw shopifyPublishUncertainError('pre_publish_reverification',err)}
 
-  const pub=await graphQLRequest(creds,`mutation JarvisPublishProduct($id: ID!, $input: [PublicationInput!]!, $publicationId: ID!) {
-    publishablePublish(id: $id, input: $input) {
-      publishable { publishedOnPublication(publicationId: $publicationId) }
-      userErrors { field message }
-    }
-  }`,{
-    id,
-    input:[{publicationId:publication.id}],
-    publicationId:publication.id
-  });
+  let pub;
+  try{
+    pub=await request(publishCreds,`mutation JarvisPublishProduct($id: ID!, $input: [PublicationInput!]!, $publicationId: ID!) {
+      publishablePublish(id: $id, input: $input) {
+        publishable { publishedOnPublication(publicationId: $publicationId) }
+        userErrors { field message }
+      }
+    }`,{id,input:[{publicationId:publication.id}],publicationId:publication.id});
+  }catch(err){throw shopifyPublishUncertainError('publishablePublish',err)}
   const out=pub.publishablePublish||{};
   const errors=summarizeErrors(out.userErrors);
-  if(errors.length)throw new Error('Ürün yayınlanamadı: '+errors.map(x=>x.message).join(' | '));
-  const publicationVerified=assertPublishedOnPublication(out,publication);
+  if(errors.length)throw shopifyPublishUncertainError('publishablePublish_userErrors',new Error(errors.map(x=>x.message).join(' | ')));
+  let publicationVerified;
+  try{publicationVerified=assertPublishedOnPublication(out,publication)}catch(err){throw shopifyPublishUncertainError('publishablePublish_postcondition',err)}
+  const finalTarget=safeShopifyFinalTargetProof(lock);
   const dirs=commerceDirs(workspace);
   const receipt=path.join(dirs.receipts,'publish-'+safeName(activeProduct.title||id)+'-'+Date.now()+'.json');
   fs.writeFileSync(receipt,JSON.stringify({
-    engine:'JARVIS_COMMERCE_ENGINE',
-    version:ENGINE_VERSION,
-    createdAt:new Date().toISOString(),
-    shop:creds.shop,
-    apiVersion:creds.apiVersion,
-    action:'PUBLISH_PRODUCT',
-    missionId:approval.missionId,
-    approvedAt:approval.approvedAt,
-    draftCompletedAt:approval.draftCompletedAt,
-    product:activeProduct,
-    publication,
-    publicationVerified
+    engine:'JARVIS_COMMERCE_ENGINE',version:ENGINE_VERSION,createdAt:new Date().toISOString(),
+    apiVersion:publishCreds.apiVersion,action:SHOPIFY_PUBLIC_ACTION,missionId:approval.missionId,
+    approvedAt:approval.approvedAt,draftCompletedAt:approval.draftCompletedAt,
+    product:activeProduct,publication,publicationVerified,finalTarget
   },null,2),'utf8');
-  return{
-    ok:true,
-    product:activeProduct,
-    publication,
-    publicationVerified,
-    approval,
-    receipt,
-    message:'Ürün Online Store kanalında yayınlandı · '+String(activeProduct.title||id)
-  };
+  return{ok:true,product:activeProduct,publication,publicationVerified,finalTarget,approval,receipt,message:'Ürün Online Store kanalında yayınlandı · '+String(activeProduct.title||id)};
 }
 function missionTag(missionId){
   const id=String(missionId||'').trim().replace(/[^A-Za-z0-9_-]/g,'_').slice(0,90);
@@ -487,23 +519,19 @@ async function findProductByMission(workspace,missionId){
   if(!creds.ready)throw new Error('SHOPIFY_NOT_CONNECTED');
   const tag=missionTag(missionId);
   const query=`query JarvisMissionProduct($query: String!) {
-    products(first: 5, query: $query) {
-      nodes { id title handle status tags }
-    }
+    products(first: 5, query: $query) { nodes { id title handle status tags } }
   }`;
   const data=await graphQLRequest(creds,query,{query:'tag:'+tag});
   const nodes=data.products&&data.products.nodes||[];
   const product=nodes.find(x=>Array.isArray(x.tags)&&x.tags.includes(tag))||nodes[0]||null;
-  return{ok:true,tag,product};
+  if(product)product._jarvisStoreHash=privacyHash(creds.shop);
+  return{ok:true,tag,product,shopHash:privacyHash(creds.shop)};
 }
 async function createDraftForMission(workspace,product,missionId){
   const tag=missionTag(missionId);
   const existing=await findProductByMission(workspace,missionId);
   if(existing.product){
-    return{
-      ok:true,reused:true,missionTag:tag,product:existing.product,
-      message:'Shopify mission taslağı zaten mevcut · '+existing.product.title+' · '+existing.product.id
-    };
+    return{ok:true,reused:true,missionTag:tag,product:existing.product,shopHash:existing.shopHash,message:'Shopify mission taslağı zaten mevcut · '+existing.product.title+' · '+existing.product.id};
   }
   const input={...(product||{})};
   input.tags=[...new Set([...normalizeTags(input.tags),tag])];
@@ -511,16 +539,12 @@ async function createDraftForMission(workspace,product,missionId){
   return{...out,reused:false,missionTag:tag};
 }
 function parseKeyValueProduct(text){
-  const raw=String(text||'').trim();
-  if(!raw)return null;
-  const parts=raw.split('|').map(x=>x.trim()).filter(Boolean);
-  if(!parts.length)return null;
+  const raw=String(text||'').trim();if(!raw)return null;
+  const parts=raw.split('|').map(x=>x.trim()).filter(Boolean);if(!parts.length)return null;
   const product={title:parts.shift()};
   for(const part of parts){
-    const m=part.match(/^([^=]+)=(.*)$/s);
-    if(!m)continue;
-    const key=m[1].trim().toLocaleLowerCase('tr-TR');
-    const value=m[2].trim();
+    const m=part.match(/^([^=]+)=(.*)$/s);if(!m)continue;
+    const key=m[1].trim().toLocaleLowerCase('tr-TR');const value=m[2].trim();
     if(['fiyat','price'].includes(key))product.price=value;
     else if(['karşılaştırma','karsilastirma','compare','compareatprice'].includes(key))product.compareAtPrice=value;
     else if(['sku','stok kodu'].includes(key))product.sku=value;
@@ -535,22 +559,9 @@ function parseKeyValueProduct(text){
 }
 
 module.exports={
-  ENGINE_VERSION,
-  DEFAULT_API_VERSION,
-  normalizeShopDomain,
-  normalizeProduct,
-  productSetPayload,
-  parseKeyValueProduct,
-  loadConfig,
-  resolveCredentials,
-  status,
-  saveLocalDraft,
-  createDraft,
-  missionTag,
-  findProductByMission,
-  createDraftForMission,
-  resolveShopifyPublishApproval,
-  assertActiveProduct,
-  assertPublishedOnPublication,
-  publishProduct
+  ENGINE_VERSION,DEFAULT_API_VERSION,SHOPIFY_FINAL_TARGET_VERSION,SHOPIFY_PUBLIC_ACTION,
+  normalizeShopDomain,normalizeProduct,productSetPayload,parseKeyValueProduct,
+  loadConfig,resolveCredentials,status,saveLocalDraft,createDraft,missionTag,findProductByMission,createDraftForMission,
+  privacyHash,buildShopifyFinalTargetLock,assertShopifyFinalTargetLock,safeShopifyFinalTargetProof,verifyShopifyFinalTargetOnline,
+  resolveShopifyPublishApproval,assertActiveProduct,assertPublishedOnPublication,publishProduct
 };
