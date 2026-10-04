@@ -10,7 +10,9 @@ assert.ok(worker.includes("const WORKER_VERSION='2.102.0'"),'Worker 2.102.0 requ
 assert.ok(worker.includes("'approval_gate_v1'"),'approval gate capability missing');
 assert.ok(worker.includes("'shopify_publish_approval_v1'"),'Shopify publish approval capability missing');
 assert.ok(worker.includes('function approveMissionGate('),'approval helper missing');
-assert.ok(worker.includes("if(pending.length>1)throw new Error('Birden fazla görev onay bekliyor"),'ambiguous approval guard missing');
+assert.ok(worker.includes('approvalModule.resolveApprovalTarget('),'approval gate must resolve the target from user intent');
+assert.ok(worker.includes("approveMissionGate({missionId:String(a.missionId||'').trim(),approvalIntent,userText})"),'approval handler must pass actual user intent into target binding');
+assert.ok(worker.includes('approvalSurface:resolved.surface||null'),'approval proof must retain the resolved surface without storing user text');
 assert.ok(worker.includes("publishRequested=args.publish===true"),'Shopify publish intent missing');
 assert.ok(worker.includes("steps.push({name:'shopify_publish',meta:{requiresApproval:true}})"),'Shopify PUBLIC approval-gated step missing');
 assert.ok(worker.includes("steps.push({name:'youtube_publish',meta:{requiresApproval:true}})"),'YouTube PUBLIC approval-gated step missing');
@@ -110,6 +112,104 @@ assert.strictEqual(approvalIntent.classifyApprovalIntent('publish etme ama onayl
 assert.strictEqual(approvalIntent.classifyApprovalIntent("don't ever publish").reason,'negated_explicit_action');
 assert.strictEqual(approvalIntent.classifyApprovalIntent('no approve').reason,'negated_explicit_action');
 
+// v157: irreversible approval is bound to the target named by the real user turn,
+// never merely to a model-selected missionId.
+const YT='M-AAAAAAAAAAAA';
+const SHOP='M-BBBBBBBBBBBB';
+const YT2='M-CCCCCCCCCCCC';
+const BROWSER='M-DDDDDDDDDDDD';
+const twoSurfaces=[
+  {id:YT,stepName:'youtube_publish'},
+  {id:SHOP,stepName:'shopify_publish'}
+];
+
+const youtubeApproval=approvalIntent.classifyApprovalIntent('YouTube videosunu yayınla');
+assert.strictEqual(youtubeApproval.approved,true);
+assert.deepStrictEqual(youtubeApproval.surfaces,['youtube']);
+assert.strictEqual(youtubeApproval.surface,'youtube');
+
+const shopifyApproval=approvalIntent.classifyApprovalIntent('Shopify mağazasında yayınla');
+assert.deepStrictEqual(shopifyApproval.surfaces,['shopify']);
+assert.strictEqual(shopifyApproval.surface,'shopify');
+
+const browserApproval=approvalIntent.classifyApprovalIntent('form butonunu onayla');
+assert.deepStrictEqual(browserApproval.surfaces,['browser']);
+assert.strictEqual(browserApproval.surface,'browser');
+
+const genericChannelApproval=approvalIntent.classifyApprovalIntent('kanalda yayınla');
+assert.strictEqual(genericChannelApproval.approved,true);
+assert.deepStrictEqual(genericChannelApproval.surfaces,[],'generic channel wording must not silently select YouTube');
+
+const productYoutubeApproval=approvalIntent.classifyApprovalIntent("ürün videosunu YouTube'da yayınla");
+assert.deepStrictEqual(productYoutubeApproval.surfaces,['youtube'],'strong YouTube target must win over generic product/video fallback words');
+
+const conflictingApproval=approvalIntent.classifyApprovalIntent("YouTube ve Shopify'da yayınla");
+assert.deepStrictEqual(conflictingApproval.surfaces,['youtube','shopify']);
+let resolved=approvalIntent.resolveApprovalTarget({approval:conflictingApproval,pending:twoSurfaces});
+assert.strictEqual(resolved.ok,false);
+assert.strictEqual(resolved.code,'AMBIGUOUS_APPROVAL_SURFACE');
+
+resolved=approvalIntent.resolveApprovalTarget({approval:youtubeApproval,pending:twoSurfaces});
+assert.strictEqual(resolved.ok,true);
+assert.strictEqual(resolved.missionId,YT);
+assert.strictEqual(resolved.surface,'youtube');
+assert.strictEqual(resolved.reason,'explicit_surface');
+
+resolved=approvalIntent.resolveApprovalTarget({approval:youtubeApproval,pending:twoSurfaces,requestedMissionId:SHOP});
+assert.strictEqual(resolved.ok,false,'model-selected Shopify mission must not override a YouTube approval');
+assert.strictEqual(resolved.code,'REQUESTED_MISSION_MISMATCH');
+
+resolved=approvalIntent.resolveApprovalTarget({approval:youtubeApproval,pending:twoSurfaces,requestedMissionId:YT});
+assert.strictEqual(resolved.ok,true);
+assert.strictEqual(resolved.missionId,YT);
+
+const genericApproval=approvalIntent.classifyApprovalIntent('onayla');
+assert.deepStrictEqual(genericApproval.surfaces,[]);
+resolved=approvalIntent.resolveApprovalTarget({approval:genericApproval,pending:twoSurfaces});
+assert.strictEqual(resolved.ok,false);
+assert.strictEqual(resolved.code,'AMBIGUOUS_PENDING_APPROVAL');
+
+resolved=approvalIntent.resolveApprovalTarget({approval:genericApproval,pending:[{id:SHOP,stepName:'shopify_publish'}]});
+assert.strictEqual(resolved.ok,true,'generic approval must remain compatible when exactly one irreversible mission waits');
+assert.strictEqual(resolved.missionId,SHOP);
+assert.strictEqual(resolved.reason,'single_pending');
+
+resolved=approvalIntent.resolveApprovalTarget({approval:genericApproval,pending:[{id:SHOP,stepName:'shopify_publish'}],requestedMissionId:YT});
+assert.strictEqual(resolved.ok,false,'even a single pending mission must reject a conflicting model-supplied missionId');
+assert.strictEqual(resolved.code,'REQUESTED_MISSION_MISMATCH');
+
+resolved=approvalIntent.resolveApprovalTarget({approval:youtubeApproval,pending:[{id:YT,stepName:'youtube_publish'},{id:YT2,stepName:'youtube_publish'}]});
+assert.strictEqual(resolved.ok,false);
+assert.strictEqual(resolved.code,'AMBIGUOUS_SURFACE_MISSIONS');
+
+const exactIdApproval=approvalIntent.classifyApprovalIntent(`onayla ${YT2}`);
+resolved=approvalIntent.resolveApprovalTarget({approval:exactIdApproval,pending:[{id:YT,stepName:'youtube_publish'},{id:YT2,stepName:'youtube_publish'}]});
+assert.strictEqual(resolved.ok,true,'exact mission ID in the user text must disambiguate same-surface missions');
+assert.strictEqual(resolved.missionId,YT2);
+assert.strictEqual(resolved.reason,'explicit_mission_id');
+
+resolved=approvalIntent.resolveApprovalTarget({approval:exactIdApproval,pending:[{id:YT,stepName:'youtube_publish'},{id:YT2,stepName:'youtube_publish'}],requestedMissionId:YT});
+assert.strictEqual(resolved.ok,false,'model missionId must not override the exact mission ID written by the user');
+assert.strictEqual(resolved.code,'REQUESTED_MISSION_MISMATCH');
+
+const matchingIdAndSurface=approvalIntent.classifyApprovalIntent(`YouTube videosunu yayınla ${YT}`);
+resolved=approvalIntent.resolveApprovalTarget({approval:matchingIdAndSurface,pending:twoSurfaces});
+assert.strictEqual(resolved.ok,true,'exact mission ID and named surface may agree');
+assert.strictEqual(resolved.missionId,YT);
+
+const conflictingIdAndSurface=approvalIntent.classifyApprovalIntent(`YouTube videosunu yayınla ${SHOP}`);
+resolved=approvalIntent.resolveApprovalTarget({approval:conflictingIdAndSurface,pending:twoSurfaces});
+assert.strictEqual(resolved.ok,false,'an exact mission ID must not override a contradictory user-named surface');
+assert.strictEqual(resolved.code,'MISSION_SURFACE_MISMATCH');
+
+resolved=approvalIntent.resolveApprovalTarget({approval:genericChannelApproval,pending:twoSurfaces});
+assert.strictEqual(resolved.ok,false,'generic channel wording must fail closed when multiple irreversible missions wait');
+assert.strictEqual(resolved.code,'AMBIGUOUS_PENDING_APPROVAL');
+
+resolved=approvalIntent.resolveApprovalTarget({approval:youtubeApproval,pending:[{id:SHOP,stepName:'shopify_publish'},{id:BROWSER,stepName:'browser_click'}]});
+assert.strictEqual(resolved.ok,false);
+assert.strictEqual(resolved.code,'SURFACE_NOT_PENDING');
+
 assert.ok(commerce.includes('async function publishProduct(workspace,productId)'),'Shopify publish engine missing');
 assert.ok(commerce.includes("Geçersiz Shopify Product GID")&&commerce.includes("Product\\/\\d+$/.test(id)"),'Shopify publish product id validation missing');
 assert.ok(youtube.includes('async function publishPreparedDraft('),'YouTube approval-gated publish engine missing');
@@ -119,4 +219,4 @@ assert.ok(youtube.includes('YOUTUBE_PUBLISH_UNCERTAIN'),'YouTube uncertain publi
 assert.ok(worker.includes("'youtube_publish_approval_v1'"),'YouTube publish approval capability missing');
 assert.ok(!worker.includes("function:{\n        name:'youtube_publish',"),'direct autonomous YouTube publish tool must not exist');
 
-console.log('APPROVAL GATE SELFTEST PASS · PUBLIC approvals fail closed on negation, direct bypass, and YouTube auth retry');
+console.log('APPROVAL GATE SELFTEST PASS · PUBLIC approval is fail-closed on negation, direct bypass, stale auth retry, ambiguous targets, and confused-deputy mission routing');

@@ -2714,7 +2714,7 @@ function nativeAgentTools(){
         description:'Yalnızca kullanıcı bu turda açıkça onayla/yayınla dediğinde, onay bekleyen tek bir kalıcı görevin geri döndürülemez sonraki adımını onayla ve çalıştır. Genel "devam et" ifadesi onay sayılmaz.',
         parameters:{
           type:'object',
-          properties:{missionId:{type:'string',description:'Varsa tam mission kimliği; boşsa en yeni onay bekleyen görev kullanılır.'}},
+          properties:{missionId:{type:'string',description:'İsteğe bağlı mission kimliği. Kullanıcının bu turdaki açık hedefiyle uyuşmazsa reddedilir; birden fazla onay bekleyen görevde kullanıcı hedefi veya tam missionId açıkça belirtilmelidir.'}},
           additionalProperties:false
         }
       }
@@ -3279,7 +3279,7 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
       return{ok:false,message:'Geri döndürülemez görev adımı için bu turda açık onay/yayınla ifadesi gerekli.'};
     }
     try{
-      const approved=approveMissionGate({missionId:String(a.missionId||'').trim()});
+      const approved=approveMissionGate({missionId:String(a.missionId||'').trim(),approvalIntent,userText});
       const out=await runDurableMission(approved.id);
       return{ok:out.status==='completed',message:'AÇIK ONAY UYGULANDI · '+missionSummaryText(out)};
     }catch(e){
@@ -6254,28 +6254,30 @@ function requestMissionControl({missionId='',action=''}={}){
   return mission;
 }
 
-function approveMissionGate({missionId=''}={}){
+function approveMissionGate({missionId='',approvalIntent=null,userText=''}={}){
   const engine=getMissionEngine();
-  let mission=null;
-  const id=String(missionId||'').trim();
-  if(id){
-    mission=engine.loadMission(WORKSPACE,id);
-    if(!mission)throw new Error('Onaylanacak görev bulunamadı: '+id);
-  }else{
-    const pending=engine.listMissions(WORKSPACE,{limit:50}).filter(row=>{
-      if(row.status!=='waiting_dependency')return false;
-      const step=engine.currentStep(row);
-      return !!(step&&step.error&&step.error.dependency==='approval');
-    });
-    if(!pending.length)throw new Error('Açık onay bekleyen görev yok.');
-    if(pending.length>1)throw new Error('Birden fazla görev onay bekliyor; missionId ile hangisinin onaylandığını belirt.');
-    mission=pending[0];
-  }
+  const approvalModule=require('./jarvis-approval-intent');
+  const pending=engine.listMissions(WORKSPACE,{limit:50}).filter(row=>{
+    if(row.status!=='waiting_dependency')return false;
+    const pendingStep=engine.currentStep(row);
+    return !!(pendingStep&&pendingStep.error&&pendingStep.error.dependency==='approval');
+  });
+  const resolved=approvalModule.resolveApprovalTarget({
+    approval:approvalIntent||approvalModule.classifyApprovalIntent(userText),
+    pending:pending.map(row=>{
+      const pendingStep=engine.currentStep(row);
+      return{id:row.id,stepName:pendingStep&&pendingStep.name||''};
+    }),
+    requestedMissionId:String(missionId||'').trim()
+  });
+  if(!resolved.ok)throw new Error(resolved.message||'Onay hedefi güvenli biçimde çözümlenemedi.');
+  const mission=engine.loadMission(WORKSPACE,resolved.missionId);
+  if(!mission)throw new Error('Onaylanacak görev bulunamadı: '+resolved.missionId);
   const step=engine.currentStep(mission);
   if(!step||mission.status!=='waiting_dependency'||!step.error||step.error.dependency!=='approval'){
     throw new Error('Bu görev şu anda açık kullanıcı onayı beklemiyor.');
   }
-  step.meta={...(step.meta||{}),approvedAt:new Date().toISOString(),approvalKind:'explicit_user'};
+  step.meta={...(step.meta||{}),approvedAt:new Date().toISOString(),approvalKind:'explicit_user',approvalSurface:resolved.surface||null,approvalTargetReason:resolved.reason||null};
   step.status='pending';
   step.error=null;
   mission.status='queued';
