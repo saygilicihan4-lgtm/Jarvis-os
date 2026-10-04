@@ -101,4 +101,5 @@ assert.ok(missionActions.includes('const receipt=buildVerifiedReceipt(action,res
 execFileSync(process.execPath,['mobile-mission-actions-selftest.js'],{stdio:'inherit'});
 execFileSync(process.execPath,['mobile-mission-replay-selftest.js'],{stdio:'inherit'});
 execFileSync(process.execPath,['mobile-mission-receipt-selftest.js'],{stdio:'inherit'});
+execFileSync(process.execPath,['mobile-mission-trail-selftest.js'],{stdio:'inherit'});
 console.log('MISSION CONSOLE SELFTEST PASS');
