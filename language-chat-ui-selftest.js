@@ -75,6 +75,12 @@ const missionActions=require('./public/mission-actions');
   const languageBootstrap=fs.readFileSync('public/language-chat.js','utf8');
   assert.ok(languageBootstrap.includes("script.src='/mission-actions.js'"),'mobile mission action script is not loaded');
   assert.ok(languageBootstrap.includes('JarvisMissionActions.install(root)'),'mission action installer is not invoked');
+  const server=fs.readFileSync('server.js','utf8'),worker=fs.readFileSync('worker.js','utf8');
+  assert.ok(server.includes("dependency:String(step.dependency||'')"),'cloud sanitizer does not preserve approval dependency');
+  assert.ok(server.includes("if(pathname==='/api/mobile-brain'&&req.method==='POST')"),'authenticated mobile-brain relay endpoint missing');
+  assert.ok(server.includes("const mobileBrainGet=pathname.match(/^\\/api\\/mobile-brain\\/([0-9a-f-]+)$/i)"),'mobile-brain result polling endpoint missing');
+  assert.ok(worker.includes("const r=await api('/api/worker/mobile-brain-next')"),'Worker does not claim mobile-brain relay');
+  assert.ok(worker.includes('let result=await runNativeAgent(q.message,{maxRounds:4})'),'mobile action no longer passes through native agent safety tools');
 
   // Exercise the actual page's playback adapter with a fake HTMLAudioElement.
   const html=fs.readFileSync('public/index.html','utf8');
@@ -104,5 +110,5 @@ const missionActions=require('./public/mission-actions');
   assert.ok(html.includes("if(document.hidden)languageChatClient?.cancel()"));
   assert.ok(html.includes("if(!ok)languageChatClient?.cancel()"));
   assert.ok(html.includes('languageChatStarting=true'));
-  console.log('LANGUAGE CHAT UI SELFTEST PASS · speech lifecycle + v170 cloud-shaped mobile mission approve/cancel relay guards');
+  console.log('LANGUAGE CHAT UI SELFTEST PASS · speech lifecycle + v170 sanitizer→relay→Worker mobile mission action chain');
 })().catch(error=>{console.error(error);process.exitCode=1});
