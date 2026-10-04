@@ -32,6 +32,17 @@ function timestamp(value){
   const ms=Date.parse(value);
   return Number.isFinite(ms)&&new Date(ms).toISOString()===value?ms:NaN;
 }
+function approvalRequestFingerprint(value){
+  const s=String(value||'').trim();
+  return s?crypto.createHash('sha256').update(s,'utf8').digest('hex').slice(0,20):'';
+}
+function requestedFingerprintFromReason(value){
+  const reason=String(value||'');
+  if(!reason.includes('|req:'))return{present:false,valid:true,value:null};
+  const matches=[...reason.matchAll(/\|req:([^|]+)/g)].map(x=>String(x[1]||'').toLowerCase());
+  if(matches.length!==1||!/^[a-f0-9]{20}$/.test(matches[0]))return{present:true,valid:false,value:null};
+  return{present:true,valid:true,value:matches[0]};
+}
 function revokeApproval(mission,reason='revoked',nowMs=Date.now()){
   const step=currentStep(mission);
   if(!isApprovalStep(step))return;
@@ -57,6 +68,11 @@ function grantApproval(mission,{surface='',targetReason='',nowMs=Date.now()}={})
     return reject('APPROVAL_NOT_PENDING');
   }
   if(surface!==approvalSurfaceForStepName(step.name))return reject('APPROVAL_SURFACE_MISMATCH');
+  const requestedFingerprint=requestedFingerprintFromReason(targetReason);
+  if(!requestedFingerprint.valid)return reject('APPROVAL_REQUEST_FINGERPRINT_INVALID');
+  if(requestedFingerprint.present&&requestedFingerprint.value!==approvalRequestFingerprint(step.meta.approvalRequestId)){
+    return reject('APPROVAL_REQUEST_FINGERPRINT_MISMATCH');
+  }
   const requested=timestamp(step.meta.approvalRequestedAt);
   const hash=payloadHash(mission);
   if(!Number.isFinite(nowMs))return reject('APPROVAL_INVALID_CLOCK');
@@ -90,4 +106,4 @@ function validateApproval(mission,{nowMs=Date.now()}={}){
   return{ok:true,approvedAt:meta.approvedAt,payloadSha256:meta.approvalPayloadSha256};
 }
 
-module.exports={APPROVAL_TTL_MS,BINDING_VERSION,isApprovalStep,payloadHash,revokeApproval,requestApproval,grantApproval,validateApproval};
+module.exports={APPROVAL_TTL_MS,BINDING_VERSION,isApprovalStep,payloadHash,approvalRequestFingerprint,revokeApproval,requestApproval,grantApproval,validateApproval};

@@ -53,10 +53,26 @@ function detectApprovalSurfaces(intent){
   return[...new Set(fallback)];
 }
 
+function approvalRequestFingerprintState(intent){
+  const matches=[...String(intent||'').matchAll(/(?:^|[\s,.;:!?])(?:req|istek)\s+([^\s,.;:!?]+)/gi)];
+  if(!matches.length)return{present:false,invalid:false,values:[]};
+  const tokens=matches.map(x=>String(x[1]||'').toLowerCase());
+  const invalid=tokens.some(x=>!/^[a-f0-9]{20}$/.test(x));
+  const values=[...new Set(tokens.filter(x=>/^[a-f0-9]{20}$/.test(x)))];
+  return{present:true,invalid,values};
+}
+
 function classifyApprovalIntent(text){
   const intent=normalizeApprovalIntent(text);
-  if(!intent)return{approved:false,reason:'missing_explicit_action',intent,surfaces:[],surface:null};
-  if(hasNegatedApproval(intent))return{approved:false,reason:'negated_explicit_action',intent,surfaces:[],surface:null};
+  const requestState=approvalRequestFingerprintState(intent);
+  const requestFields={
+    requestFingerprintPresent:requestState.present,
+    requestFingerprintInvalid:requestState.invalid,
+    requestFingerprints:requestState.values,
+    requestFingerprint:requestState.values.length===1?requestState.values[0]:null
+  };
+  if(!intent)return{approved:false,reason:'missing_explicit_action',intent,surfaces:[],surface:null,...requestFields};
+  if(hasNegatedApproval(intent))return{approved:false,reason:'negated_explicit_action',intent,surfaces:[],surface:null,...requestFields};
   const approved=hasPositiveApproval(intent);
   const surfaces=approved?detectApprovalSurfaces(intent):[];
   return{
@@ -64,7 +80,8 @@ function classifyApprovalIntent(text){
     reason:approved?'explicit_action':'missing_explicit_action',
     intent,
     surfaces,
-    surface:surfaces.length===1?surfaces[0]:null
+    surface:surfaces.length===1?surfaces[0]:null,
+    ...requestFields
   };
 }
 
@@ -84,6 +101,13 @@ function explicitMissionIds(intent){
 function resolveApprovalTarget({approval,pending=[],requestedMissionId=''}={}){
   if(!approval||approval.approved!==true){
     return{ok:false,code:'APPROVAL_NOT_EXPLICIT',message:'Açık kullanıcı onayı bulunamadı.'};
+  }
+  if(approval.requestFingerprintInvalid===true){
+    return{ok:false,code:'INVALID_APPROVAL_REQUEST_FINGERPRINT',message:'Onay isteği kodu geçersiz; görev kartını yenileyip tekrar onaylayın.'};
+  }
+  const requestFingerprints=[...new Set(Array.isArray(approval.requestFingerprints)?approval.requestFingerprints.filter(x=>/^[a-f0-9]{20}$/i.test(String(x||''))).map(x=>String(x).toLowerCase()):[])];
+  if(requestFingerprints.length>1){
+    return{ok:false,code:'AMBIGUOUS_APPROVAL_REQUEST_FINGERPRINT',message:'Onay metni birden fazla istek kodu içeriyor; tek bir güncel kart seçilmeli.'};
   }
   const rows=(Array.isArray(pending)?pending:[])
     .map(row=>({id:String(row&&row.id||'').trim(),stepName:String(row&&row.stepName||'').trim()}))
@@ -132,11 +156,13 @@ function resolveApprovalTarget({approval,pending=[],requestedMissionId=''}={}){
   if(requested&&requested.toUpperCase()!==target.id.toUpperCase()){
     return{ok:false,code:'REQUESTED_MISSION_MISMATCH',message:'Araç tarafından seçilen missionId kullanıcının açıkça onayladığı hedefle uyuşmuyor.'};
   }
+  if(requestFingerprints.length===1)reason+='|req:'+requestFingerprints[0];
   return{
     ok:true,
     missionId:target.id,
     surface:approvalSurfaceForStepName(target.stepName),
-    reason
+    reason,
+    requestFingerprint:requestFingerprints[0]||null
   };
 }
 
@@ -144,6 +170,7 @@ module.exports={
   normalizeApprovalIntent,
   classifyApprovalIntent,
   detectApprovalSurfaces,
+  approvalRequestFingerprintState,
   approvalSurfaceForStepName,
   resolveApprovalTarget
 };
