@@ -8913,7 +8913,7 @@ async function poll(){
     if(!phoneSessionCodeShown){
       const p=await api('/api/session/create',{method:'POST'});
       phoneSessionCodeShown=true;
-      console.log('[JARVIS] TELEFON SESSION CODE: '+p.code+' (5 dakika, tek kullanim)');
+      console.log('[JARVIS] TELEFON SESSION CODE: '+p.code+' ('+p.expiresInSeconds+' saniye, tek kullanim)');
     }
     await serviceMobileTts();
     await serviceMobileLanguage();
