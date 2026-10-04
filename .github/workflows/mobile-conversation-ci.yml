@@ -21,6 +21,7 @@ jobs:
           node --check jarvis-mobile-language-conversation.js
           node --check jarvis-tts-locale-router.js
           node --check public/mobile-language-chat.js
+          node --check public/mobile-speech-evidence-status.js
           node --check mobile-language-conversation-selftest.js
           node --check mobile-capture-lifecycle-selftest.js
           node --check mobile-explicit-locale-selftest.js
@@ -28,6 +29,7 @@ jobs:
           node --check mobile-runtime-catalog-selftest.js
           node --check mobile-ambiguity-candidates-selftest.js
           node --check mobile-stt-capture-evidence-selftest.js
+          node --check mobile-speech-evidence-status-selftest.js
       - name: Mobile multilingual conversation safety
         run: |
           node mobile-language-conversation-selftest.js
@@ -37,6 +39,7 @@ jobs:
           node mobile-runtime-catalog-selftest.js
           node mobile-ambiguity-candidates-selftest.js
           node mobile-stt-capture-evidence-selftest.js
+          node mobile-speech-evidence-status-selftest.js
           node mobile-tts-relay-selftest.js
           node language-conversation-selftest.js
           node language-chat-ui-selftest.js
