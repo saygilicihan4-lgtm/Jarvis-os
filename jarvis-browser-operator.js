@@ -7,6 +7,7 @@ const finalTarget=require('./jarvis-final-target-verification');
 
 const BROWSER_OPERATOR_VERSION='1.1';
 const BROWSER_AUTOFILL_VERSION='1.0';
+const BROWSER_SURFACE_VERSION='1.0';
 // Runtime rollout compatibility for Worker 2.102.0 sync probe only: BROWSER_OPERATOR_VERSION='1.0'
 const DEFAULT_PORT=9222;
 const DEFAULT_ALLOWED_HOSTS=['*'];
@@ -40,16 +41,11 @@ function profileDir(workspace){
   fs.mkdirSync(dir,{recursive:true});
   return dir;
 }
-function allowedHosts(){
-  return DEFAULT_ALLOWED_HOSTS.slice();
-}
+function allowedHosts(){return DEFAULT_ALLOWED_HOSTS.slice()}
 function hostAllowed(hostname){
   const host=String(hostname||'').trim();
   if(!host)return false;
-  try{
-    const u=new URL('https://'+host);
-    return !!u.hostname;
-  }catch(_){return false}
+  try{const u=new URL('https://'+host);return !!u.hostname}catch(_){return false}
 }
 function safeUrl(raw){
   const u=new URL(String(raw||'').trim());
@@ -62,13 +58,7 @@ function autofillProfilePath(workspace){
   return path.join(root,'.jarvis-memory','browser-autofill-profile.json');
 }
 function normalizeAutofillLabel(value){
-  return String(value||'')
-    .toLocaleLowerCase('tr-TR')
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g,'')
-    .replace(/[^a-z0-9çğıöşü]+/gi,' ')
-    .replace(/\s+/g,' ')
-    .trim();
+  return String(value||'').toLocaleLowerCase('tr-TR').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9çğıöşü]+/gi,' ').replace(/\s+/g,' ').trim();
 }
 function classifyAutofillField(label){
   const raw=String(label||'').trim();
@@ -131,14 +121,10 @@ function forgetAutofillField(workspace,key){
   const canonical=String(key||'').trim();
   if(!AUTOFILL_FIELD_KEYS.includes(canonical))return{removed:false,key:canonical};
   const profile=readAutofillProfile(workspace),existed=!!profile.fields[canonical];
-  delete profile.fields[canonical];
-  writeAutofillProfile(workspace,profile);
-  return{removed:existed,key:canonical};
+  delete profile.fields[canonical];writeAutofillProfile(workspace,profile);return{removed:existed,key:canonical};
 }
 function clearAutofillProfile(workspace){
-  const file=autofillProfilePath(workspace);
-  try{if(fs.existsSync(file))fs.unlinkSync(file)}catch(_){}
-  return{cleared:true};
+  const file=autofillProfilePath(workspace);try{if(fs.existsSync(file))fs.unlinkSync(file)}catch(_){}return{cleared:true};
 }
 function autofillProfileSummary(workspace){
   const profile=readAutofillProfile(workspace),keys=Object.keys(profile.fields).filter(x=>AUTOFILL_FIELD_KEYS.includes(x));
@@ -165,7 +151,7 @@ async function status(workspace,port=DEFAULT_PORT){
   try{version=await getJson('http://127.0.0.1:'+port+'/json/version')}catch(_){}
   if(version){try{tabs=await getJson('http://127.0.0.1:'+port+'/json/list')}catch(_){}}
   const browser=findBrowser(process.env.JARVIS_BROWSER||'');
-  return{ok:true,version:BROWSER_OPERATOR_VERSION,running:!!version,browser:version&&version.Browser||browser&&browser.name||null,executable:browser&&browser.exe||null,port,profile:profileDir(workspace),tabs:Array.isArray(tabs)?tabs.filter(x=>x&&x.type==='page').map(x=>({id:x.id,title:x.title,url:x.url})).slice(0,20):[],allowedHosts:allowedHosts(),anyHttpSite:true,safeAutofill:autofillProfileSummary(workspace)};
+  return{ok:true,version:BROWSER_OPERATOR_VERSION,running:!!version,browser:version&&version.Browser||browser&&browser.name||null,executable:browser&&browser.exe||null,port,profile:profileDir(workspace),tabs:Array.isArray(tabs)?tabs.filter(x=>x&&x.type==='page').map(x=>({id:x.id,title:x.title,url:x.url})).slice(0,20):[],allowedHosts:allowedHosts(),anyHttpSite:true,safeAutofill:autofillProfileSummary(workspace),deepSurfaces:{version:BROWSER_SURFACE_VERSION,openShadowDom:true,sameOriginFrames:true,crossOriginFrames:false}};
 }
 async function waitReady(port=DEFAULT_PORT,timeoutMs=12000){
   const started=Date.now();
@@ -178,22 +164,19 @@ async function waitReady(port=DEFAULT_PORT,timeoutMs=12000){
 async function start(workspace,{preferred='',port=DEFAULT_PORT,url='https://www.youtube.com/'}={}){
   if(process.platform!=='win32')throw new Error('JARVIS Browser Operator currently requires Windows');
   const current=await status(workspace,port),target=safeUrl(url);
-  if(current.running){
-    const page=await activePage(port);runCdpPowerShell(page.webSocketDebuggerUrl,'Page.navigate',{url:target});await new Promise(r=>setTimeout(r,500));return{...current,opened:target,reused:true};
-  }
+  if(current.running){const page=await activePage(port);runCdpPowerShell(page.webSocketDebuggerUrl,'Page.navigate',{url:target});await new Promise(r=>setTimeout(r,500));return{...current,opened:target,reused:true}}
   const browser=findBrowser(preferred||process.env.JARVIS_BROWSER||'');
   if(!browser)throw new Error('Chrome, Edge veya Opera GX bulunamadı');
   const profile=profileDir(workspace);
   const args=['--remote-debugging-port='+port,'--remote-debugging-address=127.0.0.1','--user-data-dir='+profile,'--no-first-run','--no-default-browser-check','--disable-features=TranslateUI',target];
   childProcess.spawn(browser.exe,args,{detached:true,windowsHide:true,stdio:'ignore'}).unref();
   const v=await waitReady(port);
-  return{ok:true,version:BROWSER_OPERATOR_VERSION,running:true,browser:v.Browser||browser.name,executable:browser.exe,port,profile,opened:target,reused:false,allowedHosts:allowedHosts(),anyHttpSite:true,safeAutofill:autofillProfileSummary(workspace)};
+  return{ok:true,version:BROWSER_OPERATOR_VERSION,running:true,browser:v.Browser||browser.name,executable:browser.exe,port,profile,opened:target,reused:false,allowedHosts:allowedHosts(),anyHttpSite:true,safeAutofill:autofillProfileSummary(workspace),deepSurfaces:{version:BROWSER_SURFACE_VERSION,openShadowDom:true,sameOriginFrames:true,crossOriginFrames:false}};
 }
 function psQuote(x){return String(x).replace(/'/g,"''")}
 async function activePage(port=DEFAULT_PORT){
   const tabs=await getJson('http://127.0.0.1:'+port+'/json/list',2500),pages=Array.isArray(tabs)?tabs.filter(x=>x&&x.type==='page'&&x.webSocketDebuggerUrl):[];
-  if(!pages.length)throw new Error('No browser page available');
-  return pages[0];
+  if(!pages.length)throw new Error('No browser page available');return pages[0];
 }
 function runCdpPowerShell(wsUrl,method,params={},timeoutMs=12000){
   if(process.platform!=='win32')throw new Error('CDP bridge requires Windows PowerShell');
@@ -209,8 +192,32 @@ async function evaluate(workspace,expression,{port=DEFAULT_PORT}={}){
   if(result.exceptionDetails)throw new Error('Browser script failed');
   return result.result&&Object.prototype.hasOwnProperty.call(result.result,'value')?result.result.value:null;
 }
+function deepSurfacePrelude(){
+  return [
+    "function JARVIS_SURFACE(){",
+    "const roots=[document],seen=new Set([document]);let sameOriginFrames=0,openShadowRoots=0;",
+    "for(let i=0;i<roots.length&&i<64;i++){const root=roots[i];let nodes=[];try{nodes=[...root.querySelectorAll('*')].slice(0,5000)}catch(_){nodes=[]}for(const el of nodes){",
+    "try{if(el.shadowRoot&&!seen.has(el.shadowRoot)){seen.add(el.shadowRoot);roots.push(el.shadowRoot);openShadowRoots++}}catch(_){}",
+    "if(el.tagName==='IFRAME'){try{const d=el.contentDocument;if(d&&!seen.has(d)){seen.add(d);roots.push(d);sameOriginFrames++}}catch(_){}}",
+    "}}",
+    "function query(sel){const out=[],dedupe=new Set();for(const root of roots){let rows=[];try{rows=[...root.querySelectorAll(sel)]}catch(_){rows=[]}for(const el of rows){if(!dedupe.has(el)){dedupe.add(el);out.push(el)}}}return out}",
+    "function labelFor(el){const id=el&&el.id||'';if(!id)return'';let root=null;try{root=el.getRootNode?el.getRootNode():el.ownerDocument}catch(_){};if(!root||!root.querySelector)return'';try{const x=root.querySelector('label[for=\\\"'+CSS.escape(id)+'\\\"]');return x?String(x.innerText||x.textContent||''):''}catch(_){return''}}",
+    "function eventFor(el,name){try{const W=el.ownerDocument&&el.ownerDocument.defaultView;const E=W&&W.Event||Event;el.dispatchEvent(new E(name,{bubbles:true}))}catch(_){try{el.dispatchEvent(new Event(name,{bubbles:true}))}catch(__){}}}",
+    "return{roots,query,labelFor,eventFor,sameOriginFrames,openShadowRoots}",
+    "}"
+  ].join(';');
+}
 async function pageSnapshot(workspace,{port=DEFAULT_PORT}={}){
-  const expression="(()=>{const p=location.pathname.split('/').filter(Boolean);const ci=p.indexOf('channel'),si=p.indexOf('store');const accountEl=[...document.querySelectorAll('[aria-label]')].find(e=>/@/.test(e.getAttribute('aria-label')||'')&&/(account|hesap|google)/i.test(e.getAttribute('aria-label')||''));return{title:document.title,url:location.href,targetEvidence:{account:accountEl?accountEl.getAttribute('aria-label'):'',target:ci>=0?(p[ci+1]||''):si>=0?(p[si+1]||''):''},text:(document.body&&document.body.innerText||'').replace(/\\s+/g,' ').slice(0,12000),forms:[...document.querySelectorAll('form')].slice(0,12).map(f=>({action:f.action,controls:[...f.querySelectorAll('input,textarea,select,button')].slice(0,60).map(el=>({tag:el.tagName.toLowerCase(),type:el.type||'',name:el.name||'',id:el.id||'',autocomplete:el.getAttribute('autocomplete')||'',placeholder:el.placeholder||'',aria:el.getAttribute('aria-label')||'',text:(el.tagName==='BUTTON'||el.type==='submit'?String(el.innerText||el.value||''):'').slice(0,120)}))}))}})()";
+  const expression=[
+    "(()=>{",deepSurfacePrelude(),"const surface=JARVIS_SURFACE();",
+    "const p=location.pathname.split('/').filter(Boolean);const ci=p.indexOf('channel'),si=p.indexOf('store');",
+    "const accountEl=surface.query('[aria-label]').find(e=>/@/.test(e.getAttribute('aria-label')||'')&&/(account|hesap|google)/i.test(e.getAttribute('aria-label')||''));",
+    "const controls=f=>surface.query('input,textarea,select,button').filter(el=>{try{return f.contains(el)||el.getRootNode&&el.getRootNode()===f}catch(_){return false}}).slice(0,60).map(el=>({tag:el.tagName.toLowerCase(),type:el.type||'',name:el.name||'',id:el.id||'',autocomplete:el.getAttribute('autocomplete')||'',placeholder:el.placeholder||'',aria:el.getAttribute('aria-label')||'',text:(el.tagName==='BUTTON'||el.type==='submit'?String(el.innerText||el.value||''):'').slice(0,120)}));",
+    "const forms=surface.query('form').slice(0,12).map(f=>({action:f.action,controls:controls(f)}));",
+    "const texts=[];for(const root of surface.roots){try{const t=root.body?root.body.innerText:root.textContent;if(t)texts.push(String(t))}catch(_){}}",
+    "return{title:document.title,url:location.href,targetEvidence:{account:accountEl?accountEl.getAttribute('aria-label'):'',target:ci>=0?(p[ci+1]||''):si>=0?(p[si+1]||''):''},surfaceEvidence:{sameOriginFrames:surface.sameOriginFrames,openShadowRoots:surface.openShadowRoots,crossOriginFrames:false},text:texts.join(' ').replace(/\\s+/g,' ').slice(0,12000),forms}",
+    "})()"
+  ].join('');
   const value=await evaluate(workspace,expression,{port});return{ok:true,...value};
 }
 async function navigate(workspace,url,{port=DEFAULT_PORT}={}){
@@ -221,8 +228,7 @@ async function navigate(workspace,url,{port=DEFAULT_PORT}={}){
 }
 async function clickByText(workspace,text,{port=DEFAULT_PORT}={}){
   const needle=String(text||'').trim();if(!needle)throw new Error('text required');
-  const encoded=JSON.stringify(needle),selector=JSON.stringify('button,a,[role="button"],input[type="submit"]');
-  const expr=["(()=>{","const n="+encoded+".toLocaleLowerCase('tr-TR');","const els=[...document.querySelectorAll("+selector+")];","const label=x=>String(x.innerText||x.value||x.getAttribute('aria-label')||'').trim().toLocaleLowerCase('tr-TR');","const e=els.find(x=>label(x)===n)||els.find(x=>label(x).includes(n));","if(!e)return{ok:false};","e.scrollIntoView({block:'center'});e.click();","return{ok:true,tag:e.tagName,text:String(e.innerText||e.value||'').slice(0,160)}","})()"].join('');
+  const expr=["(()=>{",deepSurfacePrelude(),"const surface=JARVIS_SURFACE();","const n="+JSON.stringify(needle)+".toLocaleLowerCase('tr-TR');","const els=surface.query('button,a,[role=\\\"button\\\"],input[type=\\\"submit\\\"]');","const label=x=>String(x.innerText||x.value||x.getAttribute('aria-label')||'').trim().toLocaleLowerCase('tr-TR');","const e=els.find(x=>label(x)===n)||els.find(x=>label(x).includes(n));","if(!e)return{ok:false,surfaceEvidence:{sameOriginFrames:surface.sameOriginFrames,openShadowRoots:surface.openShadowRoots}};","e.scrollIntoView({block:'center'});e.click();","return{ok:true,tag:e.tagName,text:String(e.innerText||e.value||'').slice(0,160),surfaceEvidence:{sameOriginFrames:surface.sameOriginFrames,openShadowRoots:surface.openShadowRoots}}","})()"].join('');
   return evaluate(workspace,expr,{port});
 }
 async function verifiedFinalClick(workspace,text,contract,{port=DEFAULT_PORT,receipt=null}={}){
@@ -234,15 +240,15 @@ async function verifiedFinalClick(workspace,text,contract,{port=DEFAULT_PORT,rec
 function browserAutofillExpression(values){
   const safe={};for(const key of AUTOFILL_FIELD_KEYS){const value=String(values&&values[key]||'').trim().slice(0,320);if(value)safe[key]=value}
   return[
-    "(()=>{",
+    "(()=>{",deepSurfacePrelude(),"const surface=JARVIS_SURFACE();",
     "const profile="+JSON.stringify(safe)+";",
     "const blocked=/(?:password|passcode|parola|şifre|sifre|pin\\b|otp|one\\s*time|tek\\s*kullanımlık|doğrulama\\s*kodu|dogrulama\\s*kodu|verification\\s*code|token|secret|api\\s*key|cvv|cvc|card\\s*number|kart\\s*numarası|kart\\s*numarasi|iban|bank\\s*account|banka\\s*hesap|ssn|social\\s*security|tc\\s*kimlik|tckn|passport|pasaport|birth|birthday|doğum|dogum)/i;",
     "const norm=x=>String(x||'').toLocaleLowerCase('tr-TR').normalize('NFKD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9çğıöşü]+/gi,' ').replace(/\\s+/g,' ').trim();",
-    "function labels(el){let l='';const id=el.id||'';if(id){const x=document.querySelector('label[for=\\\"'+CSS.escape(id)+'\\\"]');if(x)l=x.innerText||''}return[el.getAttribute('autocomplete')||'',el.getAttribute('aria-label')||'',el.getAttribute('placeholder')||'',el.getAttribute('name')||'',id,l].join(' ')}",
+    "function labels(el){return[el.getAttribute('autocomplete')||'',el.getAttribute('aria-label')||'',el.getAttribute('placeholder')||'',el.getAttribute('name')||'',el.id||'',surface.labelFor(el)].join(' ')}",
     "function kind(raw){if(!raw||blocked.test(raw))return null;const n=norm(raw),t=' '+n+' ';if(/\\b(?:e ?mail|email|eposta|e posta)\\b/i.test(t))return'email';if(/\\b(?:telefon|phone|mobile|gsm|cep telefonu|tel)\\b/i.test(t))return'phone';if(/\\b(?:organization title|organisation title|job title|position|role|title|ünvan|unvan|pozisyon|görev|gorev)\\b/i.test(t))return'job_title';if(/\\b(?:company|company name|organization|organisation|business|şirket|sirket|firma|kurum)\\b/i.test(t))return'company';if(/\\b(?:website|web site|web sitesi|homepage|personal site)\\b/i.test(t)||/\\burl\\b/i.test(t))return'website';if(/\\b(?:city|şehir|sehir|address level2)\\b/i.test(t))return'city';if(/\\b(?:country|country name|ülke|ulke)\\b/i.test(t))return'country';if(/\\b(?:last name|surname|family name|soyad|soy isim|soyisim)\\b/i.test(t))return'last_name';if(/\\b(?:full name|name surname|ad soyad|ad ve soyad|isim soyisim|isim soyad)\\b/i.test(t))return'full_name';if(/\\b(?:first name|given name|adiniz|adınız|isim)\\b/i.test(t)&&!/\\b(?:soyad|last name|surname)\\b/i.test(t))return'first_name';if(['ad','isim','name','your name'].includes(n))return'full_name';return null}",
-    "const controls=[...document.querySelectorAll('input:not([type=\\\"hidden\\\"]),textarea,select,[contenteditable=\\\"true\\\"]')];const filled=[],skipped=[];",
-    "for(const el of controls){const type=String(el.type||'').toLowerCase();if(['password','file','submit','button','reset','checkbox','radio'].includes(type)||el.disabled||el.readOnly)continue;const meta=labels(el);if(blocked.test(meta))continue;const k=kind(meta),val=k&&profile[k];if(!k||!val)continue;const existing=el.isContentEditable?String(el.textContent||'').trim():String(el.value||'').trim();if(existing){skipped.push(k);continue}try{if(el.tagName==='SELECT'){const opts=[...el.options];const n=norm(val);const opt=opts.find(o=>norm(o.value)===n||norm(o.textContent)===n)||opts.find(o=>norm(o.textContent).includes(n)||n.includes(norm(o.textContent)));if(!opt)continue;el.value=opt.value}else if(el.isContentEditable){el.textContent=val}else{const d=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el),'value');if(d&&d.set)d.set.call(el,val);else el.value=val}el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));filled.push(k)}catch(_){}}",
-    "return{ok:true,filled:[...new Set(filled)],skipped:[...new Set(skipped)]}",
+    "const controls=surface.query('input:not([type=\\\"hidden\\\"]),textarea,select,[contenteditable=\\\"true\\\"]');const filled=[],skipped=[];",
+    "for(const el of controls){const type=String(el.type||'').toLowerCase();if(['password','file','submit','button','reset','checkbox','radio'].includes(type)||el.disabled||el.readOnly)continue;const meta=labels(el);if(blocked.test(meta))continue;const k=kind(meta),val=k&&profile[k];if(!k||!val)continue;const existing=el.isContentEditable?String(el.textContent||'').trim():String(el.value||'').trim();if(existing){skipped.push(k);continue}try{if(el.tagName==='SELECT'){const opts=[...el.options];const n=norm(val);const opt=opts.find(o=>norm(o.value)===n||norm(o.textContent)===n)||opts.find(o=>norm(o.textContent).includes(n)||n.includes(norm(o.textContent)));if(!opt)continue;el.value=opt.value}else if(el.isContentEditable){el.textContent=val}else{const d=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el),'value');if(d&&d.set)d.set.call(el,val);else el.value=val}surface.eventFor(el,'input');surface.eventFor(el,'change');filled.push(k)}catch(_){}}",
+    "return{ok:true,filled:[...new Set(filled)],skipped:[...new Set(skipped)],surfaceEvidence:{sameOriginFrames:surface.sameOriginFrames,openShadowRoots:surface.openShadowRoots}}",
     "})()"
   ].join('');
 }
@@ -254,13 +260,12 @@ async function autofillSafeProfile(workspace,{port=DEFAULT_PORT}={}){
 }
 async function setField(workspace,label,value,{port=DEFAULT_PORT,learn=true,autofill=true}={}){
   const key=String(label||'').trim(),val=String(value??'');if(!key)throw new Error('label required');
-  const controlSelector=JSON.stringify('input:not([type="hidden"]),textarea,select,[contenteditable="true"]');
-  const expr=["(()=>{","const key="+JSON.stringify(key)+".toLocaleLowerCase('tr-TR');","const val="+JSON.stringify(val)+";","const all=[...document.querySelectorAll("+controlSelector+")];","function labelText(el){","const a=el.getAttribute('aria-label')||'';const p=el.getAttribute('placeholder')||'';const n=el.getAttribute('name')||'';const ac=el.getAttribute('autocomplete')||'';const id=el.id||'';let l='';","if(id){const x=document.querySelector('label[for=\\\"'+CSS.escape(id)+'\\\"]');if(x)l=x.innerText||''}","return[ac,a,p,n,l].join(' ').toLocaleLowerCase('tr-TR')","}","const el=all.find(x=>labelText(x).includes(key));if(!el)return{ok:false};","el.scrollIntoView({block:'center'});el.focus();","if(el.tagName==='SELECT'){const opt=[...el.options].find(o=>String(o.textContent||o.value).toLocaleLowerCase('tr-TR').includes(val.toLocaleLowerCase('tr-TR')));if(!opt)return{ok:false,reason:'option-not-found'};el.value=opt.value}","else if(el.isContentEditable){el.textContent=val}","else{const d=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el),'value');if(d&&d.set)d.set.call(el,val);else el.value=val}","el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));","return{ok:true,tag:el.tagName,name:el.name||'',id:el.id||''}","})()"].join('');
+  const expr=["(()=>{",deepSurfacePrelude(),"const surface=JARVIS_SURFACE();","const key="+JSON.stringify(key)+".toLocaleLowerCase('tr-TR');","const val="+JSON.stringify(val)+";","const all=surface.query('input:not([type=\\\"hidden\\\"]),textarea,select,[contenteditable=\\\"true\\\"]');","function labelText(el){return[el.getAttribute('autocomplete')||'',el.getAttribute('aria-label')||'',el.getAttribute('placeholder')||'',el.getAttribute('name')||'',surface.labelFor(el)].join(' ').toLocaleLowerCase('tr-TR')}","const el=all.find(x=>labelText(x).includes(key));if(!el)return{ok:false,surfaceEvidence:{sameOriginFrames:surface.sameOriginFrames,openShadowRoots:surface.openShadowRoots}};","el.scrollIntoView({block:'center'});el.focus();","if(el.tagName==='SELECT'){const opt=[...el.options].find(o=>String(o.textContent||o.value).toLocaleLowerCase('tr-TR').includes(val.toLocaleLowerCase('tr-TR')));if(!opt)return{ok:false,reason:'option-not-found'};el.value=opt.value}","else if(el.isContentEditable){el.textContent=val}","else{const d=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el),'value');if(d&&d.set)d.set.call(el,val);else el.value=val}","surface.eventFor(el,'input');surface.eventFor(el,'change');","return{ok:true,tag:el.tagName,name:el.name||'',id:el.id||'',surfaceEvidence:{sameOriginFrames:surface.sameOriginFrames,openShadowRoots:surface.openShadowRoots}}","})()"].join('');
   const result=await evaluate(workspace,expr,{port});
   if(!result||result.ok!==true)return result;
   const learned=learn?learnAutofillValue(workspace,key,val):{stored:false,key:null};
   const auto=autofill?await autofillSafeProfile(workspace,{port}):{ok:true,filled:[],skipped:[]};
-  return{...result,learned:{stored:!!learned.stored,key:learned.key||null},autofill:{filled:Array.isArray(auto&&auto.filled)?auto.filled:[],skipped:Array.isArray(auto&&auto.skipped)?auto.skipped:[]}};
+  return{...result,learned:{stored:!!learned.stored,key:learned.key||null},autofill:{filled:Array.isArray(auto&&auto.filled)?auto.filled:[],skipped:Array.isArray(auto&&auto.skipped)?auto.skipped:[],surfaceEvidence:auto&&auto.surfaceEvidence||null}};
 }
 async function uploadFile(workspace,selector,filePath,{port=DEFAULT_PORT}={}){
   const full=path.resolve(filePath);if(!fs.existsSync(full)||!fs.statSync(full).isFile())throw new Error('Upload file not found');
@@ -270,4 +275,4 @@ async function uploadFile(workspace,selector,filePath,{port=DEFAULT_PORT}={}){
   if(!query.nodeId)throw new Error('File input not found');
   runCdpPowerShell(page.webSocketDebuggerUrl,'DOM.setFileInputFiles',{nodeId:query.nodeId,files:[full]});return{ok:true,file:full};
 }
-module.exports={BROWSER_OPERATOR_VERSION,BROWSER_AUTOFILL_VERSION,DEFAULT_PORT,AUTOFILL_PROFILE_VERSION,AUTOFILL_FIELD_KEYS,findBrowser,allowedHosts,hostAllowed,safeUrl,profileDir,status,start,pageSnapshot,navigate,evaluate,clickByText,verifiedFinalClick,setField,uploadFile,autofillProfilePath,normalizeAutofillLabel,classifyAutofillField,readAutofillProfile,learnAutofillValue,forgetAutofillField,clearAutofillProfile,autofillProfileSummary,autofillSafeProfile};
+module.exports={BROWSER_OPERATOR_VERSION,BROWSER_AUTOFILL_VERSION,BROWSER_SURFACE_VERSION,DEFAULT_PORT,AUTOFILL_PROFILE_VERSION,AUTOFILL_FIELD_KEYS,findBrowser,allowedHosts,hostAllowed,safeUrl,profileDir,status,start,pageSnapshot,navigate,evaluate,deepSurfacePrelude,clickByText,verifiedFinalClick,setField,uploadFile,autofillProfilePath,normalizeAutofillLabel,classifyAutofillField,readAutofillProfile,learnAutofillValue,forgetAutofillField,clearAutofillProfile,autofillProfileSummary,autofillSafeProfile};
