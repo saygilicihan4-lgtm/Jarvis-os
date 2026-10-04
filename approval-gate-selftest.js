@@ -35,6 +35,21 @@ assert.ok(directShopifyBlock.includes('Shopify PUBLIC doğrudan yerel komut yolu
 assert.ok(!directShopifyBlock.includes('publishProduct('),'direct local Shopify command must never call publishProduct');
 assert.ok(worker.includes("getCommerceEngine().publishProduct(WORKSPACE,productId)"),'approval-gated Shopify mission publish path must remain');
 
+const youtubePublishStart=worker.indexOf("if(step.name==='youtube_publish')");
+const youtubePublishEnd=worker.indexOf("if(step.name==='dev_patch_prepare')",youtubePublishStart);
+assert.ok(youtubePublishStart>=0&&youtubePublishEnd>youtubePublishStart,'YouTube PUBLIC mission boundary missing');
+const youtubePublishBlock=worker.slice(youtubePublishStart,youtubePublishEnd);
+assert.ok(youtubePublishBlock.includes('publishPreparedDraft('),'YouTube PUBLIC publish call missing');
+const youtubeAuthStart=youtubePublishBlock.indexOf("if(out.code==='YOUTUBE_AUTH_REQUIRED'){");
+const youtubeUncertainStart=youtubePublishBlock.indexOf("if(out.code==='YOUTUBE_PUBLISH_UNCERTAIN'){",youtubeAuthStart);
+assert.ok(youtubeAuthStart>=0&&youtubeUncertainStart>youtubeAuthStart,'YouTube PUBLIC auth retry boundary missing');
+const youtubeAuthBlock=youtubePublishBlock.slice(youtubeAuthStart,youtubeUncertainStart);
+assert.ok(youtubeAuthBlock.includes("approvalRevokedReason:'youtube_auth_required'"),'YouTube auth failure must record approval revocation reason');
+assert.ok(youtubeAuthBlock.includes('delete step.meta.approvedAt;'),'YouTube auth failure must revoke approvedAt');
+assert.ok(youtubeAuthBlock.includes('delete step.meta.approvalKind;'),'YouTube auth failure must revoke approvalKind');
+assert.ok(/delete step\.meta\.approvedAt;[\s\S]*dependency\s*:\s*['\"]youtube_auth['\"]/.test(youtubeAuthBlock),'approval proof must be revoked before auth dependency is persisted');
+assert.strictEqual((worker.match(/approvalRevokedReason:'youtube_auth_required'/g)||[]).length,1,'approval revocation must be scoped only to the PUBLIC publish auth retry branch');
+
 const positiveCases=[
   ['shopify','mağazada yayınla'],
   ['shopify','ürünü yayınla'],
@@ -104,4 +119,4 @@ assert.ok(youtube.includes('YOUTUBE_PUBLISH_UNCERTAIN'),'YouTube uncertain publi
 assert.ok(worker.includes("'youtube_publish_approval_v1'"),'YouTube publish approval capability missing');
 assert.ok(!worker.includes("function:{\n        name:'youtube_publish',"),'direct autonomous YouTube publish tool must not exist');
 
-console.log('APPROVAL GATE SELFTEST PASS · negated approval fails closed and direct local Shopify PUBLIC bypass is blocked');
+console.log('APPROVAL GATE SELFTEST PASS · PUBLIC approvals fail closed on negation, direct bypass, and YouTube auth retry');
