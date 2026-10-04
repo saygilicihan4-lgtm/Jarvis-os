@@ -214,6 +214,29 @@ const yt=require('./jarvis-youtube-studio');
   assert.strictEqual(publishClicks,beforeInvalidProofClicks,'payload change during browser awaits must stop Publish');
 
 
+  // Switching channels after draft preparation must fail closed even with valid explicit approval.
+  const switchedId='M-SWITCHED-123456';
+  publishSucceeded=false;
+  staleSuccessMarker=false;
+  targetChannel='channel-a';
+  const switchedDraft=await yt.prepareDraft(fakeOperator,tmp,{
+    file:'creator-video/demo.mp4',
+    title:'Switched Channel Test',
+    description:'Açıklama',
+    missionId:switchedId
+  });
+  assert.strictEqual(switchedDraft.ok,true);
+  const switchedApprovedAt=new Date().toISOString();
+  saveMissionApproval(switchedId,switchedApprovedAt);
+  targetChannel='channel-b';
+  const beforeSwitchedClicks=publishClicks;
+  const switched=await yt.publishPreparedDraft(fakeOperator,tmp,{missionId:switchedId,approvedAt:switchedApprovedAt});
+  assert.strictEqual(switched.ok,false);
+  assert.strictEqual(switched.code,'YOUTUBE_FINAL_TARGET_MISMATCH');
+  assert.strictEqual(publishClicks,beforeSwitchedClicks,'channel switch must stop before Publish click');
+  assert.strictEqual(yt.readReceipt(tmp,switchedId).state,'draft_prepared');
+  targetChannel='channel-test';
+
   // Stale success text visible before the click must never be accepted as evidence for this publish attempt.
   const staleId='M-STALE-123456789';
   publishSucceeded=false;
