@@ -448,23 +448,60 @@ function persistentSnapshot(){
   const payload={...snapshotPayload(),schemaVersion:3};
   return{...payload,signature:snapshotSignature(payload)};
 }
+function snapshotRecord(x){return !!x&&typeof x==='object'&&!Array.isArray(x)}
 function verifySnapshot(s){
-  if(!s||s.schemaVersion!==3||!Number.isSafeInteger(s.revision)||s.revision<0||!Array.isArray(s.tasks)||typeof s.accountPolicies!=='object'||typeof s.devices!=='object')throw new Error('invalid signed snapshot');
+  if(!s||s.schemaVersion!==3||!Number.isSafeInteger(s.revision)||s.revision<0||!Array.isArray(s.tasks)||!snapshotRecord(s.accountPolicies)||!snapshotRecord(s.devices))throw new Error('invalid signed snapshot');
+  for(const [id,d] of Object.entries(s.devices)){
+    if(!/^[A-Za-z0-9_.-]{1,80}$/.test(id)||!snapshotRecord(d)||typeof d.approved!=='boolean')throw new Error('invalid signed snapshot device');
+    if(d.name!==undefined&&typeof d.name!=='string')throw new Error('invalid signed snapshot device');
+    if(d.roles!==undefined&&(!Array.isArray(d.roles)||d.roles.some(x=>typeof x!=='string')))throw new Error('invalid signed snapshot device');
+    if(d.allowedCapabilities!==undefined&&(!Array.isArray(d.allowedCapabilities)||d.allowedCapabilities.some(x=>typeof x!=='string')))throw new Error('invalid signed snapshot device');
+  }
   const {signature,...payload}=s,got=Buffer.from(String(signature||''),'hex'),expected=Buffer.from(snapshotSignature(payload),'hex');
   if(got.length!==expected.length||!crypto.timingSafeEqual(got,expected))throw new Error('snapshot signature check failed');
   return payload;
 }
-function restoreSnapshot(s){
+function restoredDevices(p,{actorDeviceId=null,bootstrapActor=false}={}){
+  const next=Object.fromEntries(Object.entries(state.workers.devices).map(([id,w])=>[id,{...w}]));
+  for(const [id,d] of Object.entries(p.devices)){
+    const hasLive=Object.prototype.hasOwnProperty.call(state.workers.devices,id);
+    if(hasLive){
+      const live=state.workers.devices[id];
+      // Authorization state is live authority. A backup may restore metadata,
+      // never turn an explicit denial back into approval or widen live scope.
+      next[id]={...live,name:String(d.name||live.name||id).slice(0,100)};
+      continue;
+    }
+    const actorApproved=bootstrapActor&&id===actorDeviceId;
+    next[id]={
+      name:String(d.name||id).slice(0,100),version:null,lastSeen:null,capabilities:[],memory:null,
+      approved:actorApproved,
+      roles:Array.isArray(d.roles)?d.roles.slice(0,3):[],
+      allowedCapabilities:Array.isArray(d.allowedCapabilities)?d.allowedCapabilities.slice(0,50):[],
+      authMode:actorApproved?'signed':'restored-unapproved',
+      credentialIssuedAt:actorApproved?now():null
+    };
+  }
+  if(bootstrapActor&&actorDeviceId&&!next[actorDeviceId]){
+    next[actorDeviceId]={name:actorDeviceId,version:null,lastSeen:null,capabilities:[],memory:null,approved:true,roles:['DEVELOPER'],allowedCapabilities:[],authMode:'signed',credentialIssuedAt:now()};
+  }
+  return next;
+}
+function restoreSnapshot(s,options={}){
   const p=verifySnapshot(s);
   if(p.revision<state.stateRevision)throw new Error('stale snapshot refused');
-  state.tasks=p.tasks.slice(-500);
-  state.audit=Array.isArray(p.audit)?p.audit.slice(-300):[];
-  state.accountPolicies=p.accountPolicies||{};
+  // Build every replacement before mutating live state. A malformed but signed
+  // backup must fail atomically instead of leaving a half-restored authority set.
+  const nextTasks=p.tasks.slice(-500);
+  const nextAudit=Array.isArray(p.audit)?p.audit.slice(-300):[];
+  const nextPolicies={...p.accountPolicies};
+  const nextDevices=restoredDevices(p,options);
+  state.tasks=nextTasks;
+  state.audit=nextAudit;
+  state.accountPolicies=nextPolicies;
+  state.workers.devices=nextDevices;
   state.stateRevision=p.revision;
-  for(const [id,d] of Object.entries(p.devices)){
-    const live=state.workers.devices[id]||{};
-    state.workers.devices[id]={...live,name:d.name||live.name||id,approved:!!d.approved,roles:Array.isArray(d.roles)?d.roles:[],allowedCapabilities:Array.isArray(d.allowedCapabilities)?d.allowedCapabilities:[]};
-  }
+  return p;
 }
 function sanitizeMissionTelemetry(raw){
   if(!raw||typeof raw!=='object')return null;
@@ -1037,18 +1074,26 @@ const server=http.createServer((req,res)=>{
     return json(res,200,persistentSnapshot());
   }
   if(pathname==='/api/state/restore'&&req.method==='POST'){
+    // STATE_RESTORE_AUTHORITY_V162: snapshot integrity is not requester identity.
+    // Re-check the signed actor after the request body is consumed so expiry or
+    // revocation during upload fails closed.
     return readJson(req,(err,d)=>{
       if(err)return json(res,400,{error:'bad json'});
-      const deviceId=String(req.headers['x-jarvis-device-id']||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80);
-      const live=deviceWorker(deviceId),cloudEmpty=state.stateRevision===0&&state.tasks.length===0&&Object.keys(state.accountPolicies).length===0&&!Object.values(state.workers.devices).some(x=>x.approved);
+      const rawDeviceId=String(req.headers['x-jarvis-device-id']||'');
+      const deviceId=rawDeviceId.replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80);
+      const ident=workerIdentity(req);
+      if(!ident||ident.exp<=Date.now()||!deviceId||rawDeviceId!==deviceId||ident.deviceId!==deviceId)return json(res,401,{error:'signed device identity required'});
+      const live=deviceWorker(deviceId);
+      const dataEmpty=state.stateRevision===0&&state.tasks.length===0&&Object.keys(state.accountPolicies).length===0;
+      const claimBootstrap=Number.isFinite(ident.bootstrapUntil)&&Date.now()<ident.bootstrapUntil;
+      const envBootstrap=BOOTSTRAP_DEVICE_ID===deviceId&&Date.now()<BOOTSTRAP_DEVICE_EXP;
+      const bootstrapApproved=!live&&dataEmpty&&(claimBootstrap||envBootstrap);
+      if(live&&live.approved!==true)return json(res,403,{error:'device revoked or not approved'});
+      if(!live&&!bootstrapApproved)return json(res,403,{error:'approved signed device required'});
+      if(!dataEmpty)return json(res,409,{error:'cloud state not empty; restore refused'});
       try{
-        const verified=verifySnapshot(d),snapDevice=verified.devices&&verified.devices[deviceId];
-        const normalApproved=!!(live&&live.approved);
-        const bootstrapApproved=cloudEmpty&&!!(snapDevice&&snapDevice.approved);
-        if(!normalApproved&&!bootstrapApproved)return json(res,403,{error:'approved device required'});
-        if(!cloudEmpty)return json(res,409,{error:'cloud state not empty; restore refused'});
-        restoreSnapshot(d);
-        log('STATE_RESTORE',deviceId+(bootstrapApproved?' signed bootstrap restore':' local snapshot restore'));
+        restoreSnapshot(d,{actorDeviceId:deviceId,bootstrapActor:bootstrapApproved});
+        log('STATE_RESTORE',deviceId+(bootstrapApproved?' external bootstrap restore':' approved device restore'));
         touchState();
         return json(res,200,{ok:true,bootstrap:bootstrapApproved,tasks:state.tasks.length,policies:Object.keys(state.accountPolicies).length,revision:state.stateRevision});
       }catch(e){return json(res,400,{error:e.message})}
