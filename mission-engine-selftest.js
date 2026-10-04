@@ -3,6 +3,7 @@ const fs=require('fs');
 const os=require('os');
 const path=require('path');
 const m=require('./jarvis-mission-engine');
+const approvalIntent=require('./jarvis-approval-intent');
 
 assert.strictEqual(m.MISSION_ENGINE_VERSION,'1.0');
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'jarvis-mission-'));
@@ -88,6 +89,74 @@ for(const secret of ['QUERY_SECRET_123','Cihan Secret Name','owner@example.test'
   assert.ok(!reviewSummary.label.includes(secret),'approval review leaked '+secret);
 }
 assert.ok(reviewSummary.label.length<=160);
+
+// v169: a visible REQ fingerprint is an optional freshness lock. When present,
+// it must select exactly the request the user reviewed; stale or malformed cards
+// never grant approval. Manual explicit approval without a REQ remains compatible.
+const visibleReq=(reviewSummary.label.match(/REQ ([a-f0-9]{10})/i)||[])[1];
+assert.ok(visibleReq,'visible approval request fingerprint missing');
+let parsed=approvalIntent.classifyApprovalIntent('onayla '+review.id+' req '+visibleReq);
+assert.strictEqual(parsed.approved,true);
+assert.strictEqual(parsed.requestFingerprint,visibleReq);
+let resolved=approvalIntent.resolveApprovalTarget({
+  approval:parsed,
+  pending:[{id:review.id,stepName:'browser_click'}],
+  requestedMissionId:review.id
+});
+assert.strictEqual(resolved.ok,true);
+assert.strictEqual(resolved.reason,'explicit_mission_id|req:'+visibleReq);
+
+parsed=approvalIntent.classifyApprovalIntent('onayla '+review.id+' req xyz');
+resolved=approvalIntent.resolveApprovalTarget({approval:parsed,pending:[{id:review.id,stepName:'browser_click'}],requestedMissionId:review.id});
+assert.strictEqual(resolved.ok,false);
+assert.strictEqual(resolved.code,'INVALID_APPROVAL_REQUEST_FINGERPRINT');
+
+parsed=approvalIntent.classifyApprovalIntent('onayla '+review.id+' req '+visibleReq+' req 0123456789');
+resolved=approvalIntent.resolveApprovalTarget({approval:parsed,pending:[{id:review.id,stepName:'browser_click'}],requestedMissionId:review.id});
+assert.strictEqual(resolved.ok,false);
+assert.strictEqual(resolved.code,'AMBIGUOUS_APPROVAL_REQUEST_FINGERPRINT');
+
+let stale=m.createMission(tmp,{
+  type:'browser_form',
+  label:'Stale approval card',
+  input:{url:'https://example.test/form',finalClick:'Submit',fields:[{label:'Name',value:'Safe fixture'}]},
+  steps:[{name:'browser_click',meta:{requiresApproval:true}}]
+});
+m.startStep(tmp,stale.id);
+stale=m.failStep(tmp,stale.id,{code:'EXPLICIT_APPROVAL_REQUIRED',message:'approval required',retryable:true,dependency:'approval'});
+const staleOldTag=(m.summarizeMission(stale).label.match(/REQ ([a-f0-9]{10})/i)||[])[1];
+const staleOldRequest=m.currentStep(stale).meta.approvalRequestId;
+// Refresh the request while preserving the same mission/payload. A phone card
+// rendered before this refresh must no longer be able to authorize the step.
+stale=m.failStep(tmp,stale.id,{code:'EXPLICIT_APPROVAL_REQUIRED',message:'approval refreshed',retryable:true,dependency:'approval'});
+const staleNewRequest=m.currentStep(stale).meta.approvalRequestId;
+const staleNewTag=(m.summarizeMission(stale).label.match(/REQ ([a-f0-9]{10})/i)||[])[1];
+assert.notStrictEqual(staleOldRequest,staleNewRequest);
+assert.notStrictEqual(staleOldTag,staleNewTag);
+assert.throws(
+  ()=>m.approveStep(tmp,stale.id,{surface:'browser',targetReason:'explicit_mission_id|req:'+staleOldTag}),
+  e=>e&&e.code==='APPROVAL_REQUEST_FINGERPRINT_MISMATCH'
+);
+stale=m.loadMission(tmp,stale.id);
+assert.strictEqual(stale.status,'waiting_dependency');
+assert.strictEqual(m.currentStep(stale).status,'blocked');
+assert.strictEqual(!!m.currentStep(stale).meta.approvedAt,false);
+stale=m.approveStep(tmp,stale.id,{surface:'browser',targetReason:'explicit_mission_id|req:'+staleNewTag});
+assert.strictEqual(stale.status,'queued');
+assert.strictEqual(m.currentStep(stale).status,'pending');
+assert.ok(m.currentStep(stale).meta.approvedAt);
+
+let manual=m.createMission(tmp,{
+  type:'browser_form',
+  label:'Manual approval compatibility',
+  input:{url:'https://example.test/manual',finalClick:'Submit',fields:[]},
+  steps:[{name:'browser_click',meta:{requiresApproval:true}}]
+});
+m.startStep(tmp,manual.id);
+manual=m.failStep(tmp,manual.id,{code:'EXPLICIT_APPROVAL_REQUIRED',message:'approval required',retryable:true,dependency:'approval'});
+manual=m.approveStep(tmp,manual.id,{surface:'browser',targetReason:'explicit_mission_id'});
+assert.strictEqual(manual.status,'queued');
+assert.ok(m.currentStep(manual).meta.approvedAt,'manual explicit approval without REQ must remain compatible');
 
 // Shopify review binds the human-readable product target plus only a short store
 // fingerprint. The raw store/account/token never needs to enter cloud telemetry.
