@@ -4,7 +4,7 @@ const {createOutput}=require('./jarvis-language-turn-output');
 const {createRouter}=require('./jarvis-tts-locale-router');
 const triCore=require('./jarvis-tri-core-personality');
 const relay=require('./jarvis-mobile-language-relay');
-const VERSION='1.2';
+const VERSION='1.3';
 
 function createEngine({output=createOutput(),voiceRouter=createRouter()}={}){
   async function turn({text,locale,inputSource='browser-speech',history=[]}={},options={}){
@@ -27,10 +27,13 @@ function createEngine({output=createOutput(),voiceRouter=createRouter()}={}){
     const selected=triCore.select(clean);
     const generated=await output.generate({text:clean,context,speech,history:relay.sanitizeHistory(history),core:selected,signal:options.signal});
     if(generated.locale!==normalized)throw new Error('reply_locale_mismatch');
-    // Security boundary: role/consultation metadata comes from the deterministic
-    // router, never from model/output supplied metadata.
+    const completedConsult=Array.isArray(generated.consultationCompleted)?generated.consultationCompleted.filter(id=>(selected.consultWith||[]).includes(id)).slice(0,2):[];
+    const consultationDegraded=completedConsult.length<(selected.consultWith||[]).length;
+    // Security boundary: primary role and requested consultation metadata come
+    // from the deterministic router. Completed consultation IDs are filtered
+    // against that allow-list and never grant independent authority.
     return{ok:true,state:'reply-ready',reply:generated.reply,locale:normalized,ttsLocale,localeResolution,voice:voice.voice,provider:'edge-tts',inputSource:String(inputSource),
-      core:selected.core,role:selected.role,coreSource:selected.source,consultWith:[...(selected.consultWith||[])],authority:'shared_guardrail_only',
+      core:selected.core,role:selected.role,coreSource:selected.source,consultWith:completedConsult,consultationRequested:[...(selected.consultWith||[])],consultationDegraded,authority:'shared_guardrail_only',
       learning:false,languageEvidence:'client-requested-locale',speechEvidence:evidenceLevel,deviceE2eVerified:false};
   }
   return{turn};
