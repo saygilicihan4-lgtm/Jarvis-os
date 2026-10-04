@@ -30,3 +30,7 @@ v192 tarayıcı katmanı önceki tam operatörü `jarvis-browser-operator-v191-b
 ## Sınır
 
 Bu CI tab-instance/TOCTOU davranışını ve statik sözleşmeleri doğrular. Gerçek Windows tarayıcı + gerçek YouTube Studio/Shopify Admin kabul testi, PUBLIC işlem yapmadan ayrıca fiziksel acceptance aşamasında kanıtlanmalıdır.
+
+## Current-base doğrulama notu
+
+PR, iPhone Dynamic Viewport v192 main'e girdikten sonra yeni bir head commit ile yeniden tetiklendi. Bu sayede exact-head pull-request CI, güncel `main` ile oluşturulan sentetik merge üzerinde tekrar çalışır; yalnız eski base üzerindeki yeşil sonuçlara güvenilmez.
