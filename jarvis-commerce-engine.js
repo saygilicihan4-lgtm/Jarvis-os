@@ -3,7 +3,7 @@ const path=require('path');
 const childProcess=require('child_process');
 const https=require('https');
 
-const ENGINE_VERSION='1.0';
+const ENGINE_VERSION='1.1';
 const DEFAULT_API_VERSION='2026-10';
 
 function ensureDir(dir){fs.mkdirSync(dir,{recursive:true});return dir}
@@ -323,9 +323,42 @@ async function findOnlineStorePublication(creds){
   const nodes=data.publications&&data.publications.nodes||[];
   return nodes.find(x=>/online store/i.test(String(x.name||'')))||null;
 }
+function artifactContainsProductId(value,id,depth=0){
+  if(depth>8||value===null||value===undefined)return false;
+  if(typeof value==='string')return value===id;
+  if(Array.isArray(value))return value.some(x=>artifactContainsProductId(x,id,depth+1));
+  if(typeof value==='object')return Object.values(value).some(x=>artifactContainsProductId(x,id,depth+1));
+  return false;
+}
+function resolvePublishApproval(workspace,productId,nowMs=Date.now()){
+  const id=String(productId||'').trim();
+  if(!/^gid:\/\/shopify\/Product\/\d+$/.test(id))throw new Error('Geçersiz Shopify Product GID');
+  const missionEngine=require('./jarvis-mission-engine');
+  const candidates=[];
+  for(const mission of missionEngine.listMissions(workspace,{limit:100})){
+    const step=missionEngine.currentStep(mission);
+    if(!step||step.name!=='shopify_publish')continue;
+    if(!['queued','running'].includes(String(mission.status||'')))continue;
+    if(!['pending','running'].includes(String(step.status||'')))continue;
+    const draftStep=(mission.steps||[]).find(s=>s&&s.status==='completed'&&s.name!=='shopify_publish'&&artifactContainsProductId(s.artifact,id));
+    if(!draftStep)continue;
+    candidates.push({mission,step,draftStep});
+  }
+  if(candidates.length!==1)throw new Error('SHOPIFY_EXPLICIT_APPROVAL_REQUIRED');
+  const {mission,step,draftStep}=candidates[0];
+  if(String(step.meta&&step.meta.approvalKind||'')!=='explicit_user')throw new Error('SHOPIFY_EXPLICIT_APPROVAL_REQUIRED');
+  const approvedAt=String(step.meta&&step.meta.approvedAt||'').trim();
+  if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(approvedAt))throw new Error('SHOPIFY_EXPLICIT_APPROVAL_REQUIRED');
+  const approvedMs=Date.parse(approvedAt);
+  const draftMs=Date.parse(String(draftStep.completedAt||''));
+  if(!Number.isFinite(approvedMs)||!Number.isFinite(draftMs)||approvedMs<draftMs)throw new Error('SHOPIFY_APPROVAL_PREDATES_DRAFT');
+  if(!Number.isFinite(nowMs)||approvedMs>nowMs+5000)throw new Error('SHOPIFY_APPROVAL_IN_FUTURE');
+  return{missionId:mission.id,approvedAt,draftCompletedAt:draftStep.completedAt,approvalKind:'explicit_user'};
+}
 async function publishProduct(workspace,productId){
   const id=String(productId||'').trim();
   if(!/^gid:\/\/shopify\/Product\/\d+$/.test(id))throw new Error('Geçersiz Shopify Product GID');
+  const approval=resolvePublishApproval(workspace,id);
   const creds=resolveCredentials(workspace);
   if(!creds.ready)throw new Error('SHOPIFY_NOT_CONNECTED');
 
@@ -358,6 +391,7 @@ async function publishProduct(workspace,productId){
     ok:true,
     product:update.product,
     publication,
+    approval,
     message:'Ürün Online Store kanalında yayınlandı · '+String(update.product&&update.product.title||id)
   };
 }
@@ -433,5 +467,6 @@ module.exports={
   missionTag,
   findProductByMission,
   createDraftForMission,
+  resolvePublishApproval,
   publishProduct
 };
