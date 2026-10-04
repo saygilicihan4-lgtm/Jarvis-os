@@ -3274,8 +3274,8 @@ async function executeNativeAgentTool(name,args,{userText=''}={}){
     const out=await runDurableMission(latest.id);
     return{ok:out.status==='completed',message:missionSummaryText(out)};
   }else if(n==='approve_mission_action'){
-    const intent=String(userText||'').toLocaleLowerCase('tr-TR');
-    if(!/(?:onayla|onay ver|yayınla|yayinla|publish|mağazada yayınla|magazada yayinla)/i.test(intent)){
+    const approvalIntent=require('./jarvis-approval-intent').classifyApprovalIntent(userText);
+    if(!approvalIntent.approved){
       return{ok:false,message:'Geri döndürülemez görev adımı için bu turda açık onay/yayınla ifadesi gerekli.'};
     }
     try{
