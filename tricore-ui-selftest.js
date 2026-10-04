@@ -68,10 +68,14 @@ assert(!/\bapprove\s*[:=(]/i.test(routerSource),'presentation router must not ex
 assert(!/\bfetch\s*\(/.test(personalitySource),'personality selector must stay local/pure');
 assert(!personalitySource.includes('localStorage')&&!personalitySource.includes('sessionStorage'),'personality selector must not persist user text');
 assert(outputSource.includes("require('./jarvis-tri-core-personality')"),'local conversation output must use tri-core personality contract');
-assert(desktopConversationSource.includes('tri_core_contract_mismatch'),'desktop conversation must fail closed on role contract mismatch');
-assert(mobileConversationSource.includes('tri_core_contract_mismatch'),'mobile conversation must fail closed on role contract mismatch');
+assert(desktopConversationSource.includes('const selected=triCore.select(capture.text)'),'desktop conversation must select deterministic tri-core metadata before generation');
+assert(mobileConversationSource.includes('const selected=triCore.select(clean)'),'mobile conversation must select deterministic tri-core metadata before generation');
+assert(desktopConversationSource.includes('core:selected.core')&&desktopConversationSource.includes('consultWith:[...(selected.consultWith||[])]'),'desktop result must pin role metadata to deterministic router');
+assert(mobileConversationSource.includes('core:selected.core')&&mobileConversationSource.includes('consultWith:[...(selected.consultWith||[])]'),'mobile result must pin role metadata to deterministic router');
 assert(desktopConversationSource.includes("authority:'shared_guardrail_only'"),'desktop result authority marker missing');
 assert(mobileConversationSource.includes("authority:'shared_guardrail_only'"),'mobile result authority marker missing');
+assert(!/core:generated\.core/.test(desktopConversationSource),'model/output metadata must not choose desktop authority role');
+assert(!/core:generated\.core/.test(mobileConversationSource),'model/output metadata must not choose mobile authority role');
 
 assert(loaderSource.includes("script.src='/tri-core.js'"),'tri-core browser loader missing');
 assert(loaderSource.includes("script.src='/tri-core-webgl.js'"),'tri-core WebGL loader missing');
