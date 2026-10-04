@@ -10,6 +10,11 @@
   const POLL_MS=350;
   const TIMEOUT_MS=30000;
   const PROOF_TIMEOUT_MS=18000;
+  const RECEIPT_STORAGE_KEY='jarvisMissionReceiptsV1';
+  const RECEIPT_LIMIT=8;
+  const RECEIPT_STORAGE_MAX=4096;
+  // Display evidence only; never consulted by an authorization path.
+  const verifiedProofs=new WeakMap();
 
   function reqFromText(text){
     const match=String(text||'').match(REQ_RE);
@@ -175,13 +180,27 @@
     const deadline=clock()+Math.max(1000,Number(timeoutMs)||PROOF_TIMEOUT_MS);
     while(clock()<deadline){
       const state=await jsonFetch('/api/state',{},fetchImpl);
+      const pc=state&&state.workers&&state.workers.pc;
+      const missions=pc&&pc.missions;
+      if(!pc||pc.online!==true||!missions||missions.ok!==true||!Array.isArray(missions.queue)||
+        !Number.isInteger(missions.openCount)||missions.openCount<missions.queue.length||
+        missions.queue.some(m=>!m||!cleanMissionId(m.id)||typeof m.label!=='string'||
+          !['queued','running','paused','waiting_dependency','needs_verification'].includes(m.status))||
+        new Set(missions.queue.map(m=>cleanMissionId(m.id))).size!==missions.queue.length){
+        throw new Error('mission_action_state_invalid');
+      }
       const queue=missionQueueFromState(state);
       const sameId=queue.filter(m=>cleanMissionId(m&&m.id)===missionId);
+      if(sameId.some(m=>m.status==='waiting_dependency'&&(!m.step||m.step.status!=='blocked'||
+        !String(m.step.dependency||m.step.error&&m.step.error.dependency||'')||
+        (approvalDependency(m)&&!reqFromText(m.label)))))throw new Error('mission_action_state_invalid');
+      // A truncated queue cannot prove that an absent mission was closed.
+      const complete=missions.openCount===queue.length;
       if(op==='cancel'){
-        if(sameId.length===0)return{ok:true,state:'mission_closed'};
+        if(sameId.length===0&&complete)return{ok:true,state:'mission_closed'};
       }else{
         const oldApproval=sameId.filter(m=>approvalDependency(m)&&reqFromText(m&&m.label)===fingerprint);
-        if(oldApproval.length===0)return{ok:true,state:'approval_request_consumed',missionPresent:sameId.length>0};
+        if(oldApproval.length===0&&(sameId.length===1||complete))return{ok:true,state:'approval_request_consumed',missionPresent:sameId.length>0};
       }
       await pause(POLL_MS);
     }
@@ -193,8 +212,70 @@
     const message=commandFor(op,resolved);
     const result=await runMobileBrain(message,{fetchImpl,wait,now,timeoutMs:relayTimeoutMs});
     if(!workerReceiptMatches(result,op))throw new Error('mission_action_worker_receipt_missing');
-    const proof=await waitForActionProof(op,id,req,{fetchImpl,wait,now,timeoutMs:proofTimeoutMs});
+    const proof=Object.freeze(await waitForActionProof(op,id,req,{fetchImpl,wait,now,timeoutMs:proofTimeoutMs}));
+    verifiedProofs.set(proof,{action:op,id,req});
     return{ok:true,result,proof};
+  }
+  function sanitizeVerifiedReceipt(value){
+    if(!value||typeof value!=='object'||Array.isArray(value)||value.v!==1)return null;
+    const {action,mission,req,proof,state,at}=value;
+    if([action,mission,req,proof,state,at].some(x=>typeof x!=='string'))return null;
+    if(!['approve','cancel'].includes(action)||!/^[A-Z0-9-]{8}$/.test(mission)||!/^[a-f0-9]{8}$/.test(req))return null;
+    if(proof!=='worker_receipt+durable_state')return null;
+    if(action==='approve'&&state!=='approval_request_consumed')return null;
+    if(action==='cancel'&&state!=='mission_closed')return null;
+    if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(at)||!Number.isFinite(Date.parse(at)))return null;
+    if(new Date(at).toISOString()!==at)return null;
+    return{v:1,action,mission,req,proof,state,at};
+  }
+  function buildVerifiedReceipt(action,resolved,proof,now=Date.now()){
+    const op=String(action||'').trim().toLowerCase();
+    const id=cleanMissionId(resolved&&resolved.id),req=String(resolved&&resolved.req||'').toLowerCase();
+    const proofState=String(proof&&proof.state||'');
+    const binding=verifiedProofs.get(proof);
+    const stamp=Number(typeof now==='function'?now():now);
+    if(!id||!/^[a-f0-9]{20}$/.test(req)||!Number.isFinite(stamp))throw new Error('mission_receipt_target_invalid');
+    const expected=op==='approve'?'approval_request_consumed':op==='cancel'?'mission_closed':'';
+    if(!expected||proofState!==expected||!binding||binding.action!==op||binding.id!==id||binding.req!==req)throw new Error('mission_receipt_proof_invalid');
+    const receipt=sanitizeVerifiedReceipt({
+      v:1,action:op,mission:id.slice(-8),req:req.slice(-8),proof:'worker_receipt+durable_state',state:proofState,at:new Date(stamp).toISOString()
+    });
+    if(!receipt)throw new Error('mission_receipt_invalid');
+    return receipt;
+  }
+  function verifiedReceiptText(receipt){
+    const clean=sanitizeVerifiedReceipt(receipt);
+    if(!clean)return'';
+    const action=clean.action==='approve'?'ONAY':'İPTAL';
+    const proof=clean.action==='approve'?'REQ TÜKETİLDİ':'GÖREV KAPANDI';
+    return'DOĞRULANDI · '+action+' · M…'+clean.mission+' · REQ …'+clean.req+' · WORKER + DURUM · '+proof+' · '+clean.at;
+  }
+  function readVerifiedReceipts(targetRoot=root){
+    try{
+      const storage=targetRoot&&targetRoot.sessionStorage;
+      if(!storage||typeof storage.getItem!=='function')return[];
+      const raw=storage.getItem(RECEIPT_STORAGE_KEY)||'[]';
+      if(typeof raw!=='string'||raw.length>RECEIPT_STORAGE_MAX)throw new Error('receipt_storage_invalid');
+      const rows=JSON.parse(raw);
+      if(!Array.isArray(rows))throw new Error('receipt_storage_invalid');
+      const clean=rows.slice(-RECEIPT_LIMIT).map(sanitizeVerifiedReceipt).filter(Boolean);
+      // Remove unknown fields and malformed records from storage as well as output.
+      if(JSON.stringify(clean)!==raw)storage.setItem(RECEIPT_STORAGE_KEY,JSON.stringify(clean));
+      return clean;
+    }catch(_){
+      try{targetRoot.sessionStorage.removeItem(RECEIPT_STORAGE_KEY)}catch(__){}
+      return[];
+    }
+  }
+  function storeVerifiedReceipt(receipt,targetRoot=root){
+    try{
+      const clean=sanitizeVerifiedReceipt(receipt),storage=targetRoot&&targetRoot.sessionStorage;
+      if(!clean||!storage||typeof storage.setItem!=='function')return false;
+      const rows=readVerifiedReceipts(targetRoot);
+      rows.push(clean);
+      storage.setItem(RECEIPT_STORAGE_KEY,JSON.stringify(rows.slice(-RECEIPT_LIMIT)));
+      return true;
+    }catch(_){return false}
   }
   function setStatus(text,targetRoot=root){
     const el=targetRoot&&targetRoot.document&&targetRoot.document.getElementById('consoleStatus');
@@ -212,14 +293,16 @@
       const fetchImpl=targetRoot&&targetRoot.fetch&&targetRoot.fetch.bind(targetRoot);
       const resolved=await resolveFreshMission(req,{missionId,label,fetchImpl});
       setStatus('MOBILE MISSION · WORKER RECEIPT + STATE PROOF BEKLENİYOR',targetRoot);
-      await runActionWithProof(action,resolved,{fetchImpl});
-      setStatus(action==='approve'
-        ?'MOBILE MISSION · ONAY DOĞRULANDI · ESKİ REQ TÜKETİLDİ'
-        :'MOBILE MISSION · İPTAL DOĞRULANDI · GÖREV AÇIK KUYRUKTAN ÇIKTI',targetRoot);
-      if(targetRoot&&typeof targetRoot.load==='function')await targetRoot.load().catch(()=>{});
+      const verified=await runActionWithProof(action,resolved,{fetchImpl});
+      const receipt=buildVerifiedReceipt(action,resolved,verified.proof);
+      storeVerifiedReceipt(receipt,targetRoot);
+      if(targetRoot&&typeof targetRoot.load==='function')try{await targetRoot.load()}catch(_){}
+      setStatus('MOBILE MISSION · '+verifiedReceiptText(receipt),targetRoot);
       return true;
     }catch(error){
-      setStatus('MOBILE MISSION · FAIL CLOSED · '+String(error&&error.message||error).slice(0,120),targetRoot);
+      const code=String(error&&error.message||'');
+      const safeCode=/^mission_[a-z_]{1,64}$/.test(code)?code:'mission_action_unconfirmed';
+      setStatus('MOBILE MISSION · FAIL CLOSED · '+safeCode,targetRoot);
       return false;
     }finally{buttons.forEach(button=>button.disabled=false)}
   }
@@ -265,8 +348,10 @@
 
   if(root&&root.document&&/iPhone|iPad|iPod|Android/i.test(String(root.navigator&&root.navigator.userAgent||'')))root.setTimeout(()=>autoInstall(root,0),0);
   return{
-    REQ_RE,MISSION_ID_RE,reqFromText,cleanMissionId,normalizedLabel,labelForMission,renderedCardLabel,approvalDependency,activeMission,missionQueueFromState,
+    REQ_RE,MISSION_ID_RE,RECEIPT_STORAGE_KEY,RECEIPT_LIMIT,RECEIPT_STORAGE_MAX,reqFromText,cleanMissionId,normalizedLabel,labelForMission,renderedCardLabel,approvalDependency,activeMission,missionQueueFromState,
     resolveMissionFromQueue,bindMissionCardHtml,missionIdFromSearch,missionIdFromLocation,resolveFreshMission,focusMissionById,scheduleMissionFocus,
-    commandFor,runMobileBrain,collectResultText,workerReceiptMatches,waitForActionProof,runActionWithProof,act,enhance,install,autoInstall
+    commandFor,runMobileBrain,collectResultText,workerReceiptMatches,waitForActionProof,runActionWithProof,
+    sanitizeVerifiedReceipt,buildVerifiedReceipt,verifiedReceiptText,readVerifiedReceipts,storeVerifiedReceipt,
+    act,enhance,install,autoInstall
   };
 });

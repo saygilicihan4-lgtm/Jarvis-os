@@ -69,7 +69,7 @@ const missionActions=require('./public/mission-actions');
   assert.ok(installRoot.localMissionCard(approvalMission).includes('data-jarvis-mission-id="'+missionId+'"'));
 
   const fakeResponse=(ok,status,payload)=>({ok,status,json:async()=>payload});
-  const stateOf=queue=>({workers:{pc:{missions:{queue}}}});
+  const stateOf=queue=>({workers:{pc:{online:true,missions:{ok:true,openCount:queue.length,queue}}}});
   const stateCalls=[];
   const fresh=await missionActions.resolveFreshMission(req,{
     fetchImpl:async(url,options)=>{
