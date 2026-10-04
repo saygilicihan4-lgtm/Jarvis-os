@@ -2920,6 +2920,14 @@ function waitMobileLanguagePoll(signal,ms=450){
     if(signal?.aborted)onAbort();
   });
 }
+function applyMobileTriCoreCognitive(value){
+  try{
+    const source=value&&typeof value==='object'?value:{},allowed=new Set(['jarvis','nova','orion']),phaseState={idle:'idle',listening:'listening',thinking:'thinking',consulting:'thinking',synthesizing:'thinking',waiting:'waiting',speaking:'speaking',error:'error'};
+    const core=allowed.has(source.primary)?source.primary:null,consultWith=[];
+    for(const id of [...(Array.isArray(source.consulting)?source.consulting:[]),...(Array.isArray(source.completed)?source.completed:[])])if(allowed.has(id)&&id!==core&&!consultWith.includes(id)&&consultWith.length<2)consultWith.push(id);
+    document.dispatchEvent(new CustomEvent('jarvis:conversation-state',{detail:{state:phaseState[source.phase]||'waiting',core,consultWith,authority:'shared_guardrail_only'}}));
+  }catch(_){}
+}
 async function mobileLanguageConversationRequest(data,signal){
   let id='',finished=false;
   try{
@@ -2930,6 +2938,7 @@ async function mobileLanguageConversationRequest(data,signal){
       signal?.throwIfAborted();
       await waitMobileLanguagePoll(signal,450);
       const state=await api('/api/mobile-language/'+encodeURIComponent(id),{cache:'no-store',signal});
+      if(state.cognitive)applyMobileTriCoreCognitive(state.cognitive);
       if(state.status==='ready'&&state.result){finished=true;return state.result}
       if(state.status==='failed'||state.status==='cancelled')throw new Error(state.error||('mobile_language_'+state.status));
     }

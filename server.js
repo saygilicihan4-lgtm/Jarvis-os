@@ -992,9 +992,10 @@ const server=http.createServer((req,res)=>{
   if(mobileLanguageGet&&req.method==='GET'){
     const r=state.mobileLanguageRequests.get(mobileLanguageGet[1]);
     if(!r)return json(res,404,{error:'mobile language request not found'});
-    if(r.status==='ready')return json(res,200,{ok:true,status:'ready',result:r.result,learning:false});
-    if(r.status==='failed')return json(res,200,{ok:false,status:'failed',error:r.error||'mobile language failed',learning:false});
-    return json(res,200,{ok:true,status:r.status,learning:false});
+    const cognitive=mobileLanguageRelay.getCognitive(r);
+    if(r.status==='ready')return json(res,200,{ok:true,status:'ready',result:r.result,cognitive,learning:false});
+    if(r.status==='failed')return json(res,200,{ok:false,status:'failed',error:r.error||'mobile language failed',cognitive,learning:false});
+    return json(res,200,{ok:true,status:r.status,cognitive,learning:false});
   }
 
   if(pathname==='/api/mobile-brain'&&req.method==='POST'){
@@ -1335,6 +1336,17 @@ const server=http.createServer((req,res)=>{
     const claimed=mobileLanguageRelay.claim(next,deviceId);
     if(!claimed.ok)return json(res,409,{error:claimed.reason});
     return json(res,200,{ok:true,request:{id:next.id,text:next.text,locale:next.locale,inputSource:next.inputSource,history:next.history}});
+  }
+  if(pathname==='/api/worker/mobile-language-state'&&req.method==='POST'){
+    return readJson(req,(err,d)=>{
+      if(err)return json(res,400,{error:'bad json'});
+      const r=state.mobileLanguageRequests.get(String(d.id||''));
+      if(!r)return json(res,404,{error:'mobile language request not found'});
+      const deviceId=String(req.headers['x-jarvis-device-id']||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80)||'pc';
+      const updated=mobileLanguageRelay.updateCognitive(r,{workerId:deviceId,state:d.state});
+      if(!updated.ok)return json(res,409,{error:updated.reason,status:r.status});
+      return json(res,200,{ok:true,cognitive:updated.cognitive});
+    });
   }
   if(pathname==='/api/worker/mobile-language-result'&&req.method==='POST'){
     return readJson(req,(err,d)=>{

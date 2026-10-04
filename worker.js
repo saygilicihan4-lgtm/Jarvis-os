@@ -4092,6 +4092,7 @@ function startLocalTtsBridge(){
           let result;
           switch(d.action){
             case 'create':result=conversation.create({requested:d.requested});break;
+            case 'state':result=conversation.state(sessionId);break;
             case 'turn':result=await conversation.turn(sessionId,{signal:controller.signal});break;
             case 'acknowledge':result=conversation.acknowledge(sessionId,{receipt:d.receipt,played:d.played});break;
             case 'cancel':result=conversation.cancel(sessionId);break;
@@ -8797,8 +8798,15 @@ async function serviceMobileLanguage(){
   try{
     const q=(await api('/api/worker/mobile-language-next')).request;
     if(!q)return false;
-    let result;
-    try{result=await getMobileLanguageEngine().turn(q)}catch(e){result={ok:false,state:'failed',reason:String(e.message||e),locale:q.locale,learning:false,deviceE2eVerified:false}}
+    let result,stateChain=Promise.resolve();
+    const pushCognitive=raw=>{
+      const source=raw&&typeof raw==='object'?raw:{},allowed=new Set(['jarvis','nova','orion']),phases=new Set(['idle','listening','thinking','consulting','synthesizing','waiting','speaking','error']);
+      const primary=allowed.has(source.primary)?source.primary:null,clean=list=>Array.isArray(list)?list.filter((id,index,array)=>allowed.has(id)&&id!==primary&&array.indexOf(id)===index).slice(0,2):[];
+      const state={phase:phases.has(source.phase)?source.phase:'waiting',primary,consulting:clean(source.consulting),completed:clean(source.completed),revision:Number.isSafeInteger(Number(source.revision))?Number(source.revision):0,authority:'shared_guardrail_only'};
+      stateChain=stateChain.then(()=>api('/api/worker/mobile-language-state',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:q.id,state})})).catch(()=>null);
+    };
+    try{result=await getMobileLanguageEngine().turn(q,{onCognitiveState:pushCognitive})}catch(e){result={ok:false,state:'failed',reason:String(e.message||e),locale:q.locale,learning:false,deviceE2eVerified:false}}
+    await stateChain;
     await api('/api/worker/mobile-language-result',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:q.id,locale:q.locale,ok:result.ok===true,result,error:result.ok===true?null:String(result.reason||'mobile language failed')})});
     return true;
   }catch(e){return false}finally{mobileLanguageBusy=false}
