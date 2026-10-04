@@ -6,8 +6,10 @@
   const PREFERENCE_KEY='jarvisMobileLanguagePreferenceV1';
   const TTS_EVIDENCE_KEY='jarvisMobileTtsEvidenceV1';
   const TTS_NEGATIVE_EVIDENCE_KEY='jarvisMobileTtsNegativeEvidenceV1';
+  const STT_CAPTURE_EVIDENCE_KEY='jarvisMobileSttCaptureEvidenceV1';
   const TTS_EVIDENCE_TTL_MS=5*60*1000;
   const TTS_NEGATIVE_EVIDENCE_TTL_MS=60*1000;
+  const STT_CAPTURE_EVIDENCE_TTL_MS=2*60*1000;
   const DEFAULT_CAPTURE_TIMEOUT_MS=20000;
   const RUNTIME_TTS_INVALIDATION_REASONS=new Set(['tts_locale_not_in_runtime_inventory','runtime_tts_locale_ambiguous']);
   const COMMON_LOCALES=[
@@ -159,6 +161,37 @@
       return candidate;
     }catch(_){return null}
   }
+  function cleanSttCaptureEvidenceEntry(entry,nowMs){
+    if(!entry||typeof entry!=='object'||'transcript' in entry||'text' in entry)return null;
+    const requestedLocale=canonicalLocale(entry.requestedLocale),capturedAt=Number(entry.capturedAt),expiresAt=Number(entry.expiresAt),source=String(entry.source||'');
+    if(!requestedLocale||source!=='browser-speech'||!Number.isFinite(capturedAt)||!Number.isFinite(expiresAt))return null;
+    if(capturedAt>nowMs||expiresAt!==capturedAt+STT_CAPTURE_EVIDENCE_TTL_MS||nowMs<capturedAt||nowMs>expiresAt)return null;
+    return{requestedLocale,source,capturedAt,expiresAt,captureObserved:true,nonEmptyTranscript:true,transcriptStored:false,sttVerified:false,languageVerified:false,evidence:'browser_nonempty_transcript',deviceE2eVerified:false};
+  }
+  function readSttCaptureEvidence(storage=defaultStorage(),nowMs=Date.now()){
+    if(!validStorage(storage)||!Number.isFinite(nowMs))return[];
+    try{
+      const raw=JSON.parse(storage.getItem(STT_CAPTURE_EVIDENCE_KEY)||'[]');
+      const entries=(Array.isArray(raw)?raw:[]).map(x=>cleanSttCaptureEvidenceEntry(x,nowMs)).filter(Boolean).sort((a,b)=>b.capturedAt-a.capturedAt).slice(0,32);
+      if(entries.length)storage.setItem(STT_CAPTURE_EVIDENCE_KEY,JSON.stringify(entries));else storage.removeItem(STT_CAPTURE_EVIDENCE_KEY);
+      return entries;
+    }catch(_){try{storage.removeItem(STT_CAPTURE_EVIDENCE_KEY)}catch(__){}return[]}
+  }
+  function getSttCaptureEvidence(locale,storage=defaultStorage(),nowMs=Date.now()){
+    const normalized=canonicalLocale(locale);if(!normalized)return null;
+    return readSttCaptureEvidence(storage,nowMs).find(x=>x.requestedLocale===normalized)||null;
+  }
+  function recordSttCaptureEvidence(storage,requestedLocale,transcript,nowMs=Date.now()){
+    const requested=canonicalLocale(requestedLocale),observed=String(transcript||'').replace(/\s+/g,' ').trim();
+    if(!validStorage(storage)||!requested||!observed||!Number.isFinite(nowMs))return null;
+    const candidate=cleanSttCaptureEvidenceEntry({requestedLocale:requested,source:'browser-speech',capturedAt:nowMs,expiresAt:nowMs+STT_CAPTURE_EVIDENCE_TTL_MS},nowMs);
+    if(!candidate)return null;
+    try{
+      const remaining=readSttCaptureEvidence(storage,nowMs).filter(x=>x.requestedLocale!==requested);
+      storage.setItem(STT_CAPTURE_EVIDENCE_KEY,JSON.stringify([candidate,...remaining].slice(0,32)));
+      return candidate;
+    }catch(_){return null}
+  }
   function captureWithTimeout(capture,locale,controller,timeoutMs){
     const signal=controller.signal,limit=Number.isFinite(timeoutMs)?Math.max(5,Math.min(60000,timeoutMs)):DEFAULT_CAPTURE_TIMEOUT_MS;
     return new Promise((resolve,reject)=>{
@@ -216,7 +249,7 @@
       if(!requestedLocale)return{ok:false,state:'invalid',reason:'locale_required'};
       busy=true;controller=new AbortController();const active=controller;
       const selectedLocale=canonicalLocale(explicitLocale);
-      let text,targetLocale=selectedLocale||preferredLocale||requestedLocale,inputSource='browser-speech',confirmedSwitch=false,preferenceEvidence=null,runtimeTtsNegativeResult=null;
+      let text,targetLocale=selectedLocale||preferredLocale||requestedLocale,inputSource='browser-speech',confirmedSwitch=false,preferenceEvidence=null,runtimeTtsNegativeResult=null,sttCaptureEvidence=null;
       try{
         if(pending){
           text=pending.text;targetLocale=pending.locale;inputSource=pending.inputSource;pending=null;confirmedSwitch=true;preferenceEvidence='explicit-confirmation-plus-playback';
@@ -226,10 +259,11 @@
           text=String(await captureWithTimeout(capture,targetLocale,active,captureTimeoutMs)||'').replace(/\s+/g,' ').trim().slice(0,1800);
           active.signal.throwIfAborted();
           if(!text)throw new Error('empty_transcript');
+          sttCaptureEvidence=recordSttCaptureEvidence(storage,targetLocale,text,Number(now()));
           const candidate=canonicalLocale(hint(text,targetLocale));
           if(!selectedLocale&&candidate&&candidate!==targetLocale){
             pending={text,locale:candidate,inputSource};
-            const out={ok:true,state:'confirm-language',locale:candidate,transcript:text,learning:false,preferenceSaved:false,deviceE2eVerified:false};
+            const out={ok:true,state:'confirm-language',locale:candidate,transcript:text,learning:false,preferenceSaved:false,sttCaptureObserved:!!sttCaptureEvidence,sttCaptureEvidence,sttVerified:false,languageVerified:false,deviceE2eVerified:false};
             onState('confirm-language',out);return out;
           }
         }
@@ -261,7 +295,8 @@
         }
         const completed={...result,state:'completed',nextLocale:targetLocale,ttsLocale:playbackLocale,historyCommitted:true,learning:false,automaticLearning:false,
           preferenceSaved,preferenceLocale:preferredLocale,preferenceEvidence:preferenceSaved?preferenceEvidence:null,
-          runtimeTtsVerified:!!runtimeTtsEvidence,runtimeTtsEvidence,runtimeTtsNegativeEvidence:null,sttVerified:false,deviceE2eVerified:false};
+          runtimeTtsVerified:!!runtimeTtsEvidence,runtimeTtsEvidence,runtimeTtsNegativeEvidence:null,
+          sttCaptureObserved:!!sttCaptureEvidence,sttCaptureEvidence,sttVerified:false,languageVerified:false,deviceE2eVerified:false};
         onState('completed',completed);return completed;
       }catch(error){
         const rawMessage=String(error&&error.message||error),timedOut=rawMessage==='browser_stt_timeout';
@@ -271,8 +306,9 @@
         const runtimeTtsEvidenceInvalidated=!!(provenanceMatches&&invalidateTtsEvidence(storage,targetLocale,nowMs));
         const runtimeTtsNegativeEvidence=provenanceMatches?recordNegativeTtsEvidence(storage,runtimeTtsNegativeResult,targetLocale,nowMs):null;
         if((runtimeTtsEvidenceInvalidated||runtimeTtsNegativeEvidence)&&root&&root.document)renderLocaleOptions(root.document.getElementById('jarvisMobileLocaleList'),storage,nowMs);
-        if(!cancelled)onState('error',{error:message,runtimeTtsEvidenceInvalidated,runtimeTtsNegativeEvidence});
-        return{ok:false,cancelled,error:message,learning:false,preferenceSaved:false,preferenceLocale:preferredLocale,runtimeTtsVerified:false,runtimeTtsEvidenceInvalidated,runtimeTtsNegativeEvidence,sttVerified:false,deviceE2eVerified:false};
+        if(!cancelled)onState('error',{error:message,runtimeTtsEvidenceInvalidated,runtimeTtsNegativeEvidence,sttCaptureObserved:!!sttCaptureEvidence,sttCaptureEvidence});
+        return{ok:false,cancelled,error:message,learning:false,preferenceSaved:false,preferenceLocale:preferredLocale,runtimeTtsVerified:false,runtimeTtsEvidenceInvalidated,runtimeTtsNegativeEvidence,
+          sttCaptureObserved:!!sttCaptureEvidence,sttCaptureEvidence,sttVerified:false,languageVerified:false,deviceE2eVerified:false};
       }finally{
         if(controller===active){controller=null;busy=false;onState('idle')}
       }
@@ -284,18 +320,19 @@
       const normalized=canonicalLocale(locale);if(!normalized)return{ok:false,reason:'invalid_locale'};
       pending=null;explicitLocale=normalized;stagedExplicitLocale=normalized;
       const nowMs=Number(now());
-      return{ok:true,locale:normalized,persisted:false,evidence:'explicit-user-selection-pending-playback',runtimeTtsEvidence:getTtsEvidence(normalized,storage,nowMs),runtimeTtsNegativeEvidence:getNegativeTtsEvidence(normalized,storage,nowMs)};
+      return{ok:true,locale:normalized,persisted:false,evidence:'explicit-user-selection-pending-playback',runtimeTtsEvidence:getTtsEvidence(normalized,storage,nowMs),runtimeTtsNegativeEvidence:getNegativeTtsEvidence(normalized,storage,nowMs),sttCaptureEvidence:getSttCaptureEvidence(normalized,storage,nowMs),sttVerified:false,languageVerified:false};
     }
     function forgetPreference(){preferredLocale=null;explicitLocale=null;stagedExplicitLocale=null;return clearPreference(storage)}
     const client={run,cancel,clearPending,selectLocale,forgetPreference,get busy(){return busy},get pendingLocale(){return pending?.locale||null},
-      get selectedLocale(){return explicitLocale},get preferredLocale(){return preferredLocale},get runtimeTtsEvidence(){return readTtsEvidence(storage,Number(now()))},get runtimeTtsNegativeEvidence(){return readNegativeTtsEvidence(storage,Number(now()))},get history(){return cleanHistory(history)}};
+      get selectedLocale(){return explicitLocale},get preferredLocale(){return preferredLocale},get runtimeTtsEvidence(){return readTtsEvidence(storage,Number(now()))},get runtimeTtsNegativeEvidence(){return readNegativeTtsEvidence(storage,Number(now()))},get sttCaptureEvidence(){return readSttCaptureEvidence(storage,Number(now()))},get history(){return cleanHistory(history)}};
     activeClient=client;return client;
   }
   function requestExplicitLocale(locale){
     const normalized=canonicalLocale(locale);if(!normalized)return{ok:false,reason:'invalid_locale'};
     if(activeClient)return activeClient.selectLocale(normalized);
+    const nowMs=Date.now();
     stagedExplicitLocale=normalized;
-    return{ok:true,locale:normalized,persisted:false,evidence:'explicit-user-selection-pending-playback',runtimeTtsEvidence:getTtsEvidence(normalized),runtimeTtsNegativeEvidence:getNegativeTtsEvidence(normalized)};
+    return{ok:true,locale:normalized,persisted:false,evidence:'explicit-user-selection-pending-playback',runtimeTtsEvidence:getTtsEvidence(normalized,undefined,nowMs),runtimeTtsNegativeEvidence:getNegativeTtsEvidence(normalized,undefined,nowMs),sttCaptureEvidence:getSttCaptureEvidence(normalized,undefined,nowMs),sttVerified:false,languageVerified:false};
   }
   function installLocalePicker(doc=root&&root.document){
     if(!doc||!root||!/iPhone|iPad|iPod|Android/i.test(String(root.navigator&&root.navigator.userAgent||'')))return false;
@@ -309,18 +346,20 @@
       const result=requestExplicitLocale(input.value),status=doc.getElementById('languageChatStatus');
       if(!status)return;
       if(!result.ok){status.textContent=result.reason==='mobile_language_busy'?'Konuşma sürerken dil değiştirilemez.':'Geçerli bir dil kodu girin (örn. tr-TR, en-US).';return}
-      const negative=result.runtimeTtsNegativeEvidence;
-      if(result.runtimeTtsEvidence){status.textContent='Dil isteği: '+result.locale+' · TTS son 5 dk içinde runtime + playback ile doğrulandı; STT tarayıcıya bağlı.';return}
-      if(negative&&negative.state==='unsupported'){status.textContent='Dil isteği: '+result.locale+' · TTS son 1 dk içinde runtime tarafından desteklenmedi; daha sonra yeniden denenebilir.';return}
+      const negative=result.runtimeTtsNegativeEvidence,capture=result.sttCaptureEvidence;
+      const sttText=capture?' · STT capture son 2 dk gözlendi; dil doğruluğu doğrulanmadı.':' · STT tarayıcıya bağlı.';
+      if(result.runtimeTtsEvidence){status.textContent='Dil isteği: '+result.locale+' · TTS son 5 dk içinde runtime + playback ile doğrulandı'+sttText;return}
+      if(negative&&negative.state==='unsupported'){status.textContent='Dil isteği: '+result.locale+' · TTS son 1 dk içinde runtime tarafından desteklenmedi; daha sonra yeniden denenebilir'+sttText;return}
       if(negative&&negative.state==='ambiguous'){
         const choices=negative.ttsCandidates.length?' ('+negative.ttsCandidates.join(', ')+')':'';
-        status.textContent='Dil isteği: '+result.locale+' · TTS bölgesi belirsiz; bölge kodu seçin'+choices+'.';return;
+        status.textContent='Dil isteği: '+result.locale+' · TTS bölgesi belirsiz; bölge kodu seçin'+choices+sttText;return;
       }
-      status.textContent='Dil isteği: '+result.locale+' · TTS ilk başarılı yanıtta runtime kontrol edilecek; STT tarayıcıya bağlı.';
+      status.textContent='Dil isteği: '+result.locale+' · TTS ilk başarılı yanıtta runtime kontrol edilecek'+sttText;
     });
     wrap.append(input,button,list);chatButton.parentNode.appendChild(wrap);return true;
   }
   if(root&&root.document){const start=()=>installLocalePicker(root.document);if(root.document.readyState==='loading')root.document.addEventListener('DOMContentLoaded',start,{once:true});else setTimeout(start,0)}
-  return{PREFERENCE_KEY,TTS_EVIDENCE_KEY,TTS_NEGATIVE_EVIDENCE_KEY,TTS_EVIDENCE_TTL_MS,TTS_NEGATIVE_EVIDENCE_TTL_MS,DEFAULT_CAPTURE_TIMEOUT_MS,COMMON_LOCALES,RUNTIME_TTS_INVALIDATION_REASONS,canonicalLocale,safeLanguageHint,cleanHistory,readPreference,savePreference,clearPreference,
-    cleanEvidenceEntry,readTtsEvidence,getTtsEvidence,recordTtsEvidence,invalidateTtsEvidence,shouldInvalidateTtsEvidence,cleanNegativeEvidenceEntry,readNegativeTtsEvidence,getNegativeTtsEvidence,recordNegativeTtsEvidence,clearNegativeTtsEvidence,captureWithTimeout,resolvePlaybackLocale,renderLocaleOptions,createClient,requestExplicitLocale,installLocalePicker};
+  return{PREFERENCE_KEY,TTS_EVIDENCE_KEY,TTS_NEGATIVE_EVIDENCE_KEY,STT_CAPTURE_EVIDENCE_KEY,TTS_EVIDENCE_TTL_MS,TTS_NEGATIVE_EVIDENCE_TTL_MS,STT_CAPTURE_EVIDENCE_TTL_MS,DEFAULT_CAPTURE_TIMEOUT_MS,COMMON_LOCALES,RUNTIME_TTS_INVALIDATION_REASONS,canonicalLocale,safeLanguageHint,cleanHistory,readPreference,savePreference,clearPreference,
+    cleanEvidenceEntry,readTtsEvidence,getTtsEvidence,recordTtsEvidence,invalidateTtsEvidence,shouldInvalidateTtsEvidence,cleanNegativeEvidenceEntry,readNegativeTtsEvidence,getNegativeTtsEvidence,recordNegativeTtsEvidence,clearNegativeTtsEvidence,
+    cleanSttCaptureEvidenceEntry,readSttCaptureEvidence,getSttCaptureEvidence,recordSttCaptureEvidence,captureWithTimeout,resolvePlaybackLocale,renderLocaleOptions,createClient,requestExplicitLocale,installLocalePicker};
 });
