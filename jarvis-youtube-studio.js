@@ -295,8 +295,9 @@ function publishContextReady(snap){
   return /studio\.youtube\.com/.test(url)&&/(?:görünürlük|gorunurluk|visibility|ayrıntılar|ayrintilar|details|kontroller|checks|video öğeleri|video ogeleri|video elements|ileri|next)/i.test(text);
 }
 function publishSuccess(snap){
+  const url=String(snap&&snap.url||'').toLowerCase();
   const text=String(snap&&snap.text||'').toLocaleLowerCase('tr-TR');
-  return /(?:video\s+(?:yayınlandı|yayinlandi)|(?:yayınlandı|yayinlandi)\s+video|video\s+published|published\s+successfully)/i.test(text);
+  return /studio\.youtube\.com/.test(url)&&/(?:video\s+(?:yayınlandı|yayinlandi)|(?:yayınlandı|yayinlandi)\s+video|video\s+published|published\s+successfully)/i.test(text);
 }
 async function selectPublicVisibility(operator,workspace){
   const expression=[
@@ -425,6 +426,15 @@ async function publishPreparedDraft(operator,workspace,{missionId='',approvedAt=
     return{ok:false,code:'YOUTUBE_PUBLIC_OPTION_NOT_FOUND',retryable:true,receipt,message:'YouTube Public/Herkese Açık seçeneği bulunamadı. PUBLIC adımı uygulanmadı.'};
   }
 
+  const preClickSnap=await snapshot(operator,workspace);
+  const preClickUrl=String(preClickSnap&&preClickSnap.url||'').toLowerCase();
+  if(!(preClickSnap&&preClickSnap.ok)||!/studio\.youtube\.com/.test(preClickUrl)){
+    return{ok:false,code:'YOUTUBE_PUBLISH_CONTEXT_REQUIRED',retryable:true,receipt,message:'Publish öncesi YouTube Studio bağlamı doğrulanamadı. PUBLIC adımı uygulanmadı.'};
+  }
+  if(publishSuccess(preClickSnap)){
+    return{ok:false,code:'YOUTUBE_STALE_SUCCESS_MARKER',retryable:false,uncertain:true,receipt,message:'Publish tıklamasından önce sayfada eski bir yayın başarı işareti zaten görünüyordu. Yanlış başarı kanıtını kullanmamak için PUBLIC adımı durduruldu.'};
+  }
+
   const preflight={
     ...existing,
     updatedAt:new Date().toISOString(),
@@ -434,6 +444,7 @@ async function publishPreparedDraft(operator,workspace,{missionId='',approvedAt=
     approvalMissionId:approval.missionId,
     approvalDraftCompletedAt:approval.draftCompletedAt,
     approvalPublishStartedAt:approval.publishStartedAt,
+    publishEvidenceBaselineUrl:String(preClickSnap.url||''),
     published:false
   };
   writeReceipt(receipt,preflight);
@@ -457,6 +468,7 @@ async function publishPreparedDraft(operator,workspace,{missionId='',approvedAt=
     state:'published',
     published:true,
     publishedAt:new Date().toISOString(),
+    publishEvidenceUrl:String(snap&&snap.url||''),
     studioUrl:String(snap&&snap.url||existing.studioUrl||STUDIO_URL)
   };
   writeReceipt(receipt,record);
