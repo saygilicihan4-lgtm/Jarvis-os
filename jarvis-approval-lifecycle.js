@@ -18,8 +18,6 @@ function canonical(value){
 function payloadHash(mission){
   const step=currentStep(mission);
   if(!isApprovalStep(step))throw new Error('Approval step required');
-  // Bind local execution data, not mutable scheduling/history timestamps. This is
-  // NOT an attestation of a live site's DOM, account, or remote object contents.
   const payload={
     version:BINDING_VERSION,id:mission.id,type:mission.type,
     index:mission.currentStep,step:step.name,input:mission.input||{},artifacts:mission.artifacts||{},
@@ -34,13 +32,13 @@ function timestamp(value){
 }
 function approvalRequestFingerprint(value){
   const s=String(value||'').trim();
-  return s?crypto.createHash('sha256').update(s,'utf8').digest('hex').slice(0,10):'';
+  return s?crypto.createHash('sha256').update(s,'utf8').digest('hex').slice(0,20):'';
 }
 function requestedFingerprintFromReason(value){
   const reason=String(value||'');
   if(!reason.includes('|req:'))return{present:false,valid:true,value:null};
   const matches=[...reason.matchAll(/\|req:([^|]+)/g)].map(x=>String(x[1]||'').toLowerCase());
-  if(matches.length!==1||!/^[a-f0-9]{10}$/.test(matches[0]))return{present:true,valid:false,value:null};
+  if(matches.length!==1||!/^[a-f0-9]{20}$/.test(matches[0]))return{present:true,valid:false,value:null};
   return{present:true,valid:true,value:matches[0]};
 }
 function revokeApproval(mission,reason='revoked',nowMs=Date.now()){
@@ -84,7 +82,6 @@ function grantApproval(mission,{surface='',targetReason='',nowMs=Date.now()}={})
   step.meta={...step.meta,approvedAt:new Date(nowMs).toISOString(),approvalKind:'explicit_user',
     approvalSurface:surface,approvalTargetReason:targetReason,
     approvalPayloadSha256:hash,approvalBindingVersion:BINDING_VERSION};
-  // Revocation history remains in mission.history; a new grant has fresh metadata.
   delete step.meta.approvalRevokedAt;
   delete step.meta.approvalRevokedReason;
   return{ok:true};
