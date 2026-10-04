@@ -30,7 +30,7 @@ function cookie(exp=Date.now()+60000){
 }
 async function run(){
   vm.runInContext("state.workers.devices.pc={approved:true,authMode:'signed',lastSeen:new Date().toISOString(),networkTag:ipTag({headers:{},socket:{remoteAddress:'192.0.2.10'}})}",context);
-  for(const headers of [{},{'user-agent':'iPhone'},{cookie:'jarvis_session=forged.token'},{cookie:cookie(Date.now()-1000)}]){
+  for(const headers of [{},{'user-agent':'iPhone'},{cookie:'jarvis_session=forged.token'},{cookie:'jarvis_session=%E0%A4%A'},{cookie:cookie(Date.now()-1000)}]){
     const r=await request('/api/session/lan-bootstrap',{method:'POST',headers});
     assert.strictEqual(r.status,401,'same IP and signed Worker are not browser identity');
     assert.strictEqual(r.body.pairingRequired,true);assert(!r.headers['set-cookie']);
@@ -46,6 +46,7 @@ async function run(){
     assert.strictEqual(r.status,200,'existing session survives IP change and offline Worker');
     assert.strictEqual(r.body.existing,true);assert(!r.headers['set-cookie'],'bootstrap does not extend expiry');
     const denied=await request(url,{method});assert.strictEqual(denied.status,401);assert(!denied.headers['set-cookie']);
+    const malformed=await request(url,{method,headers:{cookie:'jarvis_session=%'}});assert.strictEqual(malformed.status,401);assert(!malformed.headers['set-cookie']);
   }
   const anonymousCreate=await request('/api/session/create',{method:'POST'});assert.strictEqual(anonymousCreate.status,401);
   vm.runInContext("phoneCode='12345678';phoneCodeExp=Date.now()+60000;phoneCodeUsed=false",context);

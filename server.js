@@ -52,7 +52,10 @@ const PHONE_SESSION_SECRET=crypto.createHmac('sha256',DEVICE_SECRET||STATE_SECRE
 let phoneCode=String(crypto.randomInt(0,100000000)).padStart(8,'0');
 let phoneCodeExp=Date.now()+5*60*1000;
 let phoneCodeUsed=false;
-function cookieMap(req){return Object.fromEntries(String(req.headers.cookie||'').split(';').map(x=>x.trim().split('=').map(decodeURIComponent)).filter(x=>x.length===2))}
+function cookieMap(req){
+  try{return Object.fromEntries(String(req.headers.cookie||'').split(';').map(x=>x.trim().split('=').map(decodeURIComponent)).filter(x=>x.length===2))}
+  catch{return {}} // Malformed percent encoding is unauthenticated, not a server crash.
+}
 function setJarvisSessionCookie(req,res){
   const exp=Date.now()+30*24*60*60*1000,token=signPhoneSession(req,exp);
   res.setHeader('set-cookie','jarvis_session='+encodeURIComponent(token)+'; Max-Age=2592000; Path=/; HttpOnly; Secure; SameSite=Lax');
