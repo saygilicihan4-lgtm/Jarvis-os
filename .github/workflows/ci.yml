@@ -99,6 +99,7 @@ jobs:
           node --check routing-selftest.js
           node --check creator-engine-selftest.js
           node --check bootstrap-bridge-selftest.js
+          node --check tricore-ui-selftest.js
           python -m py_compile jarvis-local-stt-v4.py
       - name: STT lexicon selftest
         run: python stt-lexicon-selftest.py
@@ -106,6 +107,8 @@ jobs:
         run: python stt-adaptive-selftest.py
       - name: UI selftest
         run: node ui-selftest.js
+      - name: Tri-core UI selftest
+        run: node tricore-ui-selftest.js
       - name: Creator engine selftest
         run: node creator-engine-selftest.js
       - name: Creator real render smoke
