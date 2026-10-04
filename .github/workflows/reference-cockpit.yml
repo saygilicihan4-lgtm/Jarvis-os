@@ -21,12 +21,14 @@ jobs:
           node --check public/reference-cockpit-i18n.js
           node --check public/mobile-canonical-cockpit.js
           node --check public/mobile-visual-fit-v189.js
+          node --check public/mobile-native-v190.js
           node --check public/mobile-approval-review.js
           node --check public/tri-core-hologram.js
           node --check reference-cockpit-selftest.js
           node --check reference-cockpit-i18n-selftest.js
           node --check mobile-canonical-cockpit-selftest.js
           node --check mobile-visual-fit-v189-selftest.js
+          node --check mobile-native-v190-selftest.js
           node --check mobile-approval-review-selftest.js
       - name: Reference cockpit motion and authority selftest
         run: node reference-cockpit-selftest.js
@@ -34,7 +36,9 @@ jobs:
         run: node reference-cockpit-i18n-selftest.js
       - name: Canonical mobile cockpit selftest
         run: node mobile-canonical-cockpit-selftest.js
-      - name: Mobile visual fit selftest
+      - name: Mobile visual fit compatibility selftest
         run: node mobile-visual-fit-v189-selftest.js
+      - name: Native mobile cockpit selftest
+        run: node mobile-native-v190-selftest.js
       - name: Mobile approval review selftest
         run: node mobile-approval-review-selftest.js
