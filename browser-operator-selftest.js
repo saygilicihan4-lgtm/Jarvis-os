@@ -9,6 +9,7 @@ const workerSource=fs.readFileSync('./worker.js','utf8');
 
 assert.strictEqual(op.BROWSER_OPERATOR_VERSION,'1.1');
 assert.strictEqual(op.BROWSER_AUTOFILL_VERSION,'1.0');
+assert.strictEqual(op.BROWSER_SURFACE_VERSION,'1.0');
 assert.deepStrictEqual(op.allowedHosts(),['*']);
 assert.ok(op.hostAllowed('studio.youtube.com'));
 assert.ok(op.hostAllowed('admin.shopify.com'));
@@ -22,8 +23,18 @@ assert.throws(()=>op.safeUrl('javascript:alert(1)'),/http\/https/);
 assert.ok(workerSource.includes("syncRepoRuntimeFile('jarvis-browser-operator.js',\"BROWSER_OPERATOR_VERSION='1.0'\")"),'Worker 2.102 legacy browser sync probe changed unexpectedly');
 assert.ok(browserSource.includes("Runtime rollout compatibility for Worker 2.102.0 sync probe only: BROWSER_OPERATOR_VERSION='1.0'"),'Browser 1.1 must remain retrievable by Worker 2.102 legacy sync probe during rollout');
 assert.ok(browserSource.includes("autocomplete:el.getAttribute('autocomplete')||''"),'page snapshot must expose autocomplete hints');
+assert.ok(browserSource.includes('function deepSurfacePrelude()'),'deep surface helper missing');
+assert.ok(browserSource.includes('el.shadowRoot'),'open Shadow DOM discovery missing');
+assert.ok(browserSource.includes('el.contentDocument'),'same-origin iframe discovery missing');
+assert.ok(browserSource.includes('getRootNode'),'label lookup must stay inside the discovered DOM root');
+assert.ok(browserSource.includes('sameOriginFrames'),'snapshot must expose same-origin frame evidence');
+assert.ok(browserSource.includes('openShadowRoots'),'snapshot must expose open shadow-root evidence');
 const navigateBlock=browserSource.slice(browserSource.indexOf('async function navigate('),browserSource.indexOf('async function clickByText('));
 assert.ok(!navigateBlock.includes('autofillSafeProfile'),'navigation alone must never disclose saved profile data');
+const deepHelper=op.deepSurfacePrelude();
+assert.ok(deepHelper.includes('shadowRoot'));
+assert.ok(deepHelper.includes('contentDocument'));
+assert.ok(deepHelper.includes('querySelectorAll'));
 
 assert.strictEqual(op.classifyAutofillField('E-posta adresi'),'email');
 assert.strictEqual(op.classifyAutofillField('Cep telefonu'),'phone');
@@ -64,4 +75,4 @@ op.clearAutofillProfile(tmp);
 assert.strictEqual(op.autofillProfileSummary(tmp).count,0);
 
 fs.rmSync(tmp,{recursive:true,force:true});
-console.log('BROWSER OPERATOR SELFTEST PASS · any-site navigation + task-triggered safe local autofill profile');
+console.log('BROWSER OPERATOR SELFTEST PASS · any-site + safe autofill + open-shadow/same-origin-frame form surfaces');
