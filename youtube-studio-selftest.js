@@ -34,13 +34,15 @@ const yt=require('./jarvis-youtube-studio');
   let staleSuccessMarker=false;
   let publishSuccessUrl='https://studio.youtube.com/video/test/edit';
   let duringEvaluate=null;
+  let targetAccount='owner@example.com';
+  let targetChannel='channel-test';
   const fakeOperator={
     status:async()=>({running:true,profile:'test',browser:'fake'}),
     navigate:async()=>({ok:true}),
     pageSnapshot:async()=>{
-      if(publishSucceeded)return{ok:true,url:publishSuccessUrl,title:'Studio',text:'Video yayınlandı'};
-      if(staleSuccessMarker)return{ok:true,url:'https://studio.youtube.com/video/test/edit',title:'Studio',text:'Ayrıntılar Görünürlük Visibility Public · Video yayınlandı'};
-      return{ok:true,url:'https://studio.youtube.com/video/test/edit',title:'Studio',text:'Ayrıntılar Görünürlük Visibility Public'};
+      if(publishSucceeded)return{ok:true,url:publishSuccessUrl,title:'Studio',text:'Video yayınlandı',targetEvidence:{account:targetAccount,target:targetChannel}};
+      if(staleSuccessMarker)return{ok:true,url:'https://studio.youtube.com/video/test/edit',title:'Studio',text:'Ayrıntılar Görünürlük Visibility Public · Video yayınlandı',targetEvidence:{account:targetAccount,target:targetChannel}};
+      return{ok:true,url:'https://studio.youtube.com/video/test/edit',title:'Studio',text:'Ayrıntılar Görünürlük Visibility Public',targetEvidence:{account:targetAccount,target:targetChannel}};
     },
     evaluate:async(_workspace,expression)=>{
       if(duringEvaluate)duringEvaluate();
@@ -48,6 +50,13 @@ const yt=require('./jarvis-youtube-studio');
     },
     uploadFile:async()=>{uploads++;return{ok:true}},
     setField:async()=>({ok:true}),
+    verifiedFinalClick:async(_workspace,label,contract)=>{
+      const finalTarget=require('./jarvis-final-target-verification');
+      const snap=await fakeOperator.pageSnapshot();
+      const proof=finalTarget.verifyFinalTarget(contract,snap);
+      if(!proof.ok){const e=new Error('FINAL_TARGET_'+proof.reason);e.code='FINAL_TARGET_'+proof.reason;throw e}
+      return fakeOperator.clickByText(_workspace,label);
+    },
     clickByText:async(_workspace,label)=>{
       if(/^(?:Yayınla|Yayinla|Publish)$/i.test(String(label||''))){
         publishClicks++;
@@ -132,6 +141,9 @@ const yt=require('./jarvis-youtube-studio');
   assert.strictEqual(uploads,1);
   let receipt=yt.readReceipt(tmp,missionId);
   assert.strictEqual(receipt.state,'draft_prepared');
+  assert.ok(/^[a-f0-9]{64}$/.test(receipt.finalTargetAccountHash),'draft must bind account fingerprint');
+  assert.ok(/^[a-f0-9]{64}$/.test(receipt.finalTargetChannelHash),'draft must bind channel fingerprint');
+  assert.ok(!JSON.stringify(receipt).includes(targetAccount),'receipt must not expose account identity');
 
   const second=await yt.prepareDraft(fakeOperator,tmp,{
     file:'creator-video/demo.mp4',
