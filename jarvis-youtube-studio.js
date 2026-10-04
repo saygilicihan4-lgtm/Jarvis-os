@@ -320,15 +320,25 @@ async function advanceToVisibility(operator,workspace){
   const snap=await snapshot(operator,workspace);
   return{ok:/(?:görünürlük|gorunurluk|visibility)/i.test(String(snap&&snap.text||'')),snapshot:snap};
 }
+function validateApprovalProof(existing,id,proof,nowMs=Date.now()){
+  const value=String(proof||'').trim();
+  if(!value)throw new Error('explicit approval proof required for YouTube publish');
+  if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value))throw new Error('valid explicit approval timestamp required for YouTube publish');
+  const approvedMs=Date.parse(value),createdMs=Date.parse(String(existing&&existing.createdAt||''));
+  if(!Number.isFinite(approvedMs))throw new Error('valid explicit approval timestamp required for YouTube publish');
+  if(!existing||String(existing.missionId||'').trim()!==id)throw new Error('YouTube approval mission receipt mismatch');
+  if(!Number.isFinite(createdMs)||approvedMs<createdMs)throw new Error('YouTube approval predates draft receipt');
+  if(!Number.isFinite(nowMs)||approvedMs>nowMs+5000)throw new Error('YouTube approval timestamp is in the future');
+  return value;
+}
 async function publishPreparedDraft(operator,workspace,{missionId='',approvedAt=''}={}){
   if(!operator)throw new Error('browser operator required');
   const id=String(missionId||'').trim();
-  const proof=String(approvedAt||'').trim();
   if(!id)throw new Error('mission id required for YouTube publish');
-  if(!proof)throw new Error('explicit approval proof required for YouTube publish');
   const receipt=missionReceiptFile(workspace,id);
   const existing=readReceipt(workspace,id);
   if(!existing)return{ok:false,code:'YOUTUBE_DRAFT_RECEIPT_MISSING',retryable:false,message:'YouTube publish için mission draft receipt bulunamadı.'};
+  const proof=validateApprovalProof(existing,id,approvedAt);
   if(existing.state==='published'&&existing.published===true){
     return{ok:true,code:'YOUTUBE_PUBLISHED',reused:true,published:true,receipt,title:existing.title||'',message:'YouTube videosu bu mission için zaten PUBLIC olarak doğrulanmış.'};
   }
