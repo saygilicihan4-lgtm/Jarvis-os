@@ -169,8 +169,6 @@ function completeStep(workspace,id,{artifact=null,meta=null}={}){
 function failStep(workspace,id,{code='STEP_FAILED',message='Step failed',retryable=false,dependency=null,uncertain=false}={}){
   const m=loadMission(workspace,id);if(!m)throw new Error('Mission not found');
   const step=currentStep(m);if(!step)throw new Error('Mission step not found');
-  // Revoke on the freshly loaded object before the atomic save. Mutating a
-  // caller's copy does not survive this function's loadMission().
   approvalLifecycle.revokeApproval(m,String(code||'step_failed').toLowerCase());
   if(dependency==='approval')approvalLifecycle.requestApproval(m);
   step.status=uncertain?'uncertain':(retryable?'blocked':'failed');
@@ -226,7 +224,6 @@ function approveStep(workspace,id,{surface='',targetReason='',nowMs=Date.now()}=
   const m=loadMission(workspace,id);if(!m)throw new Error('Mission not found');
   const out=approvalLifecycle.grantApproval(m,{surface,targetReason,nowMs});
   if(!out.ok){
-    // Persist a refreshed review request, never a grant for changed/legacy data.
     saveMission(workspace,m);
     const e=new Error(out.code==='APPROVAL_REVIEW_REQUIRED'
       ?'Görev içeriği veya onay süresi değişti. Görevi yeniden inceleyip tekrar açık onay verin.'
@@ -243,7 +240,7 @@ function previewText(value,max=70){
 }
 function requestFingerprint(value){
   const s=String(value||'').trim();
-  return s?crypto.createHash('sha256').update(s,'utf8').digest('hex').slice(0,10):'';
+  return s?crypto.createHash('sha256').update(s,'utf8').digest('hex').slice(0,20):'';
 }
 function safeHost(value){
   try{
@@ -287,7 +284,10 @@ function approvalReviewLabel(m,step=currentStep(m)){
     subject='YOUTUBE PUBLIC · '+title+(targetHash?(' · CHANNEL '+targetHash):'');
   }
 
-  return ['ONAY',subject,ttl+' DK','REQ '+req].join(' · ').slice(0,160);
+  const prefix='ONAY · ';
+  const suffix=' · '+ttl+' DK · REQ '+req;
+  const maxSubject=Math.max(16,160-prefix.length-suffix.length);
+  return prefix+subject.slice(0,maxSubject)+suffix;
 }
 function summarizeMission(m){
   if(!m)return null;
