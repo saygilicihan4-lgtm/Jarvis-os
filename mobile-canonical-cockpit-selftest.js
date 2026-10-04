@@ -1,0 +1,24 @@
+'use strict';
+const fs=require('fs');
+const assert=require('assert');
+const mobile=fs.readFileSync('public/mobile-canonical-cockpit.js','utf8');
+const holo=fs.readFileSync('public/tri-core-hologram.js','utf8');
+
+assert(mobile.includes("const MEDIA='(max-width: 860px) and (orientation: portrait)'"),'portrait mobile activation contract missing');
+assert(mobile.includes('body[data-reference-cockpit-mobile="1"] #jarvisReferenceCockpit .ref-frame{display:none!important}'),'legacy reference frame must hide only while canonical mobile cockpit is active');
+assert(mobile.includes('m-nova')&&mobile.includes('m-jarvis')&&mobile.includes('m-orion'),'three canonical mobile cores missing');
+assert(mobile.includes('@keyframes mSpin')&&mobile.includes('@keyframes mBreathe'),'mobile hologram motion missing');
+assert(mobile.includes('data-state="speaking"')&&mobile.includes('data-state="listening"')&&mobile.includes('data-state="thinking"'),'reactive conversation states missing');
+assert(mobile.includes("doc.body.dataset.jarvisCore||'jarvis'"),'active tri-core role bridge missing');
+assert(mobile.includes('sourceLayer()'),'multilingual reference layer bridge missing');
+assert(mobile.includes("doc.addEventListener('jarvis:language-changed'"),'language change bridge missing');
+assert(mobile.includes("doc.addEventListener('jarvis:conversation-state'"),'conversation state bridge missing');
+assert(mobile.includes('clickLegacy(action)'),'mobile actions must proxy established cockpit actions');
+assert(mobile.includes(".ref-hotspot[data-a=\"'+action+'\"]"),'legacy hotspot proxy target missing');
+assert(mobile.includes('prefers-reduced-motion:reduce'),'reduced motion fallback missing');
+assert(!/\bfetch\s*\(/.test(mobile),'canonical mobile presentation must not make network requests');
+assert(!mobile.includes('localStorage')&&!mobile.includes('sessionStorage'),'canonical mobile presentation must not persist command text or state');
+assert(!mobile.includes('approve_mission_action')&&!mobile.includes('shopify_publish')&&!mobile.includes('youtube_publish'),'canonical mobile presentation must not gain approval/publish authority');
+assert(holo.includes("script.src='/mobile-canonical-cockpit.js'"),'tri-core hologram runtime must load canonical mobile cockpit');
+assert(holo.includes('Presentation-only: authority remains on the legacy cockpit/mission bridges.'),'authority boundary note missing');
+console.log('MOBILE CANONICAL COCKPIT v185 SELFTEST PASS · portrait tri-core cockpit + i18n mirror + legacy action proxy + no authority escalation');
