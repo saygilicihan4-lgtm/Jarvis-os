@@ -1,0 +1,45 @@
+name: Direct Shopify v155 branch patch
+
+on:
+  push:
+    branches: [jarvis-direct-shopify-publish-v155]
+    paths: [.github/workflows/direct-shopify-v155-patch.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: jarvis-direct-shopify-publish-v155
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Remove direct Shopify PUBLIC execution
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const p='worker.js';
+          const src=fs.readFileSync(p,'utf8');
+          const start=src.indexOf('  const shopifyPublish=c.match(');
+          const end=src.indexOf("\n\n  if(/^(?:creator motor durumu",start);
+          if(start<0||end<0)throw new Error('direct Shopify publish block boundaries not found');
+          const oldBlock=src.slice(start,end);
+          if(!oldBlock.includes('getCommerceEngine().publishProduct(WORKSPACE,shopifyPublish[1])'))throw new Error('expected direct publish call missing');
+          const replacement=`  const shopifyPublish=c.match(/^(?:shopify ürünü yayınla|shopify urunu yayinla|ürünü yayınla|urunu yayinla|mağazada yayınla|magazada yayinla)\\s+(gid:\\/\\/shopify\\/Product\\/\\d+)$/i);\n  if(shopifyPublish){\n    return{ok:false,retryable:false,message:'Shopify PUBLIC doğrudan yerel komut yolundan çalıştırılmaz; approval-gated mission gerekir.'};\n  }`;
+          const next=src.slice(0,start)+replacement+src.slice(end);
+          if(next===src)throw new Error('worker.js unchanged');
+          fs.writeFileSync(p,next,'utf8');
+          NODE
+          node --check worker.js
+      - name: Commit branch patch
+        run: |
+          git config user.name "saygilicihan4-lgtm"
+          git config user.email "saygilicihan4@gmail.com"
+          git add worker.js
+          git commit -m "Block direct Shopify PUBLIC bypass v155"
+          git push origin HEAD:jarvis-direct-shopify-publish-v155
