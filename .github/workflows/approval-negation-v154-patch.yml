@@ -1,0 +1,55 @@
+name: Approval Negation v154 Patch
+
+on:
+  push:
+    branches:
+      - jarvis-approval-negation-v154
+
+permissions:
+  contents: write
+
+concurrency:
+  group: approval-negation-v154-patch
+  cancel-in-progress: false
+
+jobs:
+  patch-worker:
+    if: github.event.head_commit.message != 'Apply approval negation guard v154'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch exact worker handler
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('worker.js')
+          s=p.read_text(encoding='utf-8')
+          old="""  }else if(n==='approve_mission_action'){
+              const intent=String(userText||'').toLocaleLowerCase('tr-TR');
+              if(!/(?:onayla|onay ver|yayınla|yayinla|publish|mağazada yayınla|magazada yayinla)/i.test(intent)){
+                return{ok:false,message:'Geri döndürülemez görev adımı için bu turda açık onay/yayınla ifadesi gerekli.'};
+              }
+          """
+          new="""  }else if(n==='approve_mission_action'){
+              const approvalIntent=require('./jarvis-approval-intent').classifyApprovalIntent(userText);
+              if(!approvalIntent.approved){
+                return{ok:false,message:'Geri döndürülemez görev adımı için bu turda açık onay/yayınla ifadesi gerekli.'};
+              }
+          """
+          count=s.count(old)
+          if count != 1:
+              raise SystemExit(f'exact approval handler count={count}, refusing patch')
+          p.write_text(s.replace(old,new,1),encoding='utf-8')
+      - name: Verify narrow approval change
+        run: |
+          node --check worker.js
+          node approval-gate-selftest.js
+          git diff --check
+          git diff -- worker.js
+      - name: Commit branch-only worker patch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add worker.js
+          git commit -m "Apply approval negation guard v154"
+          git push origin HEAD:jarvis-approval-negation-v154
