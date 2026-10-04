@@ -8,7 +8,7 @@ class FakeStore{
   async create(r){if(this.fail)throw new Error('store down');this.shared.sessions.set(r.idHash,{...r})}
   async revoke(id,at){if(this.fail)throw new Error('store down');const r=this.shared.sessions.get(id);if(r&&!r.revokedAt)r.revokedAt=at}
   async revokeOthers(current,at){if(this.fail)throw new Error('store down');for(const r of this.shared.sessions.values())if(r.idHash!==current&&!r.revokedAt)r.revokedAt=at}
-  async setLegacyAllowed(v){if(this.fail)throw new Error('store down');this.shared.legacyAllowed=!!v}
+  async disableLegacy(){if(this.fail)throw new Error('store down');this.shared.legacyAllowed=false}
 }
 
 (async()=>{
@@ -41,13 +41,18 @@ class FakeStore{
   assert.strictEqual(c.validate({sid:second.sid,iat:second.issuedAtMs,exp:second.expiresAtMs}),null,'revocation survives restart');
   assert.ok(c.validate({sid:first.sid,iat:first.issuedAtMs,exp:first.expiresAtMs}),'other session remains active');
 
-  // Legacy v2 compatibility remains explicit until a managed session disables it.
+  // Legacy v2 compatibility is a one-way migration window. Once disabled it
+  // remains disabled after restart and repeated disable calls are idempotent.
   assert.strictEqual(c.acceptsLegacy(),true);
-  await c.setLegacyAllowed(false);
+  const cutover=await c.disableLegacy();
+  assert.strictEqual(cutover.changed,true);
   assert.strictEqual(c.acceptsLegacy(),false);
   const d=createSessionLifecycle({secret,store:new FakeStore(shared),clock});
   await d.init();
   assert.strictEqual(d.acceptsLegacy(),false,'legacy disable survives restart');
+  const disabledAgain=await d.disableLegacy();
+  assert.strictEqual(disabledAgain.changed,false,'legacy cutoff is monotonic and idempotent');
+  assert.strictEqual(shared.legacyAllowed,false);
 
   // New managed sessions still work after legacy disable and can revoke all peers.
   const third=await d.issue({source:'passkey'}),fourth=await d.issue({source:'one-time-code'});
@@ -72,7 +77,7 @@ class FakeStore{
   const volatile=createSessionLifecycle({secret,clock});await volatile.init();
   const v=await volatile.issue({source:'one-time-code'});
   assert.ok(volatile.validate({sid:v.sid,iat:v.issuedAtMs,exp:v.expiresAtMs}));
-  await assert.rejects(()=>volatile.setLegacyAllowed(false),e=>e&&e.code==='SESSION_STORE_UNAVAILABLE');
+  await assert.rejects(()=>volatile.disableLegacy(),e=>e&&e.code==='SESSION_STORE_UNAVAILABLE');
 
   console.log('SESSION LIFECYCLE SELFTEST PASS');
 })().catch(e=>{console.error(e);process.exit(1)});
