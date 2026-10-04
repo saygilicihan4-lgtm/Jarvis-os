@@ -88,3 +88,27 @@
   }
   setTimeout(()=>bootMissionActions(0),0);
 })(typeof globalThis==='object'?globalThis:this);
+
+// v178: load the local tri-core presentation router on both desktop and mobile.
+// It only selects which visual/personality core is foregrounded; it does not execute actions.
+;(function(root){
+  'use strict';
+  if(!root||!root.document)return;
+  function install(){
+    try{return !!(root.JarvisTriCore&&root.JarvisTriCore.install(root))}catch(_){return false}
+  }
+  function boot(attempt=0){
+    if(install())return true;
+    let script=root.document.getElementById('jarvisTriCoreScript');
+    if(!script){
+      script=root.document.createElement('script');
+      script.id='jarvisTriCoreScript';script.src='/tri-core.js';script.async=false;
+      script.onload=()=>install();
+      (root.document.head||root.document.documentElement).appendChild(script);
+    }
+    if(attempt<30)setTimeout(()=>boot(attempt+1),100);
+    return false;
+  }
+  if(root.document.readyState==='loading')root.document.addEventListener('DOMContentLoaded',()=>boot(0),{once:true});
+  else setTimeout(()=>boot(0),0);
+})(typeof globalThis==='object'?globalThis:this);
