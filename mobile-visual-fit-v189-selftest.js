@@ -8,11 +8,12 @@ assert(fit.includes("script.src='/mobile-native-v190.js'"),'compatibility bridge
 assert(fit.includes("script.id='jarvisMobileNativeV190Script'"),'v190 loader id missing');
 assert(fit.includes("script.src='/mobile-viewport-v192.js'"),'compatibility bridge must load v192 dynamic viewport hardening');
 assert(fit.includes("script.id='jarvisMobileViewportV192Script'"),'v192 loader id missing');
-assert(fit.indexOf("mobile-native-v190.js")<fit.indexOf("mobile-viewport-v192.js"),'v192 viewport hardening must load after native cockpit');
+assert(fit.includes("if(!doc.getElementById('jarvisNativeMobileV190')&&attempt<220)"),'v192 must wait for the native v190 stage before loading');
+assert(fit.includes("script.addEventListener('load',()=>ensureViewport(0),{once:true})"),'fresh v190 load must trigger v192 only after v190 script load');
 assert(fit.includes('(max-width: 860px) and (orientation: portrait)'),'portrait activation contract missing');
 assert(!fit.includes('localStorage')&&!fit.includes('sessionStorage'),'compatibility bridge must not persist state');
 assert(!fit.includes('approve_mission_action')&&!fit.includes('shopify_publish')&&!fit.includes('youtube_publish'),'compatibility bridge must not gain authority');
 const canonicalPos=holo.indexOf("script.src='/mobile-canonical-cockpit.js'");
 const fitPos=holo.indexOf("script.src='/mobile-visual-fit-v189.js'");
 assert(canonicalPos>=0&&fitPos>canonicalPos,'compatibility bridge must still run after canonical cockpit loader');
-console.log('MOBILE VISUAL FIT COMPAT SELFTEST PASS · v190 native cockpit then v192 dynamic viewport hardening, no authority escalation');
+console.log('MOBILE VISUAL FIT COMPAT SELFTEST PASS · v190 stage-gated v192 viewport hardening, no authority escalation');
