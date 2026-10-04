@@ -182,32 +182,42 @@ async function run(){
     assert.ok(!JSON.stringify(meta).includes('https://example.test'));
 
     // Exercise the real commerce adapter with an in-memory GraphQL transport.
-    // Revocation during the publication query blocks ACTIVE; after ACTIVE it
-    // blocks PUBLIC and marks the partial operation uncertain.
+    // Revocation during target discovery blocks ACTIVE; after ACTIVE it blocks
+    // PUBLIC and marks the partial operation uncertain without replaying it.
     let commerceMode='',activeCalls=0,publicCalls=0,commerceMission=null;
     const gid='gid://shopify/Product/123456';
+    const publicationId='gid://shopify/Publication/654321';
+    const shop='example.myshopify.com';
     const commerceContext=vm.createContext({require,module:{exports:{}},Buffer,process,console,
-      fakeCredentials:()=>({ready:true,shop:'example.myshopify.com'}),
+      fakeCredentials:()=>({ready:true,shop,apiVersion:'2026-10'}),
       fakeGraphQL:async(_creds,query)=>{
         if(query.includes('query JarvisPublications')){
           if(commerceMode==='before_active')mutate(commerceMission.id,x=>{x.control={requested:'cancel'}});
-          return{publications:{nodes:[{id:'publication-fixture',name:'Online Store'}]}};
+          return{publications:{nodes:[{id:publicationId,name:'Online Store'}]}};
+        }
+        if(query.includes('query JarvisShopifyFinalTarget')){
+          return{shop:{myshopifyDomain:shop},product:{id:gid},publications:{nodes:[{id:publicationId,name:'Online Store'}]}};
         }
         if(query.includes('mutation JarvisActivateProduct')){
           activeCalls++;
           if(commerceMode==='after_active')mutate(commerceMission.id,x=>{x.control={requested:'cancel'}});
           return{productUpdate:{product:{id:gid,title:'fixture',status:'ACTIVE'},userErrors:[]}};
         }
-        publicCalls++;return{publishablePublish:{publishable:{publishedOnPublication:true},userErrors:[]}};
+        if(query.includes('mutation JarvisPublishProduct')){
+          publicCalls++;
+          return{publishablePublish:{publishable:{publishedOnPublication:true},userErrors:[]}};
+        }
+        throw new Error('Unexpected fake GraphQL operation');
       }
     });
     vm.runInContext(fs.readFileSync(path.join(__dirname,'jarvis-commerce-engine.js'),'utf8')+
       '\nresolveCredentials=fakeCredentials;graphQLRequest=fakeGraphQL;',commerceContext);
+    const commerceStoreHash=commerceContext.module.exports.privacyHash(shop);
     for(const mode of ['before_active','after_active','success']){
       commerceMode=mode;activeCalls=0;publicCalls=0;
       commerceMission=engine.createMission(root,{type:'shopify_product',steps:['shopify_draft',{name:'shopify_publish',meta:{requiresApproval:true}}]});
       engine.startStep(root,commerceMission.id);
-      engine.completeStep(root,commerceMission.id,{artifact:{product:{id:gid,title:'fixture',status:'DRAFT'}}});
+      engine.completeStep(root,commerceMission.id,{artifact:{product:{id:gid,title:'fixture',status:'DRAFT',_jarvisStoreHash:commerceStoreHash}}});
       commerceMission=await runMission(commerceMission.id);approve(commerceMission);engine.startStep(root,commerceMission.id);
       if(mode==='success'){
         const result=await commerceContext.module.exports.publishProduct(root,gid);
