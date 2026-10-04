@@ -1,0 +1,37 @@
+name: Apply v162 Restore Hardening
+
+on:
+  push:
+    branches: [ jarvis-restore-authority-v162 ]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: jarvis-restore-authority-v162
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Apply exact v162 patch
+        run: node scripts/apply-v162-restore-hardening.js
+      - name: Validate patch
+        run: |
+          node --check server.js
+          node --check session-bootstrap-selftest.js
+          node session-bootstrap-selftest.js
+          git diff --check
+      - name: Commit patched production files
+        run: |
+          git config user.name "Jarvis Security Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add server.js session-bootstrap-selftest.js .github/workflows/ci.yml
+          git commit -m "Jarvis Restore Authority Hardening v162"
+          git push origin HEAD:jarvis-restore-authority-v162
