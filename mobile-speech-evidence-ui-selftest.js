@@ -32,14 +32,18 @@ function docMock(){
   assert(badge.textContent.includes('STT capture ? henüz gözlenmedi'));
   assert(badge.textContent.includes('Otomatik STT/dil öğrenimi kapalı'));
   assert.equal(badge.dataset.sttVerified,'false');assert.equal(badge.dataset.languageVerified,'false');assert.equal(badge.dataset.deviceE2eVerified,'false');assert.equal(badge.dataset.automaticLearning,'false');
+  assert.equal(badge.dataset.ttsEvidenceObservedAt,'');assert.equal(badge.dataset.sttEvidenceObservedAt,'','unknown badge state must not retain freshness metadata');
   assert(!badge.textContent.includes('STT ✓'));assert(!badge.textContent.includes('dil doğrulandı'));
 
   const tts={provider:'edge-tts',voice:'fr-FR-HenriNeural',localeResolution:'exact',speechEvidence:'runtime_inventory'};
-  assert(chat.recordTtsEvidence(store,tts,'fr-FR','fr-FR',now));
-  assert(chat.recordSttCaptureEvidence(store,'fr-FR','bonjour',now));
+  const ttsReceipt=chat.recordTtsEvidence(store,tts,'fr-FR','fr-FR',now);
+  const sttReceipt=chat.recordSttCaptureEvidence(store,'fr-FR','bonjour',now);
+  assert(ttsReceipt);assert(sttReceipt);
   ui.refresh(doc,{storage:store,nowMs:now,fallback:'tr-TR'});
-  assert(badge.textContent.includes('TTS ✓ runtime + playback'));
-  assert(badge.textContent.includes('STT capture ◇ gözlendi · dil doğruluğu doğrulanmadı'));
+  assert(badge.textContent.includes('TTS ✓ runtime + playback · geçici kanıt'));
+  assert(badge.textContent.includes('STT capture ◇ gözlendi · geçici kanıt · dil doğruluğu doğrulanmadı'));
+  assert.equal(badge.dataset.ttsEvidenceObservedAt,String(ttsReceipt.verifiedAt));assert.equal(badge.dataset.ttsEvidenceExpiresAt,String(ttsReceipt.expiresAt));
+  assert.equal(badge.dataset.sttEvidenceObservedAt,String(sttReceipt.capturedAt));assert.equal(badge.dataset.sttEvidenceExpiresAt,String(sttReceipt.expiresAt));
   assert(!badge.textContent.includes('STT ✓'));
 
   const source=fs.readFileSync(require.resolve('./public/language-chat'),'utf8');
@@ -50,5 +54,5 @@ function docMock(){
   assert(source.includes('/iPhone|iPad|iPod|Android/i'),'bootstrap must stay mobile-only');
   assert.equal(source.includes('innerHTML='),false,'integration must not introduce HTML injection');
 
-  console.log('MOBILE SPEECH EVIDENCE UI SELFTEST PASS · mobile-only badge keeps TTS, STT capture and preference semantics separate without false support claims');
+  console.log('MOBILE SPEECH EVIDENCE UI SELFTEST PASS · mobile-only badge accepts freshness-aware status text and keeps TTS, STT capture and preference semantics separate without false support claims');
 })();
