@@ -32,6 +32,7 @@ const positiveCases=[
   ['shopify','ürünü yayınla'],
   ['youtube','videoyu yayınla'],
   ['youtube','publish'],
+  ['youtube','publish now'],
   ['browser','onayla'],
   ['browser','onay ver'],
   ['english','approve']
@@ -45,21 +46,31 @@ for(const [surface,text] of positiveCases){
 const negativeCases=[
   ['shopify','sakın yayınlama'],
   ['shopify','sakin yayinlama'],
+  ['shopify','asla yayınla'],
   ['shopify','yayınlama'],
   ['shopify','yayinlama'],
   ['shopify','yayınlamayın'],
+  ['shopify','yayınlamayınız'],
   ['shopify','yayinlamayalim'],
   ['youtube','publish etme'],
+  ['youtube','publish etmeyiniz'],
   ['youtube','do not publish'],
+  ['youtube','do not ever publish'],
   ['youtube',"don't publish"],
+  ['youtube',"don't ever publish"],
   ['youtube','dont publish'],
   ['youtube','never publish'],
+  ['youtube','no publish'],
   ['browser','onay verme'],
+  ['browser','onay vermeyiniz'],
   ['browser','onaylama'],
   ['browser','onaylamayın'],
+  ['browser','onaylamayınız'],
   ['browser','approve etme'],
   ['browser','do not approve'],
   ['browser',"don't approve"],
+  ['browser','never ever approve'],
+  ['browser','no approve'],
   ['mixed','yayınlama, sonra onayla'],
   ['mixed','publish etme ama onayla'],
   ['mixed','sakın yayınla'],
@@ -73,6 +84,8 @@ for(const [surface,text] of negativeCases){
 }
 assert.strictEqual(approvalIntent.classifyApprovalIntent('yayınlama, sonra onayla').reason,'negated_explicit_action');
 assert.strictEqual(approvalIntent.classifyApprovalIntent('publish etme ama onayla').reason,'negated_explicit_action');
+assert.strictEqual(approvalIntent.classifyApprovalIntent("don't ever publish").reason,'negated_explicit_action');
+assert.strictEqual(approvalIntent.classifyApprovalIntent('no approve').reason,'negated_explicit_action');
 
 assert.ok(commerce.includes('async function publishProduct(workspace,productId)'),'Shopify publish engine missing');
 assert.ok(commerce.includes("Geçersiz Shopify Product GID")&&commerce.includes("Product\\/\\d+$/.test(id)"),'Shopify publish product id validation missing');
