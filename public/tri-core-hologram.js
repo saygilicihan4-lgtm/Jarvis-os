@@ -77,3 +77,15 @@
   script.async=false;
   (doc.head||doc.documentElement).appendChild(script);
 })(typeof window!=='undefined'?window:null);
+
+;(function(host){
+  if(!host||!host.document)return;
+  const doc=host.document;
+  function boot(attempt=0){
+    if(doc.getElementById('jarvisReferenceCockpitI18nScript'))return true;
+    if(!doc.getElementById('jarvisReferenceCockpit')&&attempt<80){setTimeout(()=>boot(attempt+1),100);return false}
+    const script=doc.createElement('script');script.id='jarvisReferenceCockpitI18nScript';script.src='/reference-cockpit-i18n.js';script.async=false;
+    (doc.head||doc.documentElement).appendChild(script);return true;
+  }
+  setTimeout(()=>boot(0),0);
+})(typeof window!=='undefined'?window:null);
