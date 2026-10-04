@@ -71,10 +71,24 @@ const yt=require('./jarvis-youtube-studio');
   assert.strictEqual(second.reused,true);
   assert.strictEqual(uploads,1,'mission retry must not duplicate YouTube upload');
 
+  const beforeInvalidProofClicks=publishClicks;
   await assert.rejects(
     ()=>yt.publishPreparedDraft(fakeOperator,tmp,{missionId}),
     /approval proof/
   );
+  await assert.rejects(
+    ()=>yt.publishPreparedDraft(fakeOperator,tmp,{missionId,approvedAt:'yes'}),
+    /valid explicit approval timestamp/
+  );
+  await assert.rejects(
+    ()=>yt.publishPreparedDraft(fakeOperator,tmp,{missionId,approvedAt:'2000-01-01T00:00:00.000Z'}),
+    /predates draft receipt/
+  );
+  await assert.rejects(
+    ()=>yt.publishPreparedDraft(fakeOperator,tmp,{missionId,approvedAt:new Date(Date.now()+60000).toISOString()}),
+    /timestamp is in the future/
+  );
+  assert.strictEqual(publishClicks,beforeInvalidProofClicks,'invalid approval proof must fail before Publish click');
 
   const approvedAt=new Date().toISOString();
   const published=await yt.publishPreparedDraft(fakeOperator,tmp,{missionId,approvedAt});
@@ -90,6 +104,28 @@ const yt=require('./jarvis-youtube-studio');
   assert.strictEqual(publishedAgain.ok,true);
   assert.strictEqual(publishedAgain.reused,true);
   assert.strictEqual(publishClicks,1,'published mission must never click Publish twice');
+
+  // A tampered receipt must never let approval from one mission authorize another mission's draft.
+  const mismatchId='M-MISMATCH-123456';
+  publishSucceeded=false;
+  allowPublishSuccess=true;
+  const mismatchDraft=await yt.prepareDraft(fakeOperator,tmp,{
+    file:'creator-video/demo.mp4',
+    title:'Mismatch Test',
+    description:'Açıklama',
+    missionId:mismatchId
+  });
+  assert.strictEqual(mismatchDraft.ok,true);
+  const mismatchReceiptFile=yt.missionReceiptFile(tmp,mismatchId);
+  const mismatchReceipt=JSON.parse(fs.readFileSync(mismatchReceiptFile,'utf8'));
+  mismatchReceipt.missionId='M-OTHER-123456';
+  fs.writeFileSync(mismatchReceiptFile,JSON.stringify(mismatchReceipt,null,2),'utf8');
+  const beforeMismatchClicks=publishClicks;
+  await assert.rejects(
+    ()=>yt.publishPreparedDraft(fakeOperator,tmp,{missionId:mismatchId,approvedAt:new Date().toISOString()}),
+    /mission receipt mismatch/
+  );
+  assert.strictEqual(publishClicks,beforeMismatchClicks,'mission-mismatched approval must fail before Publish click');
 
   // A final Publish click with no verifiable success becomes uncertain and must never auto-click again.
   const uncertainId='M-UNCERTAIN-123456';
@@ -122,6 +158,10 @@ const yt=require('./jarvis-youtube-studio');
   assert.ok(source.includes("YOUTUBE_UPLOAD_UNCERTAIN"),'uncertain upload guard missing');
   assert.ok(source.includes("YOUTUBE_PUBLISH_UNCERTAIN"),'uncertain publish guard missing');
   assert.ok(source.includes('explicit approval proof required for YouTube publish'),'module-level approval proof missing');
+  assert.ok(source.includes('valid explicit approval timestamp required for YouTube publish'),'approval timestamp validation missing');
+  assert.ok(source.includes('YouTube approval mission receipt mismatch'),'approval mission binding missing');
+  assert.ok(source.includes('YouTube approval predates draft receipt'),'approval lifecycle lower bound missing');
+  assert.ok(source.includes('YouTube approval timestamp is in the future'),'approval lifecycle upper bound missing');
   assert.ok(source.includes("input[type=file]"),'file input upload path missing');
   assert.ok(worker.includes("name:'youtube_prepare_draft_upload'"),'native YouTube draft tool missing');
   assert.ok(worker.includes("name:'youtube_studio_status'"),'native YouTube status tool missing');
@@ -130,5 +170,5 @@ const yt=require('./jarvis-youtube-studio');
   assert.ok(worker.includes('"Devam et" tek başına YouTube PUBLIC onayı değildir'),'generic resume must not count as YouTube publish approval');
   assert.ok(server.includes("return'youtube_upload_prepare_v1'"),'server YouTube draft routing missing');
 
-  console.log('YOUTUBE STUDIO APPROVAL SELFTEST PASS');
+  console.log('YOUTUBE STUDIO APPROVAL SELFTEST PASS · approval proof is timestamped, mission-bound and draft-lifecycle-bound before PUBLIC click');
 })().catch(e=>{console.error(e);process.exit(1)});
