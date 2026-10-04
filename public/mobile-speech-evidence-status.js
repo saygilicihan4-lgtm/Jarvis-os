@@ -24,13 +24,15 @@
       ttsState='verified';
       ttsEvidence=positive;
     }
+    const preferenceSaved=preference===normalized;
     return{
       locale:normalized,
       tts:{state:ttsState,verified:ttsState==='verified',evidence:ttsEvidence},
       stt:{state:capture?'capture-observed':'unknown',captureObserved:!!capture,evidence:capture,sttVerified:false,languageVerified:false},
-      preference:{state:preference===normalized?'saved':'not-saved',saved:preference===normalized,locale:preference||null,evidence:preference===normalized?'explicit-playback-gated-preference':null},
+      preference:{state:preferenceSaved?'saved':'not-saved',saved:preferenceSaved,locale:preference||null,evidence:preferenceSaved?'device-local-locale-preference':null,provenanceVerified:false},
       automaticLearning:false,
       sttSupportVerified:false,
+      preferenceProvenanceVerified:false,
       languageVerified:false,
       deviceE2eVerified:false
     };
@@ -43,7 +45,7 @@
     else if(tts.state==='unsupported')ttsText='TTS ✕ runtime desteklemiyor (geçici kanıt)';
     else if(tts.state==='ambiguous')ttsText='TTS ! bölge belirsiz';
     const sttText=stt.captureObserved?'STT capture ◇ gözlendi · dil doğruluğu doğrulanmadı':'STT capture ? henüz gözlenmedi';
-    const prefText=pref.saved?'Tercih ✓ açık seçim + playback':'Tercih — kaydedilmedi';
+    const prefText=pref.saved?'Tercih ◇ cihazda kayıtlı · provenance doğrulanmadı':'Tercih — kaydedilmedi';
     return summary.locale+' · '+ttsText+' · '+sttText+' · '+prefText;
   }
   function render(element,locale,options={}){
@@ -57,6 +59,7 @@
       element.dataset.sttState=summary.stt.state;
       element.dataset.preferenceState=summary.preference.state;
       element.dataset.sttVerified='false';
+      element.dataset.preferenceProvenanceVerified='false';
       element.dataset.languageVerified='false';
       element.dataset.deviceE2eVerified='false';
     }
