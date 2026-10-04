@@ -2,7 +2,8 @@
 const fs=require('fs'),os=require('os'),path=require('path'),cp=require('child_process');
 const {normalizeLocale}=require('./jarvis-language-core');
 const triCore=require('./jarvis-tri-core-personality');
-const VERSION='1.2';
+const {createDeliberator,advisoryBlock}=require('./jarvis-tri-core-deliberation');
+const VERSION='1.3';
 function validatePlan(context,speech){
   const locale=normalizeLocale(context?.locale),ttsLocale=normalizeLocale(speech?.ttsLocale);
   const exact=!!locale&&ttsLocale===locale;
@@ -21,12 +22,15 @@ function createOutput({brainUrl='http://127.0.0.1:11434',model='qwen3.5:2b',fetc
   const url=new URL(brainUrl);
   if(url.protocol!=='http:'||!['127.0.0.1','localhost','[::1]'].includes(url.hostname)||url.username||url.password||url.pathname!=='/'||url.search||url.hash)
     throw new Error('loopback_brain_required');
+  const deliberator=createDeliberator({origin:url.origin,model,fetchImpl});
   async function generate({text,context,speech,history=[],signal,core}={}){
     const locale=validatePlan(context,speech);
     signal?.throwIfAborted();
     const selected=core&&triCore.PROFILES[core.core]?core:triCore.select(text);
     const cleanText=String(selected.cleanText||text||'').replace(/\s+/g,' ').trim().slice(0,1800);
-    const personaPrompt=triCore.promptFor(selected,locale);
+    const deliberation=await deliberator.consult({selection:selected,text:cleanText,locale,signal});
+    signal?.throwIfAborted();
+    const personaPrompt=triCore.promptFor(selected,locale)+advisoryBlock(deliberation.notes);
     const tuning=selected.core==='orion'?{num_predict:520,temperature:0.35}:selected.core==='jarvis'?{num_predict:260,temperature:0.45}:{num_predict:400,temperature:0.62};
     const response=await fetchImpl(url.origin+'/api/chat',{method:'POST',headers:{'content-type':'application/json'},signal:signal||AbortSignal.timeout(45000),body:JSON.stringify({
       model,stream:false,think:false,keep_alive:'30m',options:tuning,
@@ -42,7 +46,9 @@ function createOutput({brainUrl='http://127.0.0.1:11434',model='qwen3.5:2b',fetc
     if(normalizeLocale(parsed?.locale)!==locale||typeof parsed.reply!=='string'||!parsed.reply.trim()||parsed.reply.length>900)
       throw new Error('reply_locale_or_length_mismatch');
     return{reply:parsed.reply.replace(/\s+/g,' ').trim(),locale,core:selected.core,role:selected.role,coreSource:selected.source,
-      consultWith:[...(selected.consultWith||[])],authority:'shared_guardrail_only'};
+      consultWith:[...(selected.consultWith||[])],consultedWith:[...(deliberation.consultedWith||[])],
+      consultationAttempted:[...(deliberation.attempted||[])],consultationMode:deliberation.mode||'local_advisory_only',
+      authority:'shared_guardrail_only'};
   }
   async function render({reply,context,speech,signal}){
     const locale=validatePlan(context,speech),ttsLocale=normalizeLocale(speech.ttsLocale);
