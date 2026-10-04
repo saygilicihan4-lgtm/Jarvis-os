@@ -80,6 +80,42 @@
   setTimeout(()=>boot(0),0);
 })(typeof globalThis==='object'?globalThis:this);
 
+// v179 mobile tri-core bridge. It deliberately forwards only lifecycle and
+// role metadata. Transcript/reply/mission input never enter this visual event bus.
+;(function(root){
+  'use strict';
+  if(!root||!root.document||!/iPhone|iPad|iPod|Android/i.test(String(root.navigator&&root.navigator.userAgent||'')))return;
+  const ALLOWED=new Set(['jarvis','nova','orion']);
+  function safeDetail(detail){
+    const src=detail&&typeof detail==='object'?detail:{};
+    const core=ALLOWED.has(src.core)?src.core:null;
+    const consultWith=Array.isArray(src.consultWith)?src.consultWith.filter(x=>ALLOWED.has(x)&&x!==core).slice(0,2):[];
+    return{core,role:typeof src.role==='string'?src.role.slice(0,24):null,consultWith,authority:'shared_guardrail_only'};
+  }
+  function emit(state,detail){
+    try{
+      if(typeof root.CustomEvent!=='function')return;
+      const mapped=({listening:'listening',thinking:'thinking',playing:'speaking',completed:'idle',error:'error',idle:'idle','confirm-language':'waiting','language-confirmed':'thinking'})[state]||'waiting';
+      root.document.dispatchEvent(new root.CustomEvent('jarvis:conversation-state',{detail:{state:mapped,...safeDetail(detail)}}));
+    }catch(_){}
+  }
+  function patch(attempt=0){
+    const api=root.JarvisMobileLanguageChat;
+    if(!api){if(attempt<30)setTimeout(()=>patch(attempt+1),100);return false}
+    if(api.__jarvisTriCoreMobileBridgeV179)return true;
+    const original=api.createClient;if(typeof original!=='function')return false;
+    api.createClient=function(options={}){
+      const userState=options.onState,userReply=options.onReply;
+      return original({...options,
+        onState:(state,detail)=>{emit(state,detail);if(typeof userState==='function')userState(state,detail)},
+        onReply:result=>{emit('playing',result);if(typeof userReply==='function')userReply(result)}
+      });
+    };
+    api.__jarvisTriCoreMobileBridgeV179=true;return true;
+  }
+  setTimeout(()=>patch(0),0);
+})(typeof globalThis==='object'?globalThis:this);
+
 ;(function(root){
   'use strict';
   if(!root||!root.document||!/iPhone|iPad|iPod|Android/i.test(String(root.navigator&&root.navigator.userAgent||'')))return;
