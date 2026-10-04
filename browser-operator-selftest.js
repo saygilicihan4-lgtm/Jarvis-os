@@ -9,7 +9,7 @@ const baseSource=fs.readFileSync('./jarvis-browser-operator-v191-base.js','utf8'
 const manifest=JSON.parse(fs.readFileSync('./jarvis-update-manifest.json','utf8'));
 const workerSource=fs.readFileSync('./worker.js','utf8');
 
-assert.strictEqual(op.BROWSER_OPERATOR_VERSION,'1.2');
+assert.strictEqual(op.BROWSER_OPERATOR_VERSION,'1.3');
 assert.strictEqual(op.BROWSER_AUTOFILL_VERSION,'1.0');
 assert.strictEqual(op.BROWSER_SURFACE_VERSION,'1.0');
 assert.deepStrictEqual(op.allowedHosts(),['*']);
@@ -46,11 +46,15 @@ assert.ok(browserSource.includes('const samePage=await pinnedPage(port,targetId)
 assert.ok(browserSource.includes('finalTarget.assertReceipt(proof,contract,fresh)'),'verified final click must re-verify immediately before click');
 assert.ok(browserSource.includes('evalOnPage(samePage,clickExpression(text))'),'consequential click must execute on the pinned tab, not a newly selected tab');
 assert.match(op.hashTabId('tab-A'),/^[a-f0-9]{64}$/);assert.notStrictEqual(op.hashTabId('tab-A'),op.hashTabId('tab-B'));
+assert.ok(browserSource.includes('elementFingerprintExpression(text)'),'final click must fingerprint one exact element before click');
+assert.ok(browserSource.includes("FINAL_ELEMENT_AMBIGUOUS"),'ambiguous final controls must fail closed');
+assert.ok(browserSource.includes("FINAL_ELEMENT_CHANGED"),'changed final element must fail closed');
+assert.ok(browserSource.includes('clickBoundElementExpression(text,elementProof.elementHash)'),'final click must execute only against the fingerprinted element');
 const manifestPaths=new Set(manifest.files.map(x=>x.path));
 assert.ok(manifestPaths.has('jarvis-browser-operator.js'),'trusted updater must stage browser wrapper');
 assert.ok(manifestPaths.has('jarvis-browser-operator-v191-base.js'),'trusted updater must stage browser base dependency');
 assert.ok(manifestPaths.has('jarvis-final-target-verification.js'),'trusted updater must stage target verifier dependency');
-assert.strictEqual(manifest.files.find(x=>x.path==='jarvis-browser-operator.js').signature,"BROWSER_OPERATOR_VERSION='1.2'");
+assert.strictEqual(manifest.files.find(x=>x.path==='jarvis-browser-operator.js').signature,"BROWSER_OPERATOR_VERSION='1.3'");
 assert.strictEqual(manifest.files.find(x=>x.path==='jarvis-final-target-verification.js').signature,"FINAL_TARGET_VERIFICATION_VERSION='1.3'");
 
 assert.strictEqual(op.classifyAutofillField('E-posta adresi'),'email');
@@ -92,4 +96,4 @@ assert.strictEqual(op.autofillProfileSummary(tmp).count,0);
 
 fs.rmSync(tmp,{recursive:true,force:true});
 require('./final-target-verification-selftest.js');
-console.log('BROWSER OPERATOR v192 SELFTEST PASS · any-site + safe autofill + deep surfaces + same-tab pinned final click + live target binding');
+console.log('BROWSER OPERATOR v194 SELFTEST PASS · any-site + safe autofill + deep surfaces + same-tab + atomic final-element binding');
