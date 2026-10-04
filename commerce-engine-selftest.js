@@ -57,6 +57,12 @@ assert.ok(typeof engine.findProductByMission==='function');
 assert.ok(typeof engine.createDraftForMission==='function');
 assert.ok(typeof engine.resolveShopifyPublishApproval==='function');
 
+const commerceSource=fs.readFileSync(path.join(__dirname,'jarvis-commerce-engine.js'),'utf8');
+const publishStart=commerceSource.indexOf('async function publishProduct(workspace,productId)');
+const publicationPreflight=commerceSource.indexOf('const publication=await findOnlineStorePublication(creds);',publishStart);
+const activeMutation=commerceSource.indexOf('const active=await graphQLRequest(creds,`mutation JarvisActivateProduct',publishStart);
+assert.ok(publishStart>=0&&publicationPreflight>publishStart&&activeMutation>publicationPreflight,'Online Store publication preflight must happen before ACTIVE mutation');
+
 const gid='gid://shopify/Product/123456789';
 const approvalRoot=fs.mkdtempSync(path.join(os.tmpdir(),'jarvis-commerce-approval-'));
 const missionDir=path.join(approvalRoot,'.jarvis-missions');
