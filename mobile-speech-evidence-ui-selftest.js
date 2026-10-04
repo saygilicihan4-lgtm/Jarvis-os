@@ -37,7 +37,7 @@ function docMock(){
   const tts={provider:'edge-tts',voice:'fr-FR-HenriNeural',localeResolution:'exact',speechEvidence:'runtime_inventory'};
   const ttsReceipt=chat.recordTtsEvidence(store,tts,'fr-FR','fr-FR',now);assert(ttsReceipt);
   const sttReceipt=chat.recordSttCaptureEvidence(store,'fr-FR','bonjour',now);assert(sttReceipt);
-  ui.refresh(doc,{storage:store,nowMs:now,fallback:'tr-TR'});
+  const live=ui.refresh(doc,{storage:store,nowMs:now,fallback:'tr-TR'});
   assert(badge.textContent.includes('TTS ✓ runtime + playback · geçici kanıt'));
   assert(badge.textContent.includes('STT capture ◇ gözlendi · geçici kanıt · dil doğruluğu doğrulanmadı'));
   assert(!badge.textContent.includes('STT ✓'));
@@ -47,6 +47,21 @@ function docMock(){
   assert.equal(badge.dataset.sttEvidenceObservedAt,String(sttReceipt.capturedAt));
   assert.equal(badge.dataset.sttEvidenceExpiresAt,String(sttReceipt.expiresAt));
   assert.equal(badge.dataset.sttEvidenceRemainingMs,String(sttReceipt.expiresAt-now));
+
+  assert.equal(ui.nextEvidenceExpiryDelay(live,now),sttReceipt.expiresAt-now+1,'earliest evidence expiry must drive the one-shot truth refresh');
+  assert.equal(ui.nextEvidenceExpiryDelay(live,sttReceipt.expiresAt),1,'exact expiry boundary must schedule a refresh one millisecond later');
+  assert.equal(ui.nextEvidenceExpiryDelay({tts:{freshness:{expiresAt:now-1}},stt:{freshness:null}},now),null,'already expired evidence must not schedule a future timer');
+  assert.equal(ui.nextEvidenceExpiryDelay(null,now),null);
+
+  const timerRoot={scheduled:[],cleared:[],setTimeout(fn,delay){this.scheduled.push({fn,delay});return this.scheduled.length},clearTimeout(id){this.cleared.push(id)}};
+  const run=()=>{};
+  const firstDelay=ui.scheduleExpiryRefresh(timerRoot,live,run,now);
+  assert.equal(firstDelay,sttReceipt.expiresAt-now+1);assert.equal(timerRoot.scheduled.length,1);assert.equal(timerRoot.scheduled[0].fn,run);assert.equal(timerRoot.scheduled[0].delay,firstDelay);
+  const ttsOnly={tts:{freshness:{expiresAt:ttsReceipt.expiresAt}},stt:{freshness:null},transcript:'must-not-matter'};
+  const secondDelay=ui.scheduleExpiryRefresh(timerRoot,ttsOnly,run,now);
+  assert.equal(secondDelay,ttsReceipt.expiresAt-now+1);assert.deepEqual(timerRoot.cleared,[1],'reschedule must clear the older expiry timer first');assert.equal(timerRoot.scheduled.length,2);
+  assert.equal(ui.scheduleExpiryRefresh(timerRoot,{tts:{freshness:null},stt:{freshness:null}},run,now),null,'no live evidence means no one-shot expiry timer');
+  assert.deepEqual(timerRoot.cleared,[1,2],'losing all evidence must clear the prior expiry timer');assert.equal(timerRoot.__jarvisMobileSpeechEvidenceExpiryTimer,null);
 
   ui.refresh(doc,{storage:store,nowMs:sttReceipt.expiresAt,fallback:'tr-TR'});
   assert(badge.textContent.includes('STT capture ◇ gözlendi · geçici kanıt'),'capture evidence remains visible at exact expiry boundary');
@@ -67,5 +82,5 @@ function docMock(){
   assert(source.includes('/iPhone|iPad|iPod|Android/i'),'bootstrap must stay mobile-only');
   assert.equal(source.includes('innerHTML='),false,'integration must not introduce HTML injection');
 
-  console.log('MOBILE SPEECH EVIDENCE UI SELFTEST PASS · freshness-aware mobile badge clears expired STT metadata while preserving independent TTS evidence and truth boundaries');
+  console.log('MOBILE SPEECH EVIDENCE UI SELFTEST PASS · expiry-bound one-shot refresh complements periodic polling without weakening STT/language/privacy truth boundaries');
 })();
