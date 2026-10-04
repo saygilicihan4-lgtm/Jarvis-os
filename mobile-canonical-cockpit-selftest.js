@@ -3,6 +3,7 @@ const fs=require('fs');
 const assert=require('assert');
 const mobile=fs.readFileSync('public/mobile-canonical-cockpit.js','utf8');
 const holo=fs.readFileSync('public/tri-core-hologram.js','utf8');
+const tri=fs.readFileSync('public/tri-core.js','utf8');
 
 assert(mobile.includes("const MEDIA='(max-width: 860px) and (orientation: portrait)'"),'portrait mobile activation contract missing');
 assert(mobile.includes('body[data-reference-cockpit-mobile="1"] #jarvisReferenceCockpit .ref-frame{display:none!important}'),'legacy reference frame must hide only while canonical mobile cockpit is active');
@@ -21,4 +22,7 @@ assert(!mobile.includes('localStorage')&&!mobile.includes('sessionStorage'),'can
 assert(!mobile.includes('approve_mission_action')&&!mobile.includes('shopify_publish')&&!mobile.includes('youtube_publish'),'canonical mobile presentation must not gain approval/publish authority');
 assert(holo.includes("script.src='/mobile-canonical-cockpit.js'"),'tri-core hologram runtime must load canonical mobile cockpit');
 assert(holo.includes('Presentation-only: authority remains on the legacy cockpit/mission bridges.'),'authority boundary note missing');
-console.log('MOBILE CANONICAL COCKPIT v185 SELFTEST PASS · portrait tri-core cockpit + i18n mirror + legacy action proxy + no authority escalation');
+assert(tri.includes("script.src='/tri-core-hologram.js'"),'tri-core router must bootstrap the presentation runtime');
+assert(!tri.includes("if(!doc||doc.body.dataset.jarvisCoreFx==='lite')return false"),'lite mode must not skip the presentation bootstrap chain');
+assert(tri.includes("const lite=doc.body&&doc.body.dataset.jarvisCoreFx==='lite'"),'lite-mode presentation bootstrap guard missing');
+console.log('MOBILE CANONICAL COCKPIT v186 SELFTEST PASS · portrait cockpit boots on lite mobile devices + i18n mirror + legacy action proxy + no authority escalation');
