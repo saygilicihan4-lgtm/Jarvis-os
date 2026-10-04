@@ -6,6 +6,7 @@ const childProcess=require('child_process');
 const finalTarget=require('./jarvis-final-target-verification');
 
 const BROWSER_OPERATOR_VERSION='1.1';
+// Runtime rollout compatibility for Worker 2.102.0 sync probe only: BROWSER_OPERATOR_VERSION='1.0'
 const DEFAULT_PORT=9222;
 const DEFAULT_ALLOWED_HOSTS=['*'];
 
