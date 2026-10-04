@@ -49,9 +49,12 @@ async function persistReminder(r){if(!dbReady)throw new Error('database not read
 if(VAPID_PUBLIC&&VAPID_PRIVATE){try{webpush.setVapidDetails(VAPID_SUBJECT,VAPID_PUBLIC,VAPID_PRIVATE)}catch(e){console.error('[JARVIS] VAPID CONFIG ERROR:',e.message)}}
 let bootstrapPairUsed=false;
 const PHONE_SESSION_SECRET=crypto.createHmac('sha256',DEVICE_SECRET||STATE_SECRET||TOKEN||'jarvis-dev-fallback').update('jarvis:phone-session:v2').digest();
-let phoneCode=String(crypto.randomInt(0,100000000)).padStart(8,'0');
-let phoneCodeExp=Date.now()+5*60*1000;
-let phoneCodeUsed=false;
+// No unissued recovery credential exists after a restart.
+let phoneCode='';
+let phoneCodeExp=0;
+let phoneCodeUsed=true;
+let phoneCodeIssuer=null;
+function clearPhoneCode(){phoneCode='';phoneCodeExp=0;phoneCodeUsed=true;phoneCodeIssuer=null;}
 function cookieMap(req){
   try{return Object.fromEntries(String(req.headers.cookie||'').split(';').map(x=>x.trim().split('=').map(decodeURIComponent)).filter(x=>x.length===2))}
   catch{return {}} // Malformed percent encoding is unauthenticated, not a server crash.
@@ -784,6 +787,20 @@ const server=http.createServer((req,res)=>{
     return json(res,401,{error:'trusted session required',pairingRequired:true});
   }
 
+  if(pathname==='/api/session/create'&&req.method==='POST'){
+    // This route intentionally precedes the general cookie/admin fallback and
+    // bootstrap recovery. Issuance needs a signed, already-approved PC identity.
+    const ident=workerIdentity(req),issuer=ident&&deviceWorker(ident.deviceId);
+    if(!ident||ident.exp<=Date.now()||String(req.headers['x-jarvis-device-id']||'')!==ident.deviceId||!issuer||issuer.approved!==true){
+      return json(res,401,{error:'approved signed device required'});
+    }
+    phoneCode=String(crypto.randomInt(0,100000000)).padStart(8,'0');
+    phoneCodeExp=Math.min(Date.now()+5*60*1000,ident.exp);phoneCodeUsed=false;
+    phoneCodeIssuer={deviceId:ident.deviceId,credentialIssuedAt:issuer.credentialIssuedAt||null};
+    log('PHONE_SESSION_CREATE','approved signed device generated one-time phone session code');
+    return json(res,200,{code:phoneCode,expiresAt:new Date(phoneCodeExp).toISOString(),expiresInSeconds:Math.max(0,Math.floor((phoneCodeExp-Date.now())/1000))});
+  }
+
   if(pathname==='/api/db/status'&&req.method==='GET'){
     return json(res,200,{configured:!!db,ready:dbReady,persistent:dbReady,reminders:state.reminders.length,pushSubscriptions:Object.keys(state.pushSubscriptions).length,reminderStorage:dbReady?'postgresql':'unavailable',pushStorage:dbReady?'postgresql':'unavailable'});
   }
@@ -966,19 +983,16 @@ const server=http.createServer((req,res)=>{
     });
   }
 
-  if(pathname==='/api/session/create'&&req.method==='POST'){
-    phoneCode=String(crypto.randomInt(0,100000000)).padStart(8,'0');
-    phoneCodeExp=Date.now()+5*60*1000;phoneCodeUsed=false;
-    log('PHONE_SESSION_CREATE','approved signed device generated one-time phone session code');
-    return json(res,200,{code:phoneCode,expiresAt:new Date(phoneCodeExp).toISOString(),expiresInSeconds:300});
-  }
-
   if(pathname==='/api/session/exchange'&&req.method==='POST'){
     return readJson(req,(err,d)=>{
       if(err)return json(res,400,{error:'bad json'});
       const code=String(d.code||'').replace(/\D/g,'');
-      if(phoneCodeUsed||Date.now()>phoneCodeExp||code!==phoneCode)return json(res,403,{error:'invalid or expired session code'});
-      phoneCodeUsed=true;phoneCode='';
+      const issuer=phoneCodeIssuer&&deviceWorker(phoneCodeIssuer.deviceId);
+      if(phoneCodeUsed||Date.now()>=phoneCodeExp||!issuer||issuer.approved!==true||(issuer.credentialIssuedAt||null)!==phoneCodeIssuer.credentialIssuedAt){
+        clearPhoneCode();return json(res,403,{error:'invalid or expired session code'});
+      }
+      if(!/^\d{8}$/.test(code)||code!==phoneCode)return json(res,403,{error:'invalid or expired session code'});
+      clearPhoneCode();
       const exp=setJarvisSessionCookie(req,res);
       res.writeHead(200,{'content-type':'application/json; charset=utf-8','cache-control':'no-store'});
       res.end(JSON.stringify({ok:true,expiresAt:new Date(exp).toISOString()}));
@@ -1076,6 +1090,7 @@ const server=http.createServer((req,res)=>{
     const id=deviceRevoke[1],w=state.workers.devices[id];
     if(!w)return json(res,404,{error:'device not found'});
     w.approved=false;touchState();
+    if(phoneCodeIssuer&&phoneCodeIssuer.deviceId===id)clearPhoneCode();
     log('DEVICE_REVOKE',id+' cihazının yetkisi kaldırıldı');
     return json(res,200,{ok:true,deviceId:id,approved:false});
   }

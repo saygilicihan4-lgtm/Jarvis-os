@@ -26,6 +26,21 @@ Güvenlik ve güvenilirlik düzeltmeleri küçük PR'lar halinde önce yapılır
 arayüz değişikliği, tarayıcı yetkisinin genişletilmesi ve taşıma paketi ayrı PR'larda
 incelenir. Bu sıra, tüm listenin şu anda tamamlandığı anlamına gelmez.
 
+### Oturum güvenliği takip notu
+
+v160 / #215, #214'ün dar bir ön koşuludur: kurtarma kodu doğrudan yalnız imzalı ve
+zaten onaylı PC isteğiyle üretilir. Kod, üreten cihazın kimlik bilgisi kaydına ve
+süresine bağlanır; cihaz iptali bekleyen kodu temizler. Açılışta kullanılabilir kod
+üretilmez. Kodun gerçek geçerlilik süresi PC'de gösterilir.
+
+Bu, mevcut tarayıcı çerezlerini iptal etmez veya yeni bir yüksek güvenli oturum
+sınıfı oluşturmaz. Cihaz eşleştirme/kimlik bilgisi üretimi, passkey kaydı, kalıcı
+oturum envanteri/iptali ve kod denemelerine hız sınırı ayrıca denetlenmelidir.
+Özellikle tarayıcı yetkisiyle cihaz kaydetme/kimlik bilgisi alma yolları kapanmadan
+kod akışı bütünü için "bağımsız yeniden kimlik doğrulama" iddiası yapılmaz.
+Üretim sırları değiştirilmedi; #214 bu çalışmalar ve kontrollü eski oturum geçişi
+tamamlanana kadar açık kalır.
+
 ## İnternet görevlerinin davranışı
 
 - "Bu siteyi incele": izin verilen kapsamı okur, kaynakları korur, birbiriyle çelişen

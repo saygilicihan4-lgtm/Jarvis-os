@@ -28,7 +28,13 @@ function cookie(exp=Date.now()+60000){
   context.testExpiry=exp;
   return 'jarvis_session='+encodeURIComponent(vm.runInContext("signPhoneSession({headers:{},socket:{remoteAddress:'192.0.2.10'}},testExpiry)",context));
 }
+function deviceHeaders(deviceId='pc',exp=Date.now()+60000,extra={}){
+  context.testDevicePayload={deviceId,exp,v:1,...extra};
+  return {authorization:'Device '+vm.runInContext('signDevicePayload(testDevicePayload)',context),'x-jarvis-device-id':deviceId};
+}
 async function run(){
+  const unissued=await request('/api/session/exchange',{method:'POST',body:{code:'00000000'}});
+  assert.strictEqual(unissued.status,403);assert(!unissued.headers['set-cookie']);
   vm.runInContext("state.workers.devices.pc={approved:true,authMode:'signed',lastSeen:new Date().toISOString(),networkTag:ipTag({headers:{},socket:{remoteAddress:'192.0.2.10'}})}",context);
   for(const headers of [{},{'user-agent':'iPhone'},{cookie:'jarvis_session=forged.token'},{cookie:'jarvis_session=%E0%A4%A'},{cookie:cookie(Date.now()-1000)}]){
     const r=await request('/api/session/lan-bootstrap',{method:'POST',headers});
@@ -49,12 +55,39 @@ async function run(){
     const malformed=await request(url,{method,headers:{cookie:'jarvis_session=%'}});assert.strictEqual(malformed.status,401);assert(!malformed.headers['set-cookie']);
   }
   const anonymousCreate=await request('/api/session/create',{method:'POST'});assert.strictEqual(anonymousCreate.status,401);
-  vm.runInContext("phoneCode='12345678';phoneCodeExp=Date.now()+60000;phoneCodeUsed=false",context);
-  const wrong=await request('/api/session/exchange',{method:'POST',body:{code:'87654321'}});assert.strictEqual(wrong.status,403);assert(!wrong.headers['set-cookie']);
-  const exchanged=await request('/api/session/exchange',{method:'POST',body:{code:'12345678'}});
+  const browserCreate=await request('/api/session/create',{method:'POST',headers:{cookie:valid}});
+  assert.strictEqual(browserCreate.status,401,'browser cookie cannot directly issue a recovery code');
+  vm.runInContext("state.workers.devices.pc={approved:true,credentialIssuedAt:'generation-1'}",context);
+  const signed=deviceHeaders();
+  for(const headers of [{authorization:'Bearer selftest-only-token'},deviceHeaders('missing'),deviceHeaders('pc',Date.now()-1),{...signed,'x-jarvis-device-id':'other'},{...signed,'x-jarvis-device-id':'pc!'}, {authorization:'Device invalid','x-jarvis-device-id':'pc'}]){
+    const denied=await request('/api/session/create',{method:'POST',headers});assert.strictEqual(denied.status,401);assert(!denied.body.code);
+  }
+  async function create(){const r=await request('/api/session/create',{method:'POST',headers:signed});assert.strictEqual(r.status,200);assert(/^\d{8}$/.test(r.body.code));return r.body.code;}
+  async function exchange(code){return request('/api/session/exchange',{method:'POST',body:{code}});}
+  let code=await create();
+  const deniedReplacement=await request('/api/session/create',{method:'POST',headers:{cookie:valid}});
+  assert.strictEqual(deniedReplacement.status,401,'unauthorized issuance cannot replace the pending code');
+  const wrong=await exchange(code==='87654321'?'12345678':'87654321');assert.strictEqual(wrong.status,403);assert(!wrong.headers['set-cookie']);
+  const exchanged=await exchange(code);
   assert.strictEqual(exchanged.status,200);assert(/HttpOnly; Secure; SameSite=Lax/.test(exchanged.headers['set-cookie']));
   const restored=await request('/api/session/bootstrap',{ip:'198.51.100.25',headers:{cookie:exchanged.headers['set-cookie'].split(';')[0]}});assert.strictEqual(restored.status,200);
-  const replay=await request('/api/session/exchange',{method:'POST',body:{code:'12345678'}});assert.strictEqual(replay.status,403);assert(!replay.headers['set-cookie']);
+  const replay=await exchange(code);assert.strictEqual(replay.status,403);assert(!replay.headers['set-cookie']);
+  code=await create();
+  const revoke=await request('/api/devices/pc/revoke',{method:'POST',headers:{cookie:valid}});assert.strictEqual(revoke.status,200);
+  // Even a still-valid bootstrap token must not auto-approve a revoked issuer here.
+  const revokedCreate=await request('/api/session/create',{method:'POST',headers:deviceHeaders('pc',Date.now()+60000,{bootstrapUntil:Date.now()+60000})});assert.strictEqual(revokedCreate.status,401);
+  vm.runInContext('state.workers.devices.pc.approved=true',context);
+  const revoked=await exchange(code);assert.strictEqual(revoked.status,403);assert(!revoked.headers['set-cookie'],'reapproval never restores a revoked code');
+  code=await create();vm.runInContext("state.workers.devices.pc.credentialIssuedAt='generation-2'",context);
+  assert.strictEqual((await exchange(code)).status,403,'credential rotation invalidates the code');
+  code=await create();vm.runInContext('phoneCodeExp=Date.now()',context);
+  assert.strictEqual((await exchange(code)).status,403,'expiry boundary fails closed');
+  const short=await request('/api/session/create',{method:'POST',headers:deviceHeaders('pc',Date.now()+5000)});
+  assert.strictEqual(short.status,200);assert(short.body.expiresInSeconds<=5,'code never outlives issuer token');
+  const xHeaders=deviceHeaders();xHeaders['x-jarvis-device-token']=xHeaders.authorization.slice(7);delete xHeaders.authorization;
+  assert.strictEqual((await request('/api/session/create',{method:'POST',headers:xHeaders})).status,200,'alternate signed header stays supported');
+  code=await create();vm.runInContext('delete state.workers.devices.pc',context);
+  const deletedIssuer=await exchange(code);assert.strictEqual(deletedIssuer.status,403);assert(!deletedIssuer.headers['set-cookie']);
   const html=fs.readFileSync(require.resolve('./public/index.html'),'utf8');
   const bootstrap=html.slice(html.indexOf('async function bootstrapSession(){'),html.indexOf('async function languageConversationRequest'));
   assert(!bootstrap.includes('/api/session/lan-bootstrap'),'UI must not treat network presence as login');
