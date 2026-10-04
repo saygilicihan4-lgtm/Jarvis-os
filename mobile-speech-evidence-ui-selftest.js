@@ -32,19 +32,32 @@ function docMock(){
   assert(badge.textContent.includes('STT capture ? henüz gözlenmedi'));
   assert(badge.textContent.includes('Otomatik STT/dil öğrenimi kapalı'));
   assert.equal(badge.dataset.sttVerified,'false');assert.equal(badge.dataset.languageVerified,'false');assert.equal(badge.dataset.deviceE2eVerified,'false');assert.equal(badge.dataset.automaticLearning,'false');
-  assert.equal(badge.dataset.ttsEvidenceObservedAt,'');assert.equal(badge.dataset.sttEvidenceObservedAt,'','unknown badge state must not retain freshness metadata');
   assert(!badge.textContent.includes('STT ✓'));assert(!badge.textContent.includes('dil doğrulandı'));
 
   const tts={provider:'edge-tts',voice:'fr-FR-HenriNeural',localeResolution:'exact',speechEvidence:'runtime_inventory'};
-  const ttsReceipt=chat.recordTtsEvidence(store,tts,'fr-FR','fr-FR',now);
-  const sttReceipt=chat.recordSttCaptureEvidence(store,'fr-FR','bonjour',now);
-  assert(ttsReceipt);assert(sttReceipt);
+  const ttsReceipt=chat.recordTtsEvidence(store,tts,'fr-FR','fr-FR',now);assert(ttsReceipt);
+  const sttReceipt=chat.recordSttCaptureEvidence(store,'fr-FR','bonjour',now);assert(sttReceipt);
   ui.refresh(doc,{storage:store,nowMs:now,fallback:'tr-TR'});
   assert(badge.textContent.includes('TTS ✓ runtime + playback · geçici kanıt'));
   assert(badge.textContent.includes('STT capture ◇ gözlendi · geçici kanıt · dil doğruluğu doğrulanmadı'));
-  assert.equal(badge.dataset.ttsEvidenceObservedAt,String(ttsReceipt.verifiedAt));assert.equal(badge.dataset.ttsEvidenceExpiresAt,String(ttsReceipt.expiresAt));
-  assert.equal(badge.dataset.sttEvidenceObservedAt,String(sttReceipt.capturedAt));assert.equal(badge.dataset.sttEvidenceExpiresAt,String(sttReceipt.expiresAt));
   assert(!badge.textContent.includes('STT ✓'));
+  assert.equal(badge.dataset.ttsEvidenceObservedAt,String(ttsReceipt.verifiedAt));
+  assert.equal(badge.dataset.ttsEvidenceExpiresAt,String(ttsReceipt.expiresAt));
+  assert.equal(badge.dataset.ttsEvidenceRemainingMs,String(ttsReceipt.expiresAt-now));
+  assert.equal(badge.dataset.sttEvidenceObservedAt,String(sttReceipt.capturedAt));
+  assert.equal(badge.dataset.sttEvidenceExpiresAt,String(sttReceipt.expiresAt));
+  assert.equal(badge.dataset.sttEvidenceRemainingMs,String(sttReceipt.expiresAt-now));
+
+  ui.refresh(doc,{storage:store,nowMs:sttReceipt.expiresAt,fallback:'tr-TR'});
+  assert(badge.textContent.includes('STT capture ◇ gözlendi · geçici kanıt'),'capture evidence remains visible at exact expiry boundary');
+  assert.equal(badge.dataset.sttEvidenceRemainingMs,'0');
+
+  ui.refresh(doc,{storage:store,nowMs:sttReceipt.expiresAt+1,fallback:'tr-TR'});
+  assert(badge.textContent.includes('TTS ✓ runtime + playback · geçici kanıt'),'longer-lived TTS evidence must survive STT receipt expiry');
+  assert(badge.textContent.includes('STT capture ? henüz gözlenmedi'),'expired STT receipt must disappear from visible badge');
+  assert.equal(badge.dataset.sttEvidenceObservedAt,'');assert.equal(badge.dataset.sttEvidenceExpiresAt,'');assert.equal(badge.dataset.sttEvidenceRemainingMs,'','expired STT freshness dataset must clear');
+  assert(Number(badge.dataset.ttsEvidenceRemainingMs)>0,'TTS freshness remains independently live');
+  assert(!badge.textContent.includes('bonjour'),'transcript content must never leak into badge');
 
   const source=fs.readFileSync(require.resolve('./public/language-chat'),'utf8');
   const waitIndex=source.indexOf('if(!root.JarvisMobileLanguageChat)');
@@ -54,5 +67,5 @@ function docMock(){
   assert(source.includes('/iPhone|iPad|iPod|Android/i'),'bootstrap must stay mobile-only');
   assert.equal(source.includes('innerHTML='),false,'integration must not introduce HTML injection');
 
-  console.log('MOBILE SPEECH EVIDENCE UI SELFTEST PASS · mobile-only badge accepts freshness-aware status text and keeps TTS, STT capture and preference semantics separate without false support claims');
+  console.log('MOBILE SPEECH EVIDENCE UI SELFTEST PASS · freshness-aware mobile badge clears expired STT metadata while preserving independent TTS evidence and truth boundaries');
 })();
