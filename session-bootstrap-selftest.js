@@ -13,7 +13,7 @@ const context=vm.createContext({
     return require(name);
   },
   __dirname,Buffer,URL,Date:class extends Date{static now(){return clockNow===null?Date.now():clockNow;}},console:{log(){},error(){}},
-  process:{env:{JARVIS_TOKEN:'selftest-only-token',JARVIS_DEVICE_SECRET:'selftest-only-device-secret',JARVIS_BOOTSTRAP_DEVICE_ID:'env-pc',JARVIS_BOOTSTRAP_DEVICE_EXP:String(Date.now()+600000)}},
+  process:{env:{JARVIS_TOKEN:'selftest-only-token',JARVIS_DEVICE_SECRET:'selftest-only-device-secret',JARVIS_STATE_SECRET:'selftest-only-state-secret',JARVIS_BOOTSTRAP_DEVICE_ID:'env-pc',JARVIS_BOOTSTRAP_DEVICE_EXP:String(Date.now()+600000)}},
   setInterval(){return 0;},clearInterval(){},setTimeout,clearTimeout
 });
 vm.runInContext(fs.readFileSync(require.resolve('./server.js'),'utf8'),context,{filename:'server.js'});
@@ -32,6 +32,10 @@ function cookie(exp=Date.now()+60000){
 function deviceHeaders(deviceId='pc',exp=Date.now()+60000,extra={}){
   context.testDevicePayload={deviceId,exp,v:1,...extra};
   return {authorization:'Device '+vm.runInContext('signDevicePayload(testDevicePayload)',context),'x-jarvis-device-id':deviceId};
+}
+function signedSnapshot({revision=1,tasks=[],audit=[],accountPolicies={},devices={}}={}){
+  context.testSnapshotPayload={schemaVersion:3,revision,savedAt:new Date().toISOString(),tasks,audit,accountPolicies,devices};
+  return vm.runInContext('({...testSnapshotPayload,signature:snapshotSignature(testSnapshotPayload)})',context);
 }
 async function run(){
   const unissued=await request('/api/session/exchange',{method:'POST',body:{code:'00000000'}});
@@ -130,6 +134,52 @@ async function run(){
   assert.strictEqual((await tokenRequest(deviceHeaders('env-pc'),{deviceId:'env-pc'})).status,403,'environment bootstrap cannot override denial');
   vm.runInContext('delete state.workers.devices["env-pc"]',context);
   assert.strictEqual((await tokenRequest(deviceHeaders('env-pc'),{deviceId:'env-pc'})).status,200,'environment bootstrap recovers absent state');
+
+  // v162 restore authority: a valid backup proves integrity, never requester identity.
+  vm.runInContext('state.tasks=[];state.audit=[];state.accountPolicies={};state.stateRevision=0;state.workers.devices={}',context);
+  let restoreBody=signedSnapshot({revision:1,tasks:[{id:777,command:'restored'}],devices:{'restore-pc':{name:'restore-pc',approved:true,roles:['DEVELOPER'],allowedCapabilities:[]}}});
+  const snapshotOnly=await request('/api/state/restore',{method:'POST',headers:deviceHeaders('restore-pc'),body:restoreBody});
+  assert.strictEqual(snapshotOnly.status,403,'snapshot approval is not actor authorization');
+  assert.strictEqual(vm.runInContext('state.tasks.length',context),0,'denied restore does not mutate tasks');
+
+  // Even an otherwise valid bootstrap claim cannot override a live explicit denial.
+  vm.runInContext("state.workers.devices={'restore-pc':{name:'restore-pc',approved:false,roles:['DEVELOPER'],allowedCapabilities:[],credentialIssuedAt:'revoked'}};state.stateRevision=0",context);
+  const revokedBootstrap=await request('/api/state/restore',{method:'POST',headers:deviceHeaders('restore-pc',Date.now()+60000,{bootstrapUntil:Date.now()+60000}),body:restoreBody});
+  assert.strictEqual(revokedBootstrap.status,403,'bootstrap cannot revive an explicitly revoked actor');
+  assert.strictEqual(vm.runInContext("state.workers.devices['restore-pc'].approved",context),false);
+
+  // An externally anchored bootstrap may restore fresh data, but backup grants for
+  // other machines remain unapproved and a current denial wins over old approval.
+  vm.runInContext("state.tasks=[];state.audit=[];state.accountPolicies={};state.stateRevision=0;state.workers.devices={'revoked-pc':{name:'revoked-pc',approved:false,roles:['DEVELOPER'],allowedCapabilities:['current-scope'],credentialIssuedAt:'revoked-gen'}}",context);
+  restoreBody=signedSnapshot({revision:2,tasks:[{id:1,command:'restored-safe'}],devices:{
+    'restore-pc':{name:'restore-pc',approved:true,roles:['DEVELOPER'],allowedCapabilities:[]},
+    'revoked-pc':{name:'revoked-pc',approved:true,roles:['DEVELOPER'],allowedCapabilities:['backup-scope']},
+    'legacy-pc':{name:'legacy-pc',approved:true,roles:['DEVELOPER'],allowedCapabilities:['backup-scope']}
+  }});
+  const restoreResult=await request('/api/state/restore',{method:'POST',headers:deviceHeaders('restore-pc',Date.now()+60000,{bootstrapUntil:Date.now()+60000}),body:restoreBody});
+  assert.strictEqual(restoreResult.status,200,'external signed bootstrap can restore fresh data');
+  assert.strictEqual(vm.runInContext("state.workers.devices['restore-pc'].approved",context),true,'bootstrap authority applies only to actor');
+  assert.strictEqual(vm.runInContext("state.workers.devices['revoked-pc'].approved",context),false,'live revocation survives restore');
+  assert.strictEqual(vm.runInContext("state.workers.devices['revoked-pc'].allowedCapabilities[0]",context),'current-scope','live scope is not widened by backup');
+  assert.strictEqual(vm.runInContext("state.workers.devices['legacy-pc'].approved",context),false,'backup cannot approve another device');
+
+  // Structurally bad but correctly signed input must fail before any live mutation.
+  vm.runInContext("state.tasks=[];state.accountPolicies={};state.audit=[{type:'SENTINEL',message:'keep'}];state.stateRevision=0;state.workers.devices={'guard':{name:'guard',approved:false,roles:[],allowedCapabilities:[]}}",context);
+  const malformedSigned=signedSnapshot({revision:4,audit:[{type:'BACKUP'}],devices:{bad:null}});
+  const atomic=await request('/api/state/restore',{method:'POST',headers:deviceHeaders('atom-pc',Date.now()+60000,{bootstrapUntil:Date.now()+60000}),body:malformedSigned});
+  assert.strictEqual(atomic.status,400,'malformed signed backup rejected');
+  assert.strictEqual(vm.runInContext('state.stateRevision',context),0,'failed restore leaves revision untouched');
+  assert.strictEqual(vm.runInContext("state.audit[0].type",context),'SENTINEL','failed restore leaves audit untouched');
+  assert.strictEqual(vm.runInContext("state.workers.devices['guard'].approved",context),false,'failed restore leaves revocation untouched');
+  assert.strictEqual(vm.runInContext("Object.prototype.hasOwnProperty.call(state.workers.devices,'atom-pc')",context),false,'failed restore does not create actor');
+
+  // Authorization is re-read after body consumption; a concurrent revoke wins.
+  vm.runInContext("state.tasks=[];state.audit=[];state.accountPolicies={};state.stateRevision=0;state.workers.devices={'race-pc':{name:'race-pc',approved:true,roles:['DEVELOPER'],allowedCapabilities:[],credentialIssuedAt:'race'}}",context);
+  const raceBody=signedSnapshot({revision:1,devices:{'race-pc':{name:'race-pc',approved:true,roles:['DEVELOPER'],allowedCapabilities:[]}}});
+  const race=await request('/api/state/restore',{method:'POST',headers:deviceHeaders('race-pc'),body:raceBody,beforeBody:()=>vm.runInContext("state.workers.devices['race-pc'].approved=false",context)});
+  assert.strictEqual(race.status,403,'revocation during restore body fails closed');
+  assert.strictEqual(vm.runInContext('state.stateRevision',context),0);
+
   const html=fs.readFileSync(require.resolve('./public/index.html'),'utf8');
   const bootstrap=html.slice(html.indexOf('async function bootstrapSession(){'),html.indexOf('async function languageConversationRequest'));
   assert(!bootstrap.includes('/api/session/lan-bootstrap'),'UI must not treat network presence as login');
