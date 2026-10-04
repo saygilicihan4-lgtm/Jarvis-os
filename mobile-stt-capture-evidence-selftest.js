@@ -47,6 +47,22 @@ function storage(seed={}){const m=new Map(Object.entries(seed));return{getItem:k
   const pending=cancelClient.run({locale:'tr-TR'});await new Promise(resolve=>setTimeout(resolve,5));cancelClient.cancel();const cancelResult=await pending;
   assert.equal(cancelResult.cancelled,true);assert.deepEqual(mobile.readSttCaptureEvidence(cancelStore,now),[],'manual cancel must not create evidence');
 
+  const lateTimeoutStore=storage();let lateTimeoutResolved=false;
+  const lateTimeoutClient=mobile.createClient({storage:lateTimeoutStore,now:()=>now,captureTimeoutMs:5,capture:()=>new Promise(resolve=>setTimeout(()=>{lateTimeoutResolved=true;resolve('gecikmiş transcript')},18)),request:async()=>{throw new Error('request_must_not_run')},play:async()=>{}});
+  const lateTimeoutResult=await lateTimeoutClient.run({locale:'tr-TR'});assert.equal(lateTimeoutResult.error,'browser_stt_timeout');
+  await new Promise(resolve=>setTimeout(resolve,25));assert.equal(lateTimeoutResolved,true,'stale capture promise should actually resolve after timeout for this race test');
+  assert.deepEqual(mobile.readSttCaptureEvidence(lateTimeoutStore,now),[],'late capture resolution after timeout must be quarantined and never mint evidence');
+
+  const staleStore=storage();let staleResolve=null,staleCalls=0;
+  const staleClient=mobile.createClient({storage:staleStore,now:()=>now,capture:()=>{staleCalls++;if(staleCalls===1)return new Promise(resolve=>{staleResolve=resolve});return Promise.resolve('bonjour')},request:async()=>{throw new Error('network_down')},play:async()=>{}});
+  const stalePending=staleClient.run({locale:'en-US'});await new Promise(resolve=>setTimeout(resolve,5));staleClient.cancel();const staleCancelled=await stalePending;
+  assert.equal(staleCancelled.cancelled,true);assert.equal(typeof staleResolve,'function');assert.equal(mobile.getSttCaptureEvidence('en-US',staleStore,now),null,'cancelled first capture must not leave evidence');
+  const freshResult=await staleClient.run({locale:'fr-FR'});assert.equal(freshResult.error,'network_down');assert(mobile.getSttCaptureEvidence('fr-FR',staleStore,now),'fresh second capture should create evidence for its own locale');
+  staleResolve('late english transcript');await new Promise(resolve=>setTimeout(resolve,0));
+  assert.equal(mobile.getSttCaptureEvidence('en-US',staleStore,now),null,'late result from cancelled capture must not contaminate a later run');
+  assert(mobile.getSttCaptureEvidence('fr-FR',staleStore,now),'stale callback must not erase or replace the later valid receipt');
+  const staleRaw=staleStore.getItem(mobile.STT_CAPTURE_EVIDENCE_KEY)||'';assert(!staleRaw.includes('late english transcript')&&!staleRaw.includes('bonjour'),'race receipts must remain transcript-free');
+
   const index=fs.readFileSync(require.resolve('./public/index.html'),'utf8');
   const captureStart=index.indexOf('function captureMobileLanguageTranscript(locale,signal)');
   const captureEnd=index.indexOf('function waitMobileLanguagePoll',captureStart);
@@ -84,5 +100,5 @@ function storage(seed={}){const m=new Map(Object.entries(seed));return{getItem:k
   const productionClient=index.slice(clientStart,clientEnd);
   assert(productionClient.includes('capture:captureMobileLanguageTranscript'),'production evidence path must stay wired to the browser SpeechRecognition adapter, not an arbitrary text source');
 
-  console.log('MOBILE STT CAPTURE EVIDENCE SELFTEST PASS · browser final-result provenance is required; no-final, recognizer-error and cancel paths reject without fabricating STT evidence');
+  console.log('MOBILE STT CAPTURE EVIDENCE SELFTEST PASS · browser final-result provenance is required; stale timeout/cancel callbacks are quarantined and cannot fabricate or replace STT evidence');
 })().catch(error=>{console.error(error);process.exitCode=1});
