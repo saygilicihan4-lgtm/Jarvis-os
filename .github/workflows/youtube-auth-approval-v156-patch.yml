@@ -1,0 +1,43 @@
+name: YouTube auth approval v156 branch patch
+
+on:
+  push:
+    branches: [jarvis-youtube-auth-approval-revoke-v156]
+    paths: [.github/workflows/youtube-auth-approval-v156-patch.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: jarvis-youtube-auth-approval-revoke-v156
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Add YouTube PUBLIC stale-approval regression contract
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const p='approval-gate-selftest.js';
+          const src=fs.readFileSync(p,'utf8');
+          const marker="assert.ok(youtube.includes('async function publishPreparedDraft('),'YouTube approval-gated publish engine missing');";
+          if(src.includes("youtubeAuthBlock.includes('delete step.meta.approvedAt;')"))throw new Error('v156 selftest already present');
+          if(!src.includes(marker))throw new Error('YouTube approval selftest marker missing');
+          const block=`const youtubePublishStart=worker.indexOf('const out=await getYoutubeStudio().publishPreparedDraft(');\nconst youtubeAuthStart=worker.indexOf(\"if(out.code==='YOUTUBE_AUTH_REQUIRED'){\",youtubePublishStart);\nconst youtubeUncertainStart=worker.indexOf(\"if(out.code==='YOUTUBE_PUBLISH_UNCERTAIN'){\",youtubeAuthStart);\nassert.ok(youtubePublishStart>=0&&youtubeAuthStart>youtubePublishStart&&youtubeUncertainStart>youtubeAuthStart,'YouTube PUBLIC auth branch boundary missing');\nconst youtubeAuthBlock=worker.slice(youtubeAuthStart,youtubeUncertainStart);\nassert.ok(youtubeAuthBlock.includes(\"approvalRevokedReason:'youtube_auth_required'\"),'YouTube auth failure must record approval revocation reason');\nassert.ok(youtubeAuthBlock.includes('delete step.meta.approvedAt;'),'YouTube auth failure must revoke approvedAt');\nassert.ok(youtubeAuthBlock.includes('delete step.meta.approvalKind;'),'YouTube auth failure must revoke approvalKind');\nassert.ok(youtubeAuthBlock.includes(\"dependency:'youtube_auth'\"),'YouTube auth dependency must remain after approval revocation');\n\n`;
+          const next=src.replace(marker,block+marker).replace('APPROVAL GATE SELFTEST PASS · negated approval fails closed and direct local Shopify PUBLIC bypass is blocked','APPROVAL GATE SELFTEST PASS · negated approval fails closed, direct Shopify PUBLIC is blocked, and YouTube auth failure revokes stale PUBLIC approval');
+          if(next===src)throw new Error('approval-gate-selftest.js unchanged');
+          fs.writeFileSync(p,next,'utf8');
+          NODE
+          node approval-gate-selftest.js
+      - name: Commit selftest update
+        run: |
+          git config user.name "saygilicihan4-lgtm"
+          git config user.email "saygilicihan4@gmail.com"
+          git add approval-gate-selftest.js
+          git commit -m "Test YouTube auth approval revocation v156"
+          git push origin HEAD:jarvis-youtube-auth-approval-revoke-v156
