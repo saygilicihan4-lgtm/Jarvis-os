@@ -1,0 +1,48 @@
+name: YouTube auth approval v156 branch patch
+
+on:
+  push:
+    branches: [jarvis-youtube-auth-approval-revoke-v156]
+    paths: [.github/workflows/youtube-auth-approval-v156-patch.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: jarvis-youtube-auth-approval-revoke-v156
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Revoke PUBLIC approval on YouTube auth failure
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const p='worker.js';
+          const src=fs.readFileSync(p,'utf8');
+          const publishStart=src.indexOf('const out=await getYoutubeStudio().publishPreparedDraft(');
+          if(publishStart<0)throw new Error('YouTube PUBLIC publish path not found');
+          const authStart=src.indexOf("if(out.code==='YOUTUBE_AUTH_REQUIRED'){",publishStart);
+          const uncertainStart=src.indexOf("if(out.code==='YOUTUBE_PUBLISH_UNCERTAIN'){",authStart);
+          if(authStart<0||uncertainStart<0)throw new Error('YouTube PUBLIC auth/uncertain boundaries not found');
+          const oldBlock=src.slice(authStart,uncertainStart);
+          if(!oldBlock.includes("dependency:'youtube_auth'"))throw new Error('expected PUBLIC auth dependency missing');
+          if(oldBlock.includes('approvalRevokedReason'))throw new Error('v156 patch already present');
+          const replacement=`if(out.code==='YOUTUBE_AUTH_REQUIRED'){\n            step.meta={...(step.meta||{}),approvalRevokedAt:new Date().toISOString(),approvalRevokedReason:'youtube_auth_required'};\n            delete step.meta.approvedAt;\n            delete step.meta.approvalKind;\n            mission=engine.failStep(WORKSPACE,id,{code:out.code,message:out.message,retryable:true,dependency:'youtube_auth'});\n            return mission;\n          }\n          `;
+          const next=src.slice(0,authStart)+replacement+src.slice(uncertainStart);
+          if(next===src)throw new Error('worker.js unchanged');
+          fs.writeFileSync(p,next,'utf8');
+          NODE
+          node --check worker.js
+      - name: Commit branch patch
+        run: |
+          git config user.name "saygilicihan4-lgtm"
+          git config user.email "saygilicihan4@gmail.com"
+          git add worker.js
+          git commit -m "Revoke stale YouTube PUBLIC approval after auth failure v156"
+          git push origin HEAD:jarvis-youtube-auth-approval-revoke-v156
