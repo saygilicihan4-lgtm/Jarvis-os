@@ -115,4 +115,5 @@ assert(hologramSource.includes("dataset.jarvisCoreFx='lite'"),'CSS fallback mark
 assert(!/\bfetch\s*\(/.test(hologramSource),'WebGL renderer must not make network calls');
 assert(!hologramSource.includes('localStorage')&&!hologramSource.includes('sessionStorage'),'WebGL renderer must not persist sensitive state');
 
+require('./tri-core-consultation-selftest.js');
 console.log('TRI-CORE v180 PERSONALITY + PRIVATE CONSULTATION + SINGLE REACTIVE HOLOGRAM SELFTEST PASS');
