@@ -1,6 +1,7 @@
 'use strict';
 const crypto=require('crypto');
-const VERSION='1.0';
+const triCore=require('./jarvis-tri-core-personality');
+const VERSION='1.1';
 function createConversation({runtime,output,now=Date.now}={}){
   const records=new Map();let lastProbe=null;
   function get(id){
@@ -38,7 +39,8 @@ function createConversation({runtime,output,now=Date.now}={}){
       begun=runtime.begin(id);
       if(!begun.ok)return{...begun,state:'unsupported',transcript:capture.text};
       const frozen={context:{...begun.context},speech:{...begun.speech},signal:controller.signal};
-      const generated=await output.generate({text:capture.text,history:row.history,...frozen});
+      const selected=triCore.select(capture.text);
+      const generated=await output.generate({text:capture.text,history:row.history,core:selected,...frozen});
       controller.signal.throwIfAborted();
       if(generated.locale!==frozen.context.locale)throw new Error('reply_locale_mismatch');
       const rendered=await output.render({reply:generated.reply,...frozen});
@@ -46,7 +48,8 @@ function createConversation({runtime,output,now=Date.now}={}){
       if(rendered.locale!==frozen.context.locale||rendered.voice!==frozen.speech.voice||!rendered.audio)throw new Error('render_context_mismatch');
       const token=crypto.randomUUID();
       row.receipt={token,turnId:begun.turnId,at:now(),transcript:capture.text,reply:generated.reply};
-      return{ok:true,state:'audio-ready',receipt:token,reply:generated.reply,transcript:capture.text,...rendered};
+      return{ok:true,state:'audio-ready',receipt:token,reply:generated.reply,transcript:capture.text,core:selected.core,role:selected.role,
+        coreSource:selected.source,consultWith:[...(selected.consultWith||[])],authority:'shared_guardrail_only',...rendered};
     }catch(error){
       if(begun?.ok)runtime.complete(id,{turnId:begun.turnId,successful:false});
       else runtime.discardCapture(id,{resetCandidate:true});

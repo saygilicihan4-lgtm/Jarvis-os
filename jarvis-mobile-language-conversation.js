@@ -2,8 +2,9 @@
 const lang=require('./jarvis-language-core');
 const {createOutput}=require('./jarvis-language-turn-output');
 const {createRouter}=require('./jarvis-tts-locale-router');
+const triCore=require('./jarvis-tri-core-personality');
 const relay=require('./jarvis-mobile-language-relay');
-const VERSION='1.1';
+const VERSION='1.2';
 
 function createEngine({output=createOutput(),voiceRouter=createRouter()}={}){
   async function turn({text,locale,inputSource='browser-speech',history=[]}={},options={}){
@@ -23,9 +24,13 @@ function createEngine({output=createOutput(),voiceRouter=createRouter()}={}){
     const speech={ok:true,locale:normalized,sttLocale:null,ttsLocale,cost:0,fallbackUsed:false,ttsProvider:'edge-tts',voice:voice.voice,
       localeResolution,evidenceLevel};
     const context={locale:normalized,language:normalized.split('-')[0],source:'mobile_client_requested',sessionOnly:true};
-    const generated=await output.generate({text:clean,context,speech,history:relay.sanitizeHistory(history),signal:options.signal});
+    const selected=triCore.select(clean);
+    const generated=await output.generate({text:clean,context,speech,history:relay.sanitizeHistory(history),core:selected,signal:options.signal});
     if(generated.locale!==normalized)throw new Error('reply_locale_mismatch');
+    // Security boundary: role/consultation metadata comes from the deterministic
+    // router, never from model/output supplied metadata.
     return{ok:true,state:'reply-ready',reply:generated.reply,locale:normalized,ttsLocale,localeResolution,voice:voice.voice,provider:'edge-tts',inputSource:String(inputSource),
+      core:selected.core,role:selected.role,coreSource:selected.source,consultWith:[...(selected.consultWith||[])],authority:'shared_guardrail_only',
       learning:false,languageEvidence:'client-requested-locale',speechEvidence:evidenceLevel,deviceE2eVerified:false};
   }
   return{turn};
