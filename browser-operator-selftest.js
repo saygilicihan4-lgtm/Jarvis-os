@@ -75,4 +75,5 @@ op.clearAutofillProfile(tmp);
 assert.strictEqual(op.autofillProfileSummary(tmp).count,0);
 
 fs.rmSync(tmp,{recursive:true,force:true});
-console.log('BROWSER OPERATOR SELFTEST PASS · any-site + safe autofill + open-shadow/same-origin-frame form surfaces');
+require('./browser-frame-context-selftest');
+console.log('BROWSER OPERATOR SELFTEST PASS · any-site + safe autofill + open-shadow/same-origin-frame form surfaces + CDP frame runtime');
