@@ -5,6 +5,7 @@ const worker=fs.readFileSync('./worker.js','utf8');
 const server=fs.readFileSync('./server.js','utf8');
 const html=fs.readFileSync('./public/index.html','utf8');
 const css=fs.readFileSync('./public/style.css','utf8');
+const missionEngine=fs.readFileSync('./jarvis-mission-engine.js','utf8');
 
 assert.ok(worker.includes("const WORKER_VERSION='2.102.0'"),'Worker 2.102.0 required');
 assert.ok(worker.includes("'pc_self_repair_v1'"),'self-repair capability must be preserved');
@@ -30,6 +31,14 @@ assert.ok(server.includes('.slice(0,160)'), 'server still truncates capability h
 assert.ok(!server.includes('d.capabilities.slice(0,50)'), 'legacy 50-capability truncation still present');
 assert.ok(server.includes('missions:sanitizeMissionTelemetry(d.missions)'),'heartbeat mission sanitizer wiring missing');
 assert.ok(server.includes('missions:pc.missions||null'),'public state mission relay missing');
+
+// v168: the approval review stays inside the already-sanitized mission label
+// channel. No raw mission input is added to Worker/cloud telemetry.
+assert.ok(missionEngine.includes('function approvalReviewLabel('),'privacy-safe approval review helper missing');
+assert.ok(missionEngine.includes('label:approvalLabel||m.label'),'approval review is not wired into mission summaries');
+assert.ok(server.includes("label:String(m&&m.label||'')"),'cloud sanitizer does not preserve bounded mission labels');
+assert.ok(html.includes('const label=String(m&&m.label||m&&m.type||\'JARVIS mission\')'),'Mission Queue does not consume the summarized label');
+assert.ok(html.includes("<b>'+esc(label)+'</b>"),'Mission Queue does not escape/render the approval review label');
 
 assert.ok(html.includes('id="localMissionState"'),'local mission telemetry HUD missing');
 assert.ok(html.includes('function localMissionCard(m)'),'durable mission card renderer missing');
