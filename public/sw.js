@@ -9,7 +9,8 @@ function safeNotificationUrl(value,tag,title=''){
   const missionId=missionIdFromTag(tag);
   if(missionId&&!completedMissionTitle(title))return '/?mission='+encodeURIComponent(missionId);
   const url=String(value||'/').trim();
-  return /^\/(?!\/)/.test(url)?url:'/';
+  if(!/^\/(?!\/)/.test(url)||/[\\\r\n]/.test(url))return'/';
+  return url;
 }
 self.addEventListener('push',event=>{
   let data={title:'JARVIS',body:'Yeni bir hatırlatmanız var.',url:'/'};
