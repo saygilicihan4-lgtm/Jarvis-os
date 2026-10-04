@@ -1,0 +1,27 @@
+'use strict';
+const fs=require('fs');
+const assert=require('assert');
+const ui=fs.readFileSync('public/reference-cockpit.js','utf8');
+const holo=fs.readFileSync('public/tri-core-hologram.js','utf8');
+const asset='public/jarvis-reference-cockpit.jpg';
+
+assert(fs.existsSync(asset),'reference cockpit image missing');
+assert(fs.statSync(asset).size>90000,'reference cockpit image unexpectedly small');
+assert(ui.includes("const ASSET='/jarvis-reference-cockpit.jpg'"),'reference image binding missing');
+assert(ui.includes("data-reference-cockpit=\"1\""),'cockpit activation marker missing');
+assert(ui.includes('ref-copy nova')&&ui.includes('ref-copy jarvis')&&ui.includes('ref-copy orion'),'three hologram slices missing');
+assert(ui.includes('@keyframes refNovaBreathe')&&ui.includes('@keyframes refJarvisBreathe')&&ui.includes('@keyframes refOrionBreathe'),'idle hologram breathing missing');
+assert(ui.includes('@keyframes refSpeak'),'speaking growth animation missing');
+assert(ui.includes('scale(1.058)'),'JARVIS speaking growth target missing');
+assert(ui.includes('data-state="speaking"'),'speaking state binding missing');
+assert(ui.includes('data-state="listening"'),'listening state binding missing');
+assert(ui.includes('data-core="nova"')&&ui.includes('data-core="orion"')&&ui.includes('data-core="jarvis"'),'core role reaction selectors missing');
+assert(ui.includes("doc.body.classList.contains('speaking')?'speaking'"),'legacy speaking class bridge missing');
+assert(ui.includes("attributeFilter:['class','data-jarvis-core','data-jarvis-core-state','data-jarvis-core-collab']"),'reactive state observer missing');
+assert(ui.includes('@media(prefers-reduced-motion:reduce)'),'reduced-motion fallback missing');
+assert(ui.includes("root.toggleVoice")&&ui.includes("root.send"),'interactive voice/command bridge missing');
+assert(!/\bfetch\s*\(/.test(ui),'cockpit UI must not make network calls directly');
+assert(!ui.includes('localStorage')&&!ui.includes('sessionStorage'),'cockpit UI must not persist command text');
+assert(!ui.includes('approve_mission_action')&&!ui.includes('publish')&&!ui.includes('shopify_publish'),'visual layer must not gain publish/approval authority');
+assert(holo.includes("script.src='/reference-cockpit.js'"),'hologram runtime must boot reference cockpit');
+console.log('REFERENCE COCKPIT v184 SELFTEST PASS · exact-reference asset + reactive hologram motion + no authority escalation');
