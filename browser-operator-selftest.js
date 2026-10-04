@@ -9,7 +9,7 @@ const baseSource=fs.readFileSync('./jarvis-browser-operator-v191-base.js','utf8'
 const manifest=JSON.parse(fs.readFileSync('./jarvis-update-manifest.json','utf8'));
 const workerSource=fs.readFileSync('./worker.js','utf8');
 
-assert.strictEqual(op.BROWSER_OPERATOR_VERSION,'1.2');
+assert.strictEqual(op.BROWSER_OPERATOR_VERSION,'1.3');
 assert.strictEqual(op.BROWSER_AUTOFILL_VERSION,'1.0');
 assert.strictEqual(op.BROWSER_SURFACE_VERSION,'1.0');
 assert.deepStrictEqual(op.allowedHosts(),['*']);
@@ -23,7 +23,7 @@ assert.ok(op.safeUrl('http://localhost:3000/').startsWith('http://localhost:3000
 assert.throws(()=>op.safeUrl('file:///C:/Windows/System32/'),/http\/https/);
 assert.throws(()=>op.safeUrl('javascript:alert(1)'),/http\/https/);
 assert.ok(workerSource.includes("syncRepoRuntimeFile('jarvis-browser-operator.js',\"BROWSER_OPERATOR_VERSION='1.0'\")"),'Worker 2.102 legacy browser sync probe changed unexpectedly');
-assert.ok(browserSource.includes("Runtime rollout compatibility for Worker 2.102.0 sync probe only: BROWSER_OPERATOR_VERSION='1.0'"),'Browser 1.2 must remain retrievable by Worker 2.102 legacy sync probe during rollout');
+assert.ok(browserSource.includes("Runtime rollout compatibility for Worker 2.102.0 sync probe only: BROWSER_OPERATOR_VERSION='1.0'"),'Browser 1.3 must remain retrievable by Worker 2.102 legacy sync probe during rollout');
 assert.ok(baseSource.includes("BROWSER_OPERATOR_VERSION='1.1'"),'v191 base snapshot missing');
 assert.ok(baseSource.includes("autocomplete:el.getAttribute('autocomplete')||''"),'page snapshot must expose autocomplete hints');
 assert.ok(baseSource.includes('function deepSurfacePrelude()'),'deep surface helper missing');
@@ -39,18 +39,32 @@ assert.ok(deepHelper.includes('shadowRoot'));
 assert.ok(deepHelper.includes('contentDocument'));
 assert.ok(deepHelper.includes('querySelectorAll'));
 
-assert.ok(browserSource.includes("require('./jarvis-browser-operator-v191-base')"),'v192 wrapper must preserve v191 browser functionality');
+assert.ok(browserSource.includes("require('./jarvis-browser-operator-v191-base')"),'v194 wrapper must preserve v191 browser functionality');
 assert.ok(browserSource.includes("tabEvidence:{targetId:String(chosen.id||'')}"),'page snapshot must bind to exact CDP target ID');
 assert.ok(browserSource.includes('const page=await pinnedPage(port),targetId=String(page.id||\'\')'),'verified final click must pin one page before verification');
 assert.ok(browserSource.includes('const samePage=await pinnedPage(port,targetId)'),'verified final click must re-resolve the same target before click');
 assert.ok(browserSource.includes('finalTarget.assertReceipt(proof,contract,fresh)'),'verified final click must re-verify immediately before click');
-assert.ok(browserSource.includes('evalOnPage(samePage,clickExpression(text))'),'consequential click must execute on the pinned tab, not a newly selected tab');
 assert.match(op.hashTabId('tab-A'),/^[a-f0-9]{64}$/);assert.notStrictEqual(op.hashTabId('tab-A'),op.hashTabId('tab-B'));
+
+assert.ok(browserSource.includes('clickTargetInspectExpression(text)'),'final click must inspect exactly one final control before the atomic click');
+assert.ok(browserSource.includes("FINAL_ELEMENT_AMBIGUOUS"),'ambiguous final controls must fail closed');
+assert.ok(browserSource.includes("FINAL_ELEMENT_NOT_FOUND"),'missing final control must fail closed');
+assert.ok(browserSource.includes("FINAL_ELEMENT_CHANGED"),'changed final evidence must fail closed');
+assert.ok(browserSource.includes("FINAL_ELEMENT_DISABLED"),'disabled final control must fail closed');
+assert.ok(browserSource.includes('JSON.stringify(current)!==JSON.stringify(expected)'),'atomic click must compare live target/form/surface/element evidence inside the click task');
+assert.ok(browserSource.includes('evalOnPage(samePage,atomicClickExpression(text,expected))'),'consequential click must execute through the atomic evidence gate on the pinned tab');
+assert.ok(browserSource.includes('elementHash:hashClickDescriptor(elementProof.descriptor)'),'receipt must expose only the SHA-256 click-element evidence hash');
+assert.match(op.hashClickDescriptor({tag:'button',text:'Publish'}),/^[a-f0-9]{64}$/);
+assert.notStrictEqual(op.hashClickDescriptor({tag:'button',text:'Publish'}),op.hashClickDescriptor({tag:'button',text:'Delete'}));
+const atomicProbe=op.atomicClickExpression('Publish',{url:'https://admin.shopify.com/store/x/products/1',targetEvidence:{account:'a',target:'x'},surfaceEvidence:{sameOriginFrames:0,openShadowRoots:0,crossOriginFrames:false},forms:[],clickTarget:{tag:'button'}});
+assert.ok(atomicProbe.includes("reason:'FINAL_ELEMENT_CHANGED'"));
+assert.ok(atomicProbe.indexOf('JSON.stringify(current)!==JSON.stringify(expected)')<atomicProbe.indexOf('e.click()'),'evidence comparison must occur before click in the same JS task');
+
 const manifestPaths=new Set(manifest.files.map(x=>x.path));
 assert.ok(manifestPaths.has('jarvis-browser-operator.js'),'trusted updater must stage browser wrapper');
 assert.ok(manifestPaths.has('jarvis-browser-operator-v191-base.js'),'trusted updater must stage browser base dependency');
 assert.ok(manifestPaths.has('jarvis-final-target-verification.js'),'trusted updater must stage target verifier dependency');
-assert.strictEqual(manifest.files.find(x=>x.path==='jarvis-browser-operator.js').signature,"BROWSER_OPERATOR_VERSION='1.2'");
+assert.strictEqual(manifest.files.find(x=>x.path==='jarvis-browser-operator.js').signature,"BROWSER_OPERATOR_VERSION='1.3'");
 assert.strictEqual(manifest.files.find(x=>x.path==='jarvis-final-target-verification.js').signature,"FINAL_TARGET_VERIFICATION_VERSION='1.3'");
 
 assert.strictEqual(op.classifyAutofillField('E-posta adresi'),'email');
@@ -92,4 +106,4 @@ assert.strictEqual(op.autofillProfileSummary(tmp).count,0);
 
 fs.rmSync(tmp,{recursive:true,force:true});
 require('./final-target-verification-selftest.js');
-console.log('BROWSER OPERATOR v192 SELFTEST PASS · any-site + safe autofill + deep surfaces + same-tab pinned final click + live target binding');
+console.log('BROWSER OPERATOR v194 SELFTEST PASS · any-site + safe autofill + deep surfaces + same-tab + atomic evidence-and-click binding');
