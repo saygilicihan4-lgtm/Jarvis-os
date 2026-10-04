@@ -47,7 +47,7 @@ const youtubeAuthBlock=youtubePublishBlock.slice(youtubeAuthStart,youtubeUncerta
 assert.ok(youtubeAuthBlock.includes("approvalRevokedReason:'youtube_auth_required'"),'YouTube auth failure must record approval revocation reason');
 assert.ok(youtubeAuthBlock.includes('delete step.meta.approvedAt;'),'YouTube auth failure must revoke approvedAt');
 assert.ok(youtubeAuthBlock.includes('delete step.meta.approvalKind;'),'YouTube auth failure must revoke approvalKind');
-assert.ok(youtubeAuthBlock.indexOf('delete step.meta.approvedAt;')<youtubeAuthBlock.indexOf("dependency:'youtube_auth'"),'approval proof must be revoked before auth dependency is persisted');
+assert.ok(/delete step\.meta\.approvedAt;[\s\S]*dependency\s*:\s*['\"]youtube_auth['\"]/.test(youtubeAuthBlock),'approval proof must be revoked before auth dependency is persisted');
 assert.strictEqual((worker.match(/approvalRevokedReason:'youtube_auth_required'/g)||[]).length,1,'approval revocation must be scoped only to the PUBLIC publish auth retry branch');
 
 const positiveCases=[
