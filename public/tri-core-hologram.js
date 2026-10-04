@@ -89,3 +89,16 @@
   }
   setTimeout(()=>boot(0),0);
 })(typeof window!=='undefined'?window:null);
+
+// v185 canonical portrait cockpit loader. Presentation-only: authority remains on the legacy cockpit/mission bridges.
+;(function(host){
+  if(!host||!host.document)return;
+  const doc=host.document;
+  function boot(attempt=0){
+    if(doc.getElementById('jarvisMobileCanonicalScript'))return true;
+    if(!doc.getElementById('jarvisReferenceCockpit')&&attempt<100){setTimeout(()=>boot(attempt+1),80);return false}
+    const script=doc.createElement('script');script.id='jarvisMobileCanonicalScript';script.src='/mobile-canonical-cockpit.js';script.async=false;
+    (doc.head||doc.documentElement).appendChild(script);return true;
+  }
+  setTimeout(()=>boot(0),0);
+})(typeof window!=='undefined'?window:null);
