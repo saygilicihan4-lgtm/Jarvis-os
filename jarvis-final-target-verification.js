@@ -1,6 +1,6 @@
 const crypto=require('crypto');
 
-const FINAL_TARGET_VERIFICATION_VERSION='1.2';
+const FINAL_TARGET_VERIFICATION_VERSION='1.3';
 const DEFAULT_TTL_MS=15000;
 const PROVIDERS={
   youtube:{hosts:new Set(['studio.youtube.com'])},
@@ -50,6 +50,11 @@ function resourceEvidence(provider,rawUrl){
 function resourceFingerprint(provider,snapshot={}){
   const r=resourceEvidence(provider,snapshot.url);return r.kind&&r.id?exactHash(normalize(r.kind)+':'+resourceId(r.id)):'';
 }
+function tabFingerprint(snapshot={}){
+  const e=snapshot.tabEvidence||{};
+  const targetId=clean(e.targetId||e.id,320).normalize('NFKC');
+  return targetId?exactHash(targetId):'';
+}
 function canonicalControl(control={}){
   return{
     tag:normalize(control.tag),type:normalize(control.type),name:normalize(control.name),id:normalize(control.id),
@@ -77,6 +82,7 @@ function evidenceFingerprint(snapshot={},provider=''){
     accountHash:e.account[0]?evidenceHash(e.account[0]):'',
     targetHash:e.target[0]?evidenceHash(e.target[0]):'',
     resourceHash:resourceFingerprint(provider,snapshot),
+    tabHash:tabFingerprint(snapshot),
     formHash:formFingerprint(snapshot),
     surfaceHash:surfaceFingerprint(snapshot)
   };
@@ -94,7 +100,7 @@ function verifyFinalTarget(contract={},snapshot={},opts={}){
   if(!cfg.hosts.has(host))return fail('host_mismatch',{provider,host});
   const action=normalize(contract.expectedAction);
   if(!action)return fail('action_missing',{provider,host});
-  const ev=safeEvidence(snapshot),resource=resourceEvidence(provider,snapshot.url),resourceHash=resourceFingerprint(provider,snapshot),formHash=formFingerprint(snapshot),surfaceHash=surfaceFingerprint(snapshot);
+  const ev=safeEvidence(snapshot),resource=resourceEvidence(provider,snapshot.url),resourceHash=resourceFingerprint(provider,snapshot),tabHash=tabFingerprint(snapshot),formHash=formFingerprint(snapshot),surfaceHash=surfaceFingerprint(snapshot);
   if(contract.expectedAccount&&!exactEvidence(ev.account,contract.expectedAccount))return fail('account_mismatch',{provider,host,action});
   if(contract.expectedAccountHash&&!ev.account.some(x=>evidenceHash(x)===normalize(contract.expectedAccountHash)))return fail('account_mismatch',{provider,host,action});
   if(contract.expectedTarget&&!exactEvidence(ev.target,contract.expectedTarget))return fail('target_mismatch',{provider,host,action});
@@ -102,6 +108,7 @@ function verifyFinalTarget(contract={},snapshot={},opts={}){
   if(contract.expectedResource&&!expectedResourceMatches(contract.expectedResource,resource))return fail('resource_mismatch',{provider,host,action,resourceKind:resource.kind||''});
   if(contract.expectedResourceHash&&resourceHash!==normalize(contract.expectedResourceHash))return fail('resource_mismatch',{provider,host,action,resourceKind:resource.kind||''});
   if(contract.expectedResourceKind&&normalize(contract.expectedResourceKind)!==normalize(resource.kind))return fail('resource_kind_mismatch',{provider,host,action});
+  if(contract.expectedTabHash&&tabHash!==normalize(contract.expectedTabHash))return fail('tab_mismatch',{provider,host,action});
   if(contract.expectedFormHash&&formHash!==normalize(contract.expectedFormHash))return fail('form_mismatch',{provider,host,action});
   if(contract.expectedSurfaceHash&&surfaceHash!==normalize(contract.expectedSurfaceHash))return fail('surface_mismatch',{provider,host,action});
   const now=Number.isFinite(opts.nowMs)?opts.nowMs:Date.now(),ttl=Math.max(1000,Math.min(Number(opts.ttlMs)||DEFAULT_TTL_MS,30000));
@@ -109,10 +116,10 @@ function verifyFinalTarget(contract={},snapshot={},opts={}){
     provider,host,action,
     account:normalize(contract.expectedAccount)||normalize(contract.expectedAccountHash),
     target:normalize(contract.expectedTarget)||normalize(contract.expectedTargetHash),
-    resourceHash,url:clean(snapshot.url,2000),formHash,surfaceHash
+    resourceHash,tabHash,url:clean(snapshot.url,2000),formHash,surfaceHash
   };
   const digest=hashJson(binding);
-  return{ok:true,version:FINAL_TARGET_VERIFICATION_VERSION,provider,host,action,bindingHash:digest,resourceHash,resourceKind:resource.kind||'',formHash,surfaceHash,verifiedAt:new Date(now).toISOString(),expiresAt:new Date(now+ttl).toISOString(),approvalGranted:false};
+  return{ok:true,version:FINAL_TARGET_VERIFICATION_VERSION,provider,host,action,bindingHash:digest,resourceHash,resourceKind:resource.kind||'',tabHash,formHash,surfaceHash,verifiedAt:new Date(now).toISOString(),expiresAt:new Date(now+ttl).toISOString(),approvalGranted:false};
 }
 function fail(reason,extra={}){return{ok:false,version:FINAL_TARGET_VERIFICATION_VERSION,reason,...extra,approvalGranted:false}}
 function assertReceipt(receipt,contract={},snapshot={},opts={}){
@@ -124,4 +131,4 @@ function assertReceipt(receipt,contract={},snapshot={},opts={}){
   return true;
 }
 function codeError(code){const e=new Error(code);e.code=code;return e}
-module.exports={FINAL_TARGET_VERIFICATION_VERSION,DEFAULT_TTL_MS,evidenceFingerprint,resourceEvidence,resourceFingerprint,canonicalForms,formFingerprint,surfaceFingerprint,verifyFinalTarget,assertReceipt};
+module.exports={FINAL_TARGET_VERIFICATION_VERSION,DEFAULT_TTL_MS,evidenceFingerprint,resourceEvidence,resourceFingerprint,tabFingerprint,canonicalForms,formFingerprint,surfaceFingerprint,verifyFinalTarget,assertReceipt};

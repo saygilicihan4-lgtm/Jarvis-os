@@ -17,9 +17,21 @@
     },
     {
       "path": "jarvis-browser-operator.js",
+      "signature": "BROWSER_OPERATOR_VERSION='1.2'",
+      "kind": "node",
+      "min_bytes": 5000
+    },
+    {
+      "path": "jarvis-browser-operator-v191-base.js",
       "signature": "BROWSER_OPERATOR_VERSION='1.1'",
       "kind": "node",
       "min_bytes": 7000
+    },
+    {
+      "path": "jarvis-final-target-verification.js",
+      "signature": "FINAL_TARGET_VERIFICATION_VERSION='1.3'",
+      "kind": "node",
+      "min_bytes": 5000
     },
     {
       "path": "jarvis-youtube-studio.js",
