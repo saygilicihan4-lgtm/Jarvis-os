@@ -73,7 +73,9 @@
   'use strict';
   if(!root||!root.document||!root.fetch||!/iPhone|iPad|iPod|Android/i.test(String(root.navigator&&root.navigator.userAgent||'')))return;
   const REQ_RE=/\bREQ\s+([a-f0-9]{20})\b/i;
+  const MISSION_ID_RE=/^M-[A-Z0-9-]{12,80}$/;
   const TERMINAL=new Set(['completed','failed','cancelled']);
+  let missionFocusDone=false,missionFocusRunning=false;
   function setStatus(text){
     const el=root.document.getElementById('consoleStatus');
     if(el)el.textContent=String(text||'').slice(0,180);
@@ -84,20 +86,81 @@
     if(!response.ok)throw new Error(data.error||('HTTP '+response.status));
     return data;
   }
+  function missionQueue(state){
+    const missions=state&&state.workers&&state.workers.pc&&state.workers.pc.missions;
+    return missions&&Array.isArray(missions.queue)?missions.queue:[];
+  }
+  function missionIdFromLocation(){
+    try{
+      const id=String(new URLSearchParams(root.location&&root.location.search||'').get('mission')||'').toUpperCase();
+      return MISSION_ID_RE.test(id)?id:'';
+    }catch(_){return''}
+  }
+  function renderedCardLabel(card){
+    const label=card&&card.querySelector&&card.querySelector('.task-head b');
+    return String(label&&label.textContent||'').replace(/\s+/g,' ').trim();
+  }
+  function missionForCard(queue,card){
+    const cards=[...root.document.querySelectorAll('.local-mission')];
+    const index=cards.indexOf(card);
+    if(index<0||index>=queue.length)return null;
+    const mission=queue[index];
+    if(!mission||!MISSION_ID_RE.test(String(mission.id||'')))return null;
+    const expected=String(mission.label||mission.type||'JARVIS mission').replace(/\s+/g,' ').trim();
+    const rendered=renderedCardLabel(card);
+    if(expected&&rendered&&expected!==rendered)return null;
+    return mission;
+  }
   function approvalDependency(mission){
     const step=mission&&mission.step||{},err=step&&step.error||{};
     return String(mission&&mission.status||'')==='waiting_dependency'&&String(step.status||'')==='blocked'&&String(err.dependency||step.dependency||'')==='approval';
   }
   function reqFromText(text){const m=String(text||'').match(REQ_RE);return m?m[1].toLowerCase():''}
-  async function resolveFreshMission(req){
+  async function resolveFreshMission(req,card=null){
     if(!/^[a-f0-9]{20}$/.test(String(req||'')))throw new Error('Onay kartı REQ kodu geçersiz.');
     const state=await jsonFetch('/api/state');
-    const queue=state&&state.workers&&state.workers.pc&&state.workers.pc.missions&&Array.isArray(state.workers.pc.missions.queue)?state.workers.pc.missions.queue:[];
+    const queue=missionQueue(state);
+    if(card){
+      const mission=missionForCard(queue,card);
+      if(!mission||!approvalDependency(mission)||reqFromText(mission.label)!==req)throw new Error('Onay kartı eskimiş; güncel kartı yeniden açın.');
+      card.dataset.jarvisMissionId=String(mission.id);
+      return mission;
+    }
     const rows=queue.filter(m=>approvalDependency(m)&&reqFromText(m.label)===req);
     if(rows.length!==1)throw new Error(rows.length?'Onay kartı belirsiz; görev listesini yenileyin.':'Onay kartı eskimiş; güncel kartı yeniden açın.');
     const mission=rows[0];
-    if(!/^M-[A-Z0-9-]{12,80}$/.test(String(mission.id||'')))throw new Error('Güncel mission kimliği doğrulanamadı.');
+    if(!MISSION_ID_RE.test(String(mission.id||'')))throw new Error('Güncel mission kimliği doğrulanamadı.');
     return mission;
+  }
+  async function focusMissionFromUrl(attempt=0){
+    const requested=missionIdFromLocation();
+    if(!requested||missionFocusDone||missionFocusRunning)return !!missionFocusDone;
+    missionFocusRunning=true;
+    try{
+      const state=await jsonFetch('/api/state');
+      const queue=missionQueue(state),index=queue.findIndex(m=>String(m&&m.id||'')===requested);
+      const cards=[...root.document.querySelectorAll('.local-mission')];
+      const mission=index>=0?queue[index]:null,card=index>=0?cards[index]:null;
+      if(!mission||!card||missionForCard(queue,card)!==mission){
+        if(attempt<24)root.setTimeout(()=>{missionFocusRunning=false;focusMissionFromUrl(attempt+1).catch(()=>{})},250);
+        return false;
+      }
+      card.dataset.jarvisMissionId=requested;
+      card.dataset.jarvisMissionFocused='1';
+      card.style.outline='2px solid currentColor';
+      card.style.outlineOffset='3px';
+      try{card.scrollIntoView({behavior:'smooth',block:'center'})}catch(_){try{card.scrollIntoView()}catch(__){}}
+      setStatus('MOBILE MISSION · BİLDİRİMDEN İLGİLİ GÖREV AÇILDI · '+requested.slice(-8));
+      missionFocusDone=true;
+      root.setTimeout(()=>{try{card.style.outline='';card.style.outlineOffset=''}catch(_){}},8000);
+      return true;
+    }catch(error){
+      if(attempt<24)root.setTimeout(()=>{missionFocusRunning=false;focusMissionFromUrl(attempt+1).catch(()=>{})},250);
+      else setStatus('MOBILE MISSION · BİLDİRİM HEDEFİ AÇILAMADI');
+      return false;
+    }finally{
+      if(missionFocusDone||attempt>=24)missionFocusRunning=false;
+    }
   }
   async function runMobileBrain(message){
     const created=await jsonFetch('/api/mobile-brain',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message:String(message||'').slice(0,300)})});
@@ -119,7 +182,7 @@
     buttons.forEach(b=>b.disabled=true);
     try{
       setStatus('MOBILE MISSION · GÜNCEL HEDEF DOĞRULANIYOR');
-      const mission=await resolveFreshMission(req);
+      const mission=await resolveFreshMission(req,card);
       const message=action==='approve'
         ?('onayla '+mission.id+' req '+req)
         :('iptal et '+mission.id+' req '+req);
@@ -146,8 +209,8 @@
   }
   function install(){
     const target=root.document.getElementById('tasks');if(!target)return false;
-    enhance();
-    const observer=new MutationObserver(()=>enhance());observer.observe(target,{childList:true,subtree:true});
+    enhance();focusMissionFromUrl().catch(()=>{});
+    const observer=new MutationObserver(()=>{enhance();focusMissionFromUrl().catch(()=>{})});observer.observe(target,{childList:true,subtree:true});
     return true;
   }
   const start=()=>{if(!install())setTimeout(start,250)};
