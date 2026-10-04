@@ -54,10 +54,25 @@ function storage(seed={}){const m=new Map(Object.entries(seed));return{getItem:k
   const productionCapture=index.slice(captureStart,captureEnd);
   assert(productionCapture.includes("if(!recognition)return Promise.reject(new Error('browser_stt_unsupported'))"),'production capture must fail closed without browser recognizer');
   assert(productionCapture.includes('recognition.lang=locale;recognition.start()'),'production capture must bind the requested locale before starting the recognizer');
+  assert(productionCapture.includes('try{recognition.abort()}catch(_){}'),'production cancel must abort the active browser recognizer');
+  assert(productionCapture.includes("slot.reject(new Error('mobile_language_cancelled'))"),'production cancel must reject the dedicated capture slot rather than resolve text');
 
-  const resultStart=index.indexOf('recognition.onresult=async e=>');
+  const endStart=index.indexOf('recognition.onend=()=>{');
+  const errorStart=index.indexOf('recognition.onerror=e=>',endStart);
+  assert(endStart>=0&&errorStart>endStart,'production SpeechRecognition onend/onerror handlers must exist');
+  const productionEnd=index.slice(endStart,errorStart);
+  assert(productionEnd.includes('if(mobileLanguageCapture)'),'no-final onend must inspect the dedicated mobile capture slot');
+  assert(productionEnd.includes("slot.reject(new Error('browser_stt_no_final_result'))"),'no-final onend must reject instead of manufacturing a transcript');
+  assert.equal(productionEnd.includes('slot.resolve('),false,'no-final onend must never resolve transcript content');
+
+  const resultStart=index.indexOf('recognition.onresult=async e=>',errorStart);
+  assert(resultStart>errorStart,'production SpeechRecognition onresult handler must follow onerror');
+  const productionError=index.slice(errorStart,resultStart);
+  assert(productionError.includes('if(mobileLanguageCapture)'),'recognizer errors must inspect the dedicated mobile capture slot');
+  assert(productionError.includes("slot.reject(new Error('browser_stt_'+err.toLowerCase()))"),'recognizer errors must reject with browser STT provenance');
+  assert.equal(productionError.includes('slot.resolve('),false,'recognizer error path must never resolve transcript content');
+
   const resultEnd=index.indexOf('function ',resultStart+20);
-  assert(resultStart>=0,'production SpeechRecognition onresult handler must exist');
   const productionResult=index.slice(resultStart,resultEnd>resultStart?resultEnd:resultStart+5000);
   assert(productionResult.includes('if(e.results[e.results.length-1].isFinal)'),'mobile capture must wait for a final browser recognition result');
   assert(productionResult.includes('if(mobileLanguageCapture)'),'final browser result must resolve through the dedicated mobile capture slot');
@@ -69,5 +84,5 @@ function storage(seed={}){const m=new Map(Object.entries(seed));return{getItem:k
   const productionClient=index.slice(clientStart,clientEnd);
   assert(productionClient.includes('capture:captureMobileLanguageTranscript'),'production evidence path must stay wired to the browser SpeechRecognition adapter, not an arbitrary text source');
 
-  console.log('MOBILE STT CAPTURE EVIDENCE SELFTEST PASS · privacy-safe locale-bound evidence is backed by the production browser SpeechRecognition wiring and never promoted to STT/language verification');
+  console.log('MOBILE STT CAPTURE EVIDENCE SELFTEST PASS · browser final-result provenance is required; no-final, recognizer-error and cancel paths reject without fabricating STT evidence');
 })().catch(error=>{console.error(error);process.exitCode=1});
