@@ -8,6 +8,7 @@ const PROVIDERS={
 };
 function clean(v,max=240){return String(v==null?'':v).trim().slice(0,max)}
 function normalize(v){return clean(v).normalize('NFKC').toLocaleLowerCase('en-US')}
+function resourceId(v){return clean(v,160).normalize('NFKC')}
 function hostOf(raw){try{const u=new URL(clean(raw,2000));return u.protocol==='https:'?u.hostname.toLowerCase():''}catch(_){return''}}
 function exactEvidence(haystack,expected){
   const want=normalize(expected);if(!want)return true;
@@ -16,6 +17,7 @@ function exactEvidence(haystack,expected){
 }
 function hashJson(value){return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex')}
 function evidenceHash(value){const v=normalize(value);return v?crypto.createHash('sha256').update(v).digest('hex'):''}
+function exactHash(value){const v=clean(value,320).normalize('NFKC');return v?crypto.createHash('sha256').update(v).digest('hex'):''}
 function safeEvidence(snapshot={}){
   const e=snapshot.targetEvidence||{};
   return{
@@ -32,21 +34,21 @@ function resourceEvidence(provider,rawUrl){
   if(u.protocol!=='https:')return{kind:'',id:''};
   const parts=u.pathname.split('/').filter(Boolean).map(x=>safePathPart(x));
   if(p==='youtube'&&u.hostname.toLowerCase()==='studio.youtube.com'){
-    const vi=parts.indexOf('video');if(vi>=0&&parts[vi+1])return{kind:'video',id:clean(parts[vi+1],160)};
-    const ci=parts.indexOf('channel');if(ci>=0&&parts[ci+1])return{kind:'channel',id:clean(parts[ci+1],160)};
+    const vi=parts.indexOf('video');if(vi>=0&&parts[vi+1])return{kind:'video',id:resourceId(parts[vi+1])};
+    const ci=parts.indexOf('channel');if(ci>=0&&parts[ci+1])return{kind:'channel',id:resourceId(parts[ci+1])};
   }
   if(p==='shopify'&&u.hostname.toLowerCase()==='admin.shopify.com'){
     const storeIndex=parts.indexOf('store'),storeId=storeIndex>=0?parts[storeIndex+1]:'';
     const kinds=new Set(['products','orders','customers','collections','discounts']);
     for(let i=Math.max(0,storeIndex+2);i<parts.length-1;i++){
-      if(kinds.has(parts[i]))return{kind:parts[i].replace(/s$/,''),id:clean(parts[i+1],160),store:clean(storeId,160)};
+      if(kinds.has(parts[i]))return{kind:parts[i].replace(/s$/,''),id:resourceId(parts[i+1]),store:resourceId(storeId)};
     }
-    if(storeId)return{kind:'store',id:clean(storeId,160),store:clean(storeId,160)};
+    if(storeId)return{kind:'store',id:resourceId(storeId),store:resourceId(storeId)};
   }
   return{kind:'',id:''};
 }
 function resourceFingerprint(provider,snapshot={}){
-  const r=resourceEvidence(provider,snapshot.url);return r.kind&&r.id?evidenceHash(r.kind+':'+r.id):'';
+  const r=resourceEvidence(provider,snapshot.url);return r.kind&&r.id?exactHash(normalize(r.kind)+':'+resourceId(r.id)):'';
 }
 function canonicalControl(control={}){
   return{
@@ -80,8 +82,10 @@ function evidenceFingerprint(snapshot={},provider=''){
   };
 }
 function expectedResourceMatches(contractResource,resource){
-  const want=normalize(contractResource);if(!want)return true;
-  return want===normalize(resource.id)||want===normalize(resource.kind+':'+resource.id);
+  const want=clean(contractResource,320).normalize('NFKC');if(!want)return true;
+  const id=resourceId(resource.id),kind=normalize(resource.kind),colon=want.indexOf(':');
+  if(colon>=0)return normalize(want.slice(0,colon))===kind&&resourceId(want.slice(colon+1))===id;
+  return resourceId(want)===id;
 }
 function verifyFinalTarget(contract={},snapshot={},opts={}){
   const provider=normalize(contract.provider),cfg=PROVIDERS[provider];
@@ -92,19 +96,19 @@ function verifyFinalTarget(contract={},snapshot={},opts={}){
   if(!action)return fail('action_missing',{provider,host});
   const ev=safeEvidence(snapshot),resource=resourceEvidence(provider,snapshot.url),resourceHash=resourceFingerprint(provider,snapshot),formHash=formFingerprint(snapshot),surfaceHash=surfaceFingerprint(snapshot);
   if(contract.expectedAccount&&!exactEvidence(ev.account,contract.expectedAccount))return fail('account_mismatch',{provider,host,action});
-  if(contract.expectedAccountHash&&!ev.account.some(x=>evidenceHash(x)===contract.expectedAccountHash))return fail('account_mismatch',{provider,host,action});
+  if(contract.expectedAccountHash&&!ev.account.some(x=>evidenceHash(x)===normalize(contract.expectedAccountHash)))return fail('account_mismatch',{provider,host,action});
   if(contract.expectedTarget&&!exactEvidence(ev.target,contract.expectedTarget))return fail('target_mismatch',{provider,host,action});
-  if(contract.expectedTargetHash&&!ev.target.some(x=>evidenceHash(x)===contract.expectedTargetHash))return fail('target_mismatch',{provider,host,action});
+  if(contract.expectedTargetHash&&!ev.target.some(x=>evidenceHash(x)===normalize(contract.expectedTargetHash)))return fail('target_mismatch',{provider,host,action});
   if(contract.expectedResource&&!expectedResourceMatches(contract.expectedResource,resource))return fail('resource_mismatch',{provider,host,action,resourceKind:resource.kind||''});
-  if(contract.expectedResourceHash&&resourceHash!==clean(contract.expectedResourceHash,64))return fail('resource_mismatch',{provider,host,action,resourceKind:resource.kind||''});
+  if(contract.expectedResourceHash&&resourceHash!==normalize(contract.expectedResourceHash))return fail('resource_mismatch',{provider,host,action,resourceKind:resource.kind||''});
   if(contract.expectedResourceKind&&normalize(contract.expectedResourceKind)!==normalize(resource.kind))return fail('resource_kind_mismatch',{provider,host,action});
-  if(contract.expectedFormHash&&formHash!==clean(contract.expectedFormHash,64))return fail('form_mismatch',{provider,host,action});
-  if(contract.expectedSurfaceHash&&surfaceHash!==clean(contract.expectedSurfaceHash,64))return fail('surface_mismatch',{provider,host,action});
+  if(contract.expectedFormHash&&formHash!==normalize(contract.expectedFormHash))return fail('form_mismatch',{provider,host,action});
+  if(contract.expectedSurfaceHash&&surfaceHash!==normalize(contract.expectedSurfaceHash))return fail('surface_mismatch',{provider,host,action});
   const now=Number.isFinite(opts.nowMs)?opts.nowMs:Date.now(),ttl=Math.max(1000,Math.min(Number(opts.ttlMs)||DEFAULT_TTL_MS,30000));
   const binding={
     provider,host,action,
-    account:normalize(contract.expectedAccount)||clean(contract.expectedAccountHash,64),
-    target:normalize(contract.expectedTarget)||clean(contract.expectedTargetHash,64),
+    account:normalize(contract.expectedAccount)||normalize(contract.expectedAccountHash),
+    target:normalize(contract.expectedTarget)||normalize(contract.expectedTargetHash),
     resourceHash,url:clean(snapshot.url,2000),formHash,surfaceHash
   };
   const digest=hashJson(binding);
