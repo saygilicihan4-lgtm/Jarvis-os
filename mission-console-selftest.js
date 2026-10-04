@@ -9,6 +9,7 @@ const css=fs.readFileSync('./public/style.css','utf8');
 const missionEngine=fs.readFileSync('./jarvis-mission-engine.js','utf8');
 const languageChat=fs.readFileSync('./public/language-chat.js','utf8');
 const missionActions=fs.readFileSync('./public/mission-actions.js','utf8');
+const serviceWorker=fs.readFileSync('./public/sw.js','utf8');
 
 assert.ok(worker.includes("const WORKER_VERSION='2.102.0'"),'Worker 2.102.0 required');
 assert.ok(worker.includes("'pc_self_repair_v1'"),'self-repair capability must be preserved');
@@ -80,5 +81,14 @@ assert.ok(missionActions.includes("cancel.textContent='İPTAL'"),'mobile cancel 
 assert.ok(worker.includes("message:'AÇIK ONAY UYGULANDI · '"),'authoritative Worker approval receipt marker missing');
 assert.ok(worker.includes("'MISSION İPTAL EDİLDİ'"),'authoritative Worker cancel receipt marker missing');
 
+// v174: same mission action replay is coalesced at the shared Service Worker
+// network boundary, while Worker REQ/state proof remains the final authority.
+assert.doesNotThrow(()=>new Function(serviceWorker),'service worker has invalid JavaScript syntax');
+assert.ok(serviceWorker.includes('function missionActionReplayKeyFromMessage('),'mission replay key parser missing');
+assert.ok(serviceWorker.includes('function coalesceMissionActionRequest('),'mission replay request coalescer missing');
+assert.ok(serviceWorker.includes("url.pathname!=='/api/mobile-brain'"),'replay coalescing must be scoped to mobile-brain only');
+assert.ok(serviceWorker.includes('MISSION_ACTION_REPLAY_TTL_MS=45000'),'mission replay cache must be short-lived and bounded');
+
 execFileSync(process.execPath,['mobile-mission-actions-selftest.js'],{stdio:'inherit'});
+execFileSync(process.execPath,['mobile-mission-replay-selftest.js'],{stdio:'inherit'});
 console.log('MISSION CONSOLE SELFTEST PASS');
