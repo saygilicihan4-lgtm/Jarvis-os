@@ -19,10 +19,19 @@ function hasPositiveApproval(intent){
 }
 
 function hasNegatedApproval(intent){
+  // Turkish negative imperative / request forms. Prefix matching intentionally
+  // catches suffix variants such as yayınlamayın / yayınlamayalım.
   if(/(?:^|[\s,.;:!?])(?:yayınlama|yayinlama|onaylama)(?:yın|yin|yınız|yiniz|yalım|yalim|nı|ni|nız|niz)?(?=$|[\s,.;:!?])/i.test(intent))return true;
   if(/(?:^|[\s,.;:!?])onay\s+verme(?:yin|yınız|yiniz)?(?=$|[\s,.;:!?])/i.test(intent))return true;
   if(/(?:^|[\s,.;:!?])(?:publish|approve)\s+etme(?:yin|yınız|yiniz)?(?=$|[\s,.;:!?])/i.test(intent))return true;
+
+  // English explicit negation. Keep the scan inside the same punctuation-bounded
+  // clause so forms such as "don't ever publish" and "no publish" fail closed.
   if(/(?:^|[\s,.;:!?])(?:do\s+not|don't|dont|never|not|no)(?:\s+[^,.;:!?\s]+){0,3}\s+(?:publish|approve)(?=$|[\s,.;:!?])/i.test(intent))return true;
+
+  // Turkish prohibition tokens win over a positive action in the same turn.
+  // This intentionally treats contradictory wording such as “sakın yayınla”
+  // as non-approval because irreversible actions must fail closed.
   if((hasToken(intent,'sakın')||hasToken(intent,'sakin')||hasToken(intent,'asla'))&&hasPositiveApproval(intent))return true;
   return false;
 }
@@ -30,6 +39,8 @@ function hasNegatedApproval(intent){
 function detectApprovalSurfaces(intent){
   const text=String(intent||'');
   const strong=[];
+  // Generic words such as "kanal" are intentionally not enough to select YouTube.
+  // Irreversible routing needs either a provider-specific token or an unambiguous fallback.
   if(/(?:^|[^a-z0-9])(?:youtube|you\s*tube)(?=$|[^a-z0-9])/i.test(text))strong.push('youtube');
   if(/(?:^|[^a-z0-9çğıöşü])(?:shopify|mağaza|magaza)(?=$|[^a-z0-9çğıöşü])/i.test(text))strong.push('shopify');
   if(/(?:^|[^a-z0-9çğıöşü])(?:browser|tarayıcı|tarayici|form|buton|button|link)(?=$|[^a-z0-9çğıöşü])/i.test(text))strong.push('browser');
