@@ -1,0 +1,28 @@
+name: Jarvis Reference Cockpit CI
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  cockpit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Reference cockpit syntax
+        run: |
+          node --check public/reference-cockpit.js
+          node --check public/reference-cockpit-i18n.js
+          node --check public/tri-core-hologram.js
+          node --check reference-cockpit-selftest.js
+          node --check reference-cockpit-i18n-selftest.js
+      - name: Reference cockpit motion and authority selftest
+        run: node reference-cockpit-selftest.js
+      - name: Reference cockpit multilingual selftest
+        run: node reference-cockpit-i18n-selftest.js
