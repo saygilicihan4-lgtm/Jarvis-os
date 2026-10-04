@@ -38,6 +38,8 @@ jobs:
           s=s.replace(old2,"assert.strictEqual(restoreResult.status,200,'external signed bootstrap can restore fresh data');",1)
           p.write_text(s)
           PY
+      - name: Keep workflow files unchanged
+        run: git restore .github/workflows/ci.yml
       - name: Validate patch
         run: |
           node --check server.js
@@ -48,6 +50,6 @@ jobs:
         run: |
           git config user.name "Jarvis Security Bot"
           git config user.email "actions@users.noreply.github.com"
-          git add server.js session-bootstrap-selftest.js .github/workflows/ci.yml
+          git add server.js session-bootstrap-selftest.js
           git commit -m "Jarvis Restore Authority Hardening v162"
           git push origin HEAD:jarvis-restore-authority-v162
