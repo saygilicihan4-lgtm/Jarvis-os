@@ -5,6 +5,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node selftest.js",
+    "security:check": "node tests/security-check.cjs",
     "worker": "node worker.js"
   },
   "engines": {

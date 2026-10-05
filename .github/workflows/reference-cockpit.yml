@@ -52,10 +52,14 @@ jobs:
         run: node mobile-session-security-v195-selftest.js
       - name: Mobile approval review selftest
         run: node mobile-approval-review-selftest.js
+      - name: Avatar syntax and isolated security checks
+        run: |
+          node --check public/avatar-security-v198.js
+          npm run security:check
 
   mobile-browser:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:

@@ -118,7 +118,8 @@
       }).join('')||'<div class="jsv-banner">'+esc(d.empty)+'</div>';
     }else list='<div class="jsv-banner warn">'+esc(d.legacy)+'</div>';
     const actions='<div class="jsv-actions"><button class="jsv-action" data-jsv="refresh">'+esc(d.refresh)+'</button><button class="jsv-action" data-jsv="revoke-others" '+(!current.managed||!status.durable?'disabled':'')+'>'+esc(d.revokeOthers)+'</button><button class="jsv-action danger" data-jsv="legacy-disable" '+(!current.managed||!status.durable||!status.legacySessionsAccepted?'disabled':'')+'>'+esc(d.disableLegacy)+'</button><button class="jsv-action" data-jsv="general">'+esc(d.general)+'</button></div>';
-    body.innerHTML=banner+legacy+ip+stats+'<div class="jsv-list">'+list+'</div>'+actions+'<div class="jsv-note">v195 · Session IDs are shown only as shortened hashes. Cookies, passkey material and raw session secrets are never displayed or stored by this panel.</div>';
+    const tr=(doc.documentElement.lang||'').startsWith('tr');
+    body.innerHTML=banner+legacy+ip+stats+'<div class="jsv-list">'+list+'</div>'+actions+'<div class="jsv-actions"><button class="jsv-action" data-jsv="avatar">'+(tr?'Avatar stüdyosu':'Avatar studio')+'</button><button class="jsv-action" data-jsv="cyber">'+(tr?'Güvenlik kontrolü':'Security checks')+'</button></div><div class="jsv-note">v195 · Session IDs are shown only as shortened hashes. Cookies, passkey material and raw session secrets are never displayed or stored by this panel.</div>';
   }
   async function refresh(){
     if(busy)return;busy=true;render();
@@ -174,6 +175,7 @@
       if(a==='close')return close();
       if(a==='refresh')return void refresh();
       if(a==='general')return legacySettings();
+      if(a==='avatar'||a==='cyber'){if(host.JarvisAvatarSecurity){close();host.JarvisAvatarSecurity.open(a)}return}
       if(a==='revoke')return void mutate('revoke',String(ctl.dataset.id||''),ctl.dataset.current==='1');
       if(a==='revoke-others'||a==='legacy-disable')return void mutate(a);
     },true);

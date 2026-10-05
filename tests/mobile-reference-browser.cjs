@@ -27,6 +27,38 @@ function geometry(){
   const scroll=document.documentElement.scrollWidth;if(scroll>v.width+1)errors.push('horizontal overflow '+scroll);
   return errors;
 }
+async function avatarChecks(page){
+  await page.waitForFunction(()=>!!window.JarvisAvatarSecurity);
+  await page.locator('.jr-layout [data-a=settings]').tap();
+  await page.locator('[data-jsv=avatar]').tap();await page.locator('#jarvisAvatarStudio[open]').waitFor();
+  await page.locator('[data-ja=name]').fill('Test avatar <img onerror=alert(1)>');
+  await page.locator('[data-ja=file]').setInputFiles({name:'bad.svg',mimeType:'image/svg+xml',buffer:Buffer.from('<svg onload="alert(1)"></svg>')});
+  await page.waitForFunction(()=>document.querySelector('#jarvisAvatarStudio [role=status]').textContent.length>0);
+  await page.locator('[data-ja=save]').click();
+  assert.equal(await page.evaluate(()=>localStorage.getItem('jarvis.avatar.v198.jarvis')),null,'rights and media required');
+  await page.locator('[data-ja=file]').setInputFiles(path.join(root,'mobile-reference-art.jpg'));
+  await page.locator('.ja-preview:not([hidden])').waitFor();
+  await page.evaluate(()=>{window.originalAvatarSetItem=Storage.prototype.setItem;Storage.prototype.setItem=function(){throw new DOMException('test quota','QuotaExceededError')}});
+  await page.locator('[data-ja=rights]').check();await page.locator('[data-ja=save]').click();
+  assert.equal(await page.locator('.jr-core.jarvis .ja-face').count(),0,'quota failure must not claim or apply persistence');
+  await page.evaluate(()=>Storage.prototype.setItem=window.originalAvatarSetItem);
+  await page.locator('[data-ja=rights]').check();await page.locator('[data-ja=save]').click();
+  assert.equal(await page.locator('.jr-core.jarvis .ja-face').count(),1);
+  assert.equal(await page.locator('.jr-core.jarvis .ja-face').getAttribute('alt'),'Test avatar <img onerror=alert(1)> · AI avatarı · Gerçek kişi değil');
+  await page.locator('[data-ja=project]').click();await page.locator('.ja-projection').waitFor();
+  if(process.env.JARVIS_SCREENSHOTS)await page.screenshot({path:path.join(process.env.JARVIS_SCREENSHOTS,'avatar-projection-'+process.env.JARVIS_TEST_BROWSER+'.png')});
+  assert.equal(await page.locator('.ja-projection').evaluate(n=>n.textContent.includes('Test avatar <img onerror=alert(1)>')),true,'name stays text');
+  await page.locator('[data-ja=mirror]').click();assert.equal(await page.locator('.ja-projected-image.ja-mirror').count(),1);
+  await page.locator('[data-ja=close]').click();
+  await page.reload();await page.waitForSelector('.jr-core.jarvis .ja-face');
+  await page.locator('.jr-layout [data-a=settings]').tap();await page.locator('[data-jsv=avatar]').tap();
+  await page.locator('[data-ja=reset]').click();assert.equal(await page.locator('.jr-core.jarvis .ja-face').count(),0);assert.equal(await page.evaluate(()=>localStorage.getItem('jarvis.avatar.v198.jarvis')),null);
+  await page.locator('[data-ja=close]').click();
+  await page.locator('.jr-layout [data-a=settings]').tap();await page.locator('[data-jsv=cyber]').tap();
+  assert.equal(await page.locator('#jarvisAvatarStudio code').textContent(),'npm run security:check');
+  await page.locator('[data-ja=close]').click();
+  assert.deepEqual(await page.evaluate(geometry),[],'avatar reset preserves original controls');
+}
 (async()=>{
   await new Promise(r=>server.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+server.address().port;
   const engines=process.env.JARVIS_TEST_BROWSER?[process.env.JARVIS_TEST_BROWSER]:['chromium','webkit'];
@@ -76,6 +108,7 @@ function geometry(){
         for(const s of ['idle','listening','speaking','thinking']){await page.evaluate(v=>document.body.dataset.jarvisCoreState=v,s);await page.waitForFunction(v=>document.querySelector('.jr-enhanced').dataset.state===v,s);}
         assert.equal(await page.locator('.jr-sphere-art').first().evaluate(n=>getComputedStyle(n).animationName),'none','reduced motion');
         if(width===390&&height===844&&process.env.JARVIS_SCREENSHOTS){fs.mkdirSync(process.env.JARVIS_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.JARVIS_SCREENSHOTS,engine+'-390x844.png')})}
+        if(width===390&&height===844)await avatarChecks(page);
         assert.deepEqual(errors,[],engine+' runtime errors');assert.equal(await page.evaluate(()=>sendCalls),0,'opening UI must not execute commands');
         console.log(engine,width+'x'+height,'PASS: 16 targets, modal dispatch, locales, state, honest telemetry');
         await context.close();
