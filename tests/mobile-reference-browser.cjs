@@ -32,7 +32,7 @@ function geometry(){
   const engines=process.env.JARVIS_TEST_BROWSER?[process.env.JARVIS_TEST_BROWSER]:['chromium','webkit'];
   for(const engine of engines){const browser=await ({chromium,webkit})[engine].launch({headless:true,...(process.env.JARVIS_CHROMIUM_PATH&&engine==='chromium'?{executablePath:process.env.JARVIS_CHROMIUM_PATH,args:['--no-sandbox','--disable-dev-shm-usage']}: {})});
     try{
-      for(const [width,height] of [[390,844],[390,664],[320,568],[430,932]]){
+      for(const [width,height] of [[390,844],[390,664],[320,568],[430,932],[844,390],[667,375],[932,430],[1366,768],[1920,1080]]){
         const context=await browser.newContext({viewport:{width,height},deviceScaleFactor:3,isMobile:true,hasTouch:true,locale:'tr-TR',reducedMotion:'reduce'});
         const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
         await page.goto(base+'/test-fixture');await page.waitForSelector('.jr-layout');await page.waitForFunction(()=>document.querySelector('#jarvisNativeMobileV190')?.dataset.sessionSecurity==='ready');
@@ -41,6 +41,12 @@ function geometry(){
         assert.deepEqual(await page.evaluate(geometry),[],engine+' '+width+'x'+height);
         assert.equal(await page.locator('.jr-layout .jr-button').count(),16);
         assert.equal(await page.locator('.jr-sphere-art image').count(),3);
+        if(width>height){
+          assert.deepEqual(await page.evaluate(()=>['nova','jarvis','orion'].flatMap(name=>{
+            const core=document.querySelector('.jr-core.'+name).getBoundingClientRect(),card=document.querySelector('.jr-card.'+name),r=card.getBoundingClientRect();
+            return r.left<core.right-1||r.top>=core.bottom||r.bottom<=core.top||card.scrollHeight>card.clientHeight+1?[name+' capability card is not beside sphere or clips text']:[];
+          })),[],'wide agent descriptions');
+        }
         assert.deepEqual(await page.locator('.jr-meter b').allTextContents(),['—','—','—']);
         assert.equal(await page.locator('[data-connection=pc]').getAttribute('data-online'),'false');
         // Activate the actual visible controls, not their hidden legacy proxies.
@@ -74,6 +80,12 @@ function geometry(){
       }
       const ctx=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,locale:'tr-TR'}),page=await ctx.newPage();
       await page.goto(base+'/test-fixture');await page.waitForSelector('.jr-layout');
+      await page.evaluate(()=>window.rotationStage=document.querySelector('.jr-enhanced'));
+      for(const size of [{width:844,height:390},{width:1366,height:768},{width:390,height:844}]){
+        await page.setViewportSize(size);await page.waitForFunction(()=>Math.abs(document.querySelector('.jr-layout').getBoundingClientRect().height-visualViewport.height)<1);
+        assert.deepEqual(await page.evaluate(geometry),[],'rotation '+JSON.stringify(size));
+        assert.equal(await page.evaluate(()=>rotationStage===document.querySelector('.jr-enhanced')),true,'rotation must retain DOM/state');
+      }
       const idle=await page.locator('.jarvis .jr-sphere-art').evaluate(n=>getComputedStyle(n).animationName);
       await page.evaluate(()=>document.body.dataset.jarvisCoreState='speaking');await page.waitForFunction(()=>document.querySelector('.jr-enhanced').dataset.state==='speaking');
       assert.notEqual(await page.locator('.jarvis .jr-sphere-art').evaluate(n=>getComputedStyle(n).animationName),idle);
@@ -88,6 +100,14 @@ function geometry(){
       assert.deepEqual(await app.evaluate(geometry),[],'actual app loader');assert.deepEqual(appErrors,[],'actual app boot errors');
       if(process.env.JARVIS_SCREENSHOTS)await app.screenshot({path:path.join(process.env.JARVIS_SCREENSHOTS,engine+'-app-390x844.png')});
       await real.close();
+      const desktop=await browser.newContext({viewport:{width:1366,height:768},locale:'tr-TR'});
+      const desk=await desktop.newPage(),deskErrors=[];desk.on('pageerror',e=>deskErrors.push(e.message));
+      await desk.goto(base+'/');await desk.waitForSelector('.jr-layout');await desk.waitForSelector('#loginOverlay.hidden',{state:'attached'});
+      assert.deepEqual(await desk.evaluate(geometry),[],'actual desktop app loader');
+      await desk.locator('.jr-layout [data-a=newTask]').click();await desk.locator('.ref-modal.open').waitFor();
+      await desk.locator('.ref-modal .ref-actions button').first().click();
+      await desk.locator('.jr-layout [data-a=settings]').click();await desk.locator('#jarvisMobileSessionSecurityV195[data-open="1"]').waitFor();await desk.locator('button[data-jsv=close]').click();
+      assert.deepEqual(deskErrors,[],'desktop runtime errors');await desktop.close();
       console.log(engine,'PASS: animation state and viewport/keyboard resize');
     }finally{await browser.close()}
   }

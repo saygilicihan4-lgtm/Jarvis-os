@@ -3,7 +3,7 @@
   if(!host||!host.document)return;
   const doc=host.document;
   const VERSION='4.0';
-  const MEDIA='(max-width: 860px) and (orientation: portrait)';
+  const MEDIA='screen'; // v197: one cockpit in portrait, landscape and desktop.
   function active(){try{return !!host.matchMedia(MEDIA).matches}catch(_){return false}}
   function ensureReference(attempt=0){
     if(!active()||doc.getElementById('jarvisMobileReferenceV195Script'))return;

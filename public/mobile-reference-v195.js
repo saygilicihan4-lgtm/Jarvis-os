@@ -3,7 +3,7 @@
   'use strict';
   if(!host||!host.document)return;
   const doc=host.document,VERSION='2.0',STAGE_ID='jarvisNativeMobileV190';
-  const MEDIA='(max-width: 860px) and (orientation: portrait)';
+  const MEDIA='screen'; // v197: one cockpit in portrait, landscape and desktop.
   const ACTIONS=['newTask','youtube','shopify','files','apps','browser','settings','mic','tasks','feed','connections','talk','listen','think','apply','done'];
   const PATHS={
     newTask:'M12 4v16M4 12h16',youtube:'M9 7l8 5-8 5z',shopify:'M5 7h14l2 14H3L5 7zM8 8V6a4 4 0 018 0v2M15 11c-6-3-7 3-2 3s4 6-3 3',

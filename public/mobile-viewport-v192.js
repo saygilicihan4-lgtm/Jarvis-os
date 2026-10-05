@@ -6,7 +6,7 @@
   const STAGE_ID='jarvisNativeMobileV190';
   const STYLE_ID='jarvisMobileViewportV192Style';
   const VERSION='1.0';
-  const MEDIA='(max-width: 860px) and (orientation: portrait)';
+  const MEDIA='screen'; // v197: one cockpit in portrait, landscape and desktop.
   let raf=0;
 
   function mobile(){try{return !!host.matchMedia(MEDIA).matches}catch(_){return false}}
@@ -33,7 +33,7 @@
   function installStyle(){
     if(doc.getElementById(STYLE_ID))return;
     const s=doc.createElement('style');s.id=STYLE_ID;s.textContent=`
-      @media (max-width:860px) and (orientation:portrait){
+      @media screen{
         html{margin:0!important;padding:0!important;width:100%!important;height:var(--jv-mobile-vh,100dvh)!important;min-height:0!important;overflow:hidden!important;background:#02070b!important}
         body[data-reference-cockpit-mobile="1"]{margin:0!important;padding:0!important;position:fixed!important;left:0!important;top:0!important;right:auto!important;bottom:auto!important;width:var(--jv-mobile-vw,100vw)!important;height:var(--jv-mobile-vh,100dvh)!important;min-height:0!important;max-height:none!important;overflow:hidden!important;overscroll-behavior:none!important;background:#02070b!important;-webkit-text-size-adjust:100%!important}
         #${ROOT_ID}{position:fixed!important;left:0!important;top:0!important;right:auto!important;bottom:auto!important;width:var(--jv-mobile-vw,100vw)!important;height:var(--jv-mobile-vh,100dvh)!important;min-height:0!important;max-height:none!important;overflow:hidden!important;background:#02070b!important;contain:layout paint size!important}

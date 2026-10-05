@@ -6,7 +6,7 @@
   const ROOT_ID='jarvisMobileSessionSecurityV195';
   const STYLE_ID='jarvisMobileSessionSecurityV195Style';
   const VERSION='1.0';
-  const MEDIA='(max-width: 860px) and (orientation: portrait)';
+  const MEDIA='screen'; // v197: one cockpit in portrait, landscape and desktop.
   let status=null;
   let sessions=[];
   let installed=false;
@@ -55,7 +55,7 @@
   function style(){
     if(doc.getElementById(STYLE_ID))return;
     const s=doc.createElement('style');s.id=STYLE_ID;s.textContent=`
-      @media (max-width:860px) and (orientation:portrait){
+      @media screen{
         #${ROOT_ID}{position:absolute;inset:0;z-index:480;display:none;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;color:#edfaff;-webkit-tap-highlight-color:transparent}
         #${ROOT_ID}[data-open="1"]{display:block}
         #${ROOT_ID} .jsv-backdrop{position:absolute;inset:0;background:rgba(0,3,7,.72);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
