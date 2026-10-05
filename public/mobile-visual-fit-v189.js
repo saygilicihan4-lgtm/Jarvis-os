@@ -2,14 +2,23 @@
   'use strict';
   if(!host||!host.document)return;
   const doc=host.document;
-  const VERSION='3.0';
+  const VERSION='4.0';
   const MEDIA='(max-width: 860px) and (orientation: portrait)';
   function active(){try{return !!host.matchMedia(MEDIA).matches}catch(_){return false}}
+  function ensureSessionSecurity(attempt=0){
+    if(!active())return false;
+    if(doc.getElementById('jarvisMobileSessionSecurityV195Script'))return true;
+    if(!doc.getElementById('jarvisNativeMobileV190')&&attempt<220){host.setTimeout(()=>ensureSessionSecurity(attempt+1),40);return false}
+    const script=doc.createElement('script');script.id='jarvisMobileSessionSecurityV195Script';script.src='/mobile-session-security-v195.js';script.async=false;
+    (doc.head||doc.documentElement).appendChild(script);return true;
+  }
   function ensureViewport(attempt=0){
     if(!active())return false;
-    if(doc.getElementById('jarvisMobileViewportV192Script'))return true;
+    const existing=doc.getElementById('jarvisMobileViewportV192Script');
+    if(existing){ensureSessionSecurity(0);return true}
     if(!doc.getElementById('jarvisNativeMobileV190')&&attempt<220){host.setTimeout(()=>ensureViewport(attempt+1),40);return false}
     const script=doc.createElement('script');script.id='jarvisMobileViewportV192Script';script.src='/mobile-viewport-v192.js';script.async=false;
+    script.addEventListener('load',()=>ensureSessionSecurity(0),{once:true});
     (doc.head||doc.documentElement).appendChild(script);return true;
   }
   function boot(attempt=0){
