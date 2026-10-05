@@ -32,7 +32,7 @@ function geometry(){
   const engines=process.env.JARVIS_TEST_BROWSER?[process.env.JARVIS_TEST_BROWSER]:['chromium','webkit'];
   for(const engine of engines){const browser=await ({chromium,webkit})[engine].launch({headless:true,...(process.env.JARVIS_CHROMIUM_PATH&&engine==='chromium'?{executablePath:process.env.JARVIS_CHROMIUM_PATH,args:['--no-sandbox','--disable-dev-shm-usage']}: {})});
     try{
-      for(const [width,height] of [[390,844],[390,664],[320,568],[430,932],[844,390],[667,375],[932,430],[1366,768],[1920,1080]]){
+      for(const [width,height] of [[390,844],[390,664],[320,568],[430,932],[844,390],[667,375],[932,430],[844,320],[568,320],[1366,768],[1920,1080]]){
         const context=await browser.newContext({viewport:{width,height},deviceScaleFactor:3,isMobile:true,hasTouch:true,locale:'tr-TR',reducedMotion:'reduce'});
         const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
         await page.goto(base+'/test-fixture');await page.waitForSelector('.jr-layout');await page.waitForFunction(()=>document.querySelector('#jarvisNativeMobileV190')?.dataset.sessionSecurity==='ready');
@@ -71,6 +71,7 @@ function geometry(){
         await page.evaluate(()=>JarvisCockpitI18n.setLocale('tr-TR',{translate:false}));
         // Simulate device safe-area reservations; emulated WebKit has no notch.
         if(height>=664){await page.addStyleTag({content:'.jr-enhanced .jr-layout{padding-top:47px!important;padding-bottom:34px!important}'});assert.deepEqual(await page.evaluate(geometry),[],'safe-area inset');}
+        if(width>height&&width<1000){await page.addStyleTag({content:'.jr-enhanced .jr-layout{padding-left:47px!important;padding-right:47px!important;padding-bottom:21px!important}'});if(process.env.JARVIS_SCREENSHOTS)await page.screenshot({path:path.join(process.env.JARVIS_SCREENSHOTS,engine+'-'+width+'x'+height+'-notch.png')});assert.deepEqual(await page.evaluate(geometry),[],'landscape notch/home indicator');}
         for(const s of ['idle','listening','speaking','thinking']){await page.evaluate(v=>document.body.dataset.jarvisCoreState=v,s);await page.waitForFunction(v=>document.querySelector('.jr-enhanced').dataset.state===v,s);}
         assert.equal(await page.locator('.jr-sphere-art').first().evaluate(n=>getComputedStyle(n).animationName),'none','reduced motion');
         if(width===390&&height===844&&process.env.JARVIS_SCREENSHOTS){fs.mkdirSync(process.env.JARVIS_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.JARVIS_SCREENSHOTS,engine+'-390x844.png')})}

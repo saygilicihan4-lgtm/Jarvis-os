@@ -52,7 +52,7 @@
   .jr-core-title b{font-size:clamp(15px,1.7vw,27px)}.jr-core-title small{font-size:clamp(9px,.9vw,14px)}
   .jr-card{padding:12px;align-self:center;min-height:70%;max-height:100%;overflow:auto}
   .jr-card li{font-size:clamp(9px,.85vw,15px);line-height:1.8;overflow-wrap:break-word}
-  .jr-work{grid-row:3;grid-template-columns:29% 38% 29%}
+  .jr-work{grid-row:3;grid-template-columns:29% 38% 29%}.jr-work>*{min-height:0}
   .jr-quick nav{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(4,minmax(24px,1fr));gap:2px 8px}
   .jr-quick button{font-size:clamp(10px,1vw,16px);min-height:28px}
   .jr-mic{width:auto;height:60%;max-height:150px;aspect-ratio:1}
@@ -63,7 +63,7 @@
   .jr-right .jr-panel{grid-template-rows:27px minmax(0,1fr)}
   #jarvisReferenceCockpit>.ref-modal .ref-card{max-width:760px}
 }
-@media screen and (orientation:landscape) and (max-height:550px){
+@media screen and (orientation:landscape) and (max-height:600px){
   .jr-enhanced .jr-layout{grid-template-rows:32px minmax(102px,1fr) minmax(92px,.8fr) 34px 45px;gap:4px;padding-top:max(4px,env(safe-area-inset-top));padding-bottom:max(4px,env(safe-area-inset-bottom))}
   .jr-brand b{font-size:23px}.jr-brand small{font-size:5px;margin-top:2px}.jr-time{font-size:20px}.jr-date{font-size:7px}.jr-online{font-size:7px;margin-top:2px}.jr-wave{height:18px}.jr-listening{font-size:9px}
   .jr-core{padding-top:28px}.jr-core-title{padding:1px 0}.jr-core-title b{font-size:14px}.jr-core-title small{font-size:8px}
@@ -77,4 +77,10 @@
   .jr-actions{padding:0 12%;gap:6px}.jr-actions button{flex-direction:row;gap:6px;font-size:9px}.jr-actions svg{width:18px;height:18px}
   .jr-footer{grid-template-columns:36% 34%}.jr-meters{padding:3px}.jr-meter{font-size:7px}.jr-meter b{font-size:10px;margin-top:0}
   .jr-connections{padding:3px 6px;display:flex;align-items:center;gap:8px}.jr-connections h2{font-size:8px;margin:0}.jr-links{flex:1}.jr-link{font-size:7px;gap:1px}.jr-link svg{width:13px;height:13px}
+}
+@media screen and (orientation:landscape) and (max-height:360px){
+  .jr-enhanced .jr-layout{grid-template-rows:28px minmax(88px,1fr) minmax(83px,.8fr) 32px 40px;gap:3px}
+  .jr-brand small{display:none}.jr-online{margin-top:0}.jr-card li{font-size:7px;line-height:1.45}
+  .jr-core-title b{font-size:12px}.jr-core-title small{font-size:7px}.jr-quick button{font-size:7px}
+  .jr-quick nav{grid-template-rows:repeat(2,minmax(24px,1fr))}.jr-quick button{min-height:24px}.jr-quick svg{width:12px;height:12px}
 }

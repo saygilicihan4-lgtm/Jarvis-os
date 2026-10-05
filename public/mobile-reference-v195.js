@@ -25,7 +25,7 @@
   function icon(name){return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="'+(PATHS[name]||PATHS.done)+'"/></svg>'}
   function label(node,key){node.dataset.i18n=key;node.textContent=t(key);return node}
   function button(action,key,cls=''){const n=el('button','jr-button '+cls);n.type='button';n.dataset.a=action;n.innerHTML=icon(action);n.appendChild(label(el('span'),key));return n}
-  function artCrop(name){const [x,y,size]=CROPS[name];return '<svg class="jr-sphere-art" viewBox="'+x+' '+y+' '+size+' '+size+'" aria-hidden="true" focusable="false"><image href="/mobile-reference-art.jpg" width="1221" height="1288"/></svg>'}
+  function artCrop(name){const [x,y,size]=CROPS[name];return '<svg class="jr-sphere-art" viewBox="'+x+' '+y+' '+size+' '+size+'" aria-hidden="true" focusable="false"><defs><clipPath id="jr-sphere-'+name+'"><rect x="'+x+'" y="'+y+'" width="'+size+'" height="'+size+'"/></clipPath></defs><image clip-path="url(#jr-sphere-'+name+')" href="/mobile-reference-art.jpg" width="1221" height="1288"/></svg>'}
   function viewport(){const v=host.visualViewport;return {width:v?.width||host.innerWidth,height:v?.height||host.innerHeight,left:v?.offsetLeft||0,top:v?.offsetTop||0,scale:v?.scale||1}}
   function percent(value){return typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=100?Math.round(value):null}
   function viewportSync(){

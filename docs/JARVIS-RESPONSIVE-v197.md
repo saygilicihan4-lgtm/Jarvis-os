@@ -12,7 +12,7 @@ All modes retain visualViewport sizing, safe-area padding and reduced motion.
 Rotation retains the DOM and event bindings rather than rebuilding the cockpit.
 
 Browser regression coverage: 390x844, 390x664, 320x568, 430x932, 844x390,
-667x375, 932x430, 1366x768 and 1920x1080; initial landscape boot; rotation in
+667x375, 932x430, 844x320, 568x320, 1366x768 and 1920x1080; initial landscape boot; rotation in
 both directions; 16 controls and hit targets; translated/RTL labels; adjacent
 capability geometry; session panel; live data; genuine desktop app boot/mouse
 interaction; viewport/keyboard changes. API writes are forbidden in fixtures.
