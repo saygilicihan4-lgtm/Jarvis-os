@@ -56,6 +56,12 @@ async function avatarChecks(page){
   await page.locator('[data-ja=close]').click();
   await page.reload();await page.waitForSelector('.jr-core.jarvis .ja-face');
   await page.locator('.jr-layout [data-a=settings]').tap();await page.locator('[data-jsv=avatar]').tap();
+  const stored=await page.evaluate(()=>localStorage.getItem('jarvis.avatar.v198.jarvis'));
+  await page.locator('[data-ja=name]').fill('Must not replace saved avatar');
+  await page.locator('[data-ja=file]').setInputFiles({name:'invalid.png',mimeType:'image/png',buffer:Buffer.from('not a valid PNG image')});
+  await page.waitForFunction(()=>document.querySelector('#jarvisAvatarStudio [role=status]').textContent.length>0);
+  await page.locator('[data-ja=rights]').check();await page.locator('[data-ja=save]').click();
+  assert.equal(await page.evaluate(()=>localStorage.getItem('jarvis.avatar.v198.jarvis')),stored,'failed replacement must not save previous image as new success');
   await page.locator('[data-ja=reset]').click();assert.equal(await page.locator('.jr-core.jarvis .ja-face').count(),0);assert.equal(await page.evaluate(()=>localStorage.getItem('jarvis.avatar.v198.jarvis')),null);
   await page.locator('[data-ja=close]').click();
   await page.locator('.jr-layout [data-a=settings]').tap();await page.locator('[data-jsv=cyber]').tap();
@@ -69,7 +75,7 @@ async function avatarChecks(page){
   for(const engine of engines){const browser=await ({chromium,webkit})[engine].launch({headless:true,...(process.env.JARVIS_CHROMIUM_PATH&&engine==='chromium'?{executablePath:process.env.JARVIS_CHROMIUM_PATH,args:['--no-sandbox','--disable-dev-shm-usage']}: {})});
     try{
       for(const [width,height] of [[390,844],[390,664],[320,568],[430,932],[844,390],[667,375],[932,430],[844,320],[568,320],[1366,768],[1920,1080]]){
-        const context=await browser.newContext({viewport:{width,height},deviceScaleFactor:3,isMobile:true,hasTouch:true,locale:'tr-TR',reducedMotion:'reduce'});
+        const context=await browser.newContext({viewport:{width,height},deviceScaleFactor:width>=1000?1:3,isMobile:width<1000,hasTouch:true,locale:'tr-TR',reducedMotion:'reduce'});
         const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
         await page.goto(base+'/test-fixture');await page.waitForSelector('.jr-layout');await page.waitForFunction(()=>document.querySelector('#jarvisNativeMobileV190')?.dataset.sessionSecurity==='ready');
         await page.evaluate(s=>document.dispatchEvent(new CustomEvent('jarvis:dashboard-state',{detail:s})),state);
