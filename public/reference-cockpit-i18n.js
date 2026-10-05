@@ -8,6 +8,9 @@
   const KEYS=['smart','listening','online','advisor','executor','specialist','strategy','ideas','risk','planning','chat','mission','pcControl','youtubeCreate','shopifyManage','appDev','automation','research','technical','codeDev','data','expert','quick','newTask','youtube','shopify','files','apps','browser','settings','speakPrompt','talk','listen','think','apply','done','activeTasks','viewAll','notifications','connections','phone','cloud','internet','projectDev','mailCheck','draftReady','systemUpdated','ideaReady'];
   const EN=['SMART ASSISTANT','Listening…','Systems Online','ADVISOR','EXECUTION','SPECIALIST','Strategy & Analysis','Idea Development','Risk Assessment','Planning & Optimization','Conversation','Mission Execution','Computer Control','YouTube Content Creation','Shopify Product Management','App Development','Automation & Tasks','Deep Research','Technical Analysis','Code & Development','Data Analysis','Specialist Modes','QUICK ACCESS','New Task','YouTube','Shopify','Files','Apps','Browser','Settings','Say it to speak','Speak','Listen','Think','Apply','Completed','ACTIVE TASKS','View All','RECENT NOTIFICATIONS','CONNECTIONS','Phone','Cloud','Internet','Project Development','Mail Check','Product draft prepared','System update completed','New idea ready'];
   const TR=['AKILLI ASİSTANINIZ','Dinliyorum…','Sistemler Çevrimiçi','DANIŞMAN','İCRA','UZMAN','Strateji & Analiz','Fikir Geliştirme','Risk Değerlendirme','Planlama & Optimizasyon','Sizinle Sohbet','Görev Yürütme','Bilgisayar Yönetimi','YouTube İçerik Üretimi','Shopify Ürün Yönetimi','Uygulama Geliştirme','Otomasyon & Görevler','Derin Araştırma','Teknik Analiz','Kod & Geliştirme','Veri Analizi','Özel Uzmanlık Modları','HIZLI ERİŞİM','Yeni Görev','YouTube','Shopify','Dosyalar','Uygulamalar','Tarayıcı','Ayarlar','Konuşmak için söyleyin','Konuş','Dinle','Düşün','Uygula','Tamamlandı','AKTİF GÖREVLER','Tümünü Gör','SON BİLDİRİMLER','BAĞLANTILAR','Telefon','Bulut','İnternet','Proje Geliştirme','Mail Kontrolü','Ürün taslağı hazırlandı','Sistem güncellemesi tamamlandı','Yeni fikir önerisi hazır'];
+  KEYS.push('ready','speaking','thinking','executing','offline','connecting','unknown','unavailable','noTasks','noNotifications','pending','waitingPc','waitingDependency','failed');
+  EN.push('Ready','Speaking…','Thinking…','Executing…','Offline','Connecting…','Unknown','No live data','No active tasks','No notifications','Pending','Waiting for PC','Waiting for dependency','Failed');
+  TR.push('Hazırım','Konuşuyorum…','Düşünüyorum…','Uyguluyorum…','Çevrimdışı','Bağlanıyor…','Bilinmiyor','Canlı veri yok','Aktif görev yok','Bildirim yok','Bekliyor','PC bekleniyor','Bağımlılık bekleniyor','Başarısız');
   const packs=new Map();
   const makePack=values=>Object.freeze(Object.fromEntries(KEYS.map((k,i)=>[k,String(values[i]||EN[i]||k)])));
   packs.set('en',makePack(EN));packs.set('tr',makePack(TR));
@@ -123,7 +126,7 @@
     if(translate&&!packs.has(lang))await ensurePack(normalized);
     const cockpit=doc.getElementById('jarvisReferenceCockpit');if(!cockpit)return normalized;cockpit.dataset.locale=normalized;cockpit.dataset.dir=RTL.has(lang)?'rtl':'ltr';
     let layer=cockpit.querySelector('.ref-i18n-layer');if(!layer){layer=div('ref-i18n-layer');cockpit.querySelector('.ref-frame')?.appendChild(layer)}
-    if(layer)paintStatic(layer);doc.documentElement.lang=normalized;doc.documentElement.dir=RTL.has(lang)?'rtl':'ltr';return normalized;
+    if(layer)paintStatic(layer);doc.documentElement.lang=normalized;doc.documentElement.dir=RTL.has(lang)?'rtl':'ltr';doc.dispatchEvent(new root.CustomEvent('jarvis:cockpit-locale',{detail:{locale:normalized}}));return normalized;
   }
   function install(attempt=0){
     const cockpit=doc.getElementById('jarvisReferenceCockpit');if(!cockpit){if(attempt<80)setTimeout(()=>install(attempt+1),100);return false}
@@ -134,6 +137,6 @@
     return true;
   }
   function register(locale,dict){const normalized=canonical(locale);if(!normalized||!dict||typeof dict!=='object')return false;const base=packs.get('en'),values=KEYS.map(k=>String(dict[k]||base[k]||'').trim());return !!safePack(normalized,values)}
-  root.JarvisCockpitI18n=Object.freeze({VERSION,KEYS,canonical,currentLocale,setLocale,register,install});
+  root.JarvisCockpitI18n=Object.freeze({VERSION,KEYS,canonical,currentLocale,setLocale,register,install,t});
   if(doc.readyState==='loading')doc.addEventListener('DOMContentLoaded',()=>install(0),{once:true});else install(0);
 })(typeof window!=='undefined'?window:null);

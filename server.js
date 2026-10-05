@@ -1578,7 +1578,7 @@ const server=http.createServer((req,res)=>{
     }
     if(err){res.writeHead(404);return res.end('not found')}
     const ext=path.extname(file);
-    const type=ext==='.css'?'text/css; charset=utf-8':ext==='.js'?'application/javascript; charset=utf-8':'text/html; charset=utf-8';
+    const type=ext==='.css'?'text/css; charset=utf-8':ext==='.js'?'application/javascript; charset=utf-8':ext==='.jpg'||ext==='.jpeg'?'image/jpeg':ext==='.webp'?'image/webp':ext==='.avif'?'image/avif':ext==='.png'?'image/png':ext==='.svg'?'image/svg+xml':'text/html; charset=utf-8';
     res.writeHead(200,{'content-type':type,'cache-control':'no-store'});
     res.end(data);
   });

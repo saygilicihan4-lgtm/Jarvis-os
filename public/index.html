@@ -2714,6 +2714,7 @@ function speakPhoneTaskResults(taskList){
 function workerVersionSupported(value){const m=String(value||'').match(/^(\d+)\.(\d+)\.(\d+)$/);return !!m&&(Number(m[1])>2||(Number(m[1])===2&&Number(m[2])>=13));}
 async function load(){
   const d=await api('/api/state');
+  document.dispatchEvent(new CustomEvent('jarvis:dashboard-state',{detail:d}));
   speakPhoneTaskResults(d.tasks||[]);
   const pc=d.workers&&d.workers.pc?d.workers.pc:{online:false};
   const brain=d.brain||{};

@@ -5,7 +5,14 @@
   const VERSION='4.0';
   const MEDIA='(max-width: 860px) and (orientation: portrait)';
   function active(){try{return !!host.matchMedia(MEDIA).matches}catch(_){return false}}
+  function ensureReference(attempt=0){
+    if(!active()||doc.getElementById('jarvisMobileReferenceV195Script'))return;
+    if(!doc.getElementById('jarvisNativeMobileV190')){if(attempt<220)host.setTimeout(()=>ensureReference(attempt+1),40);return}
+    const script=doc.createElement('script');script.id='jarvisMobileReferenceV195Script';script.src='/mobile-reference-v195.js';script.async=false;
+    (doc.head||doc.documentElement).appendChild(script);
+  }
   function ensureSessionSecurity(attempt=0){
+    ensureReference();
     if(!active())return false;
     if(doc.getElementById('jarvisMobileSessionSecurityV195Script'))return true;
     if(!doc.getElementById('jarvisNativeMobileV190')&&attempt<220){host.setTimeout(()=>ensureSessionSecurity(attempt+1),40);return false}
