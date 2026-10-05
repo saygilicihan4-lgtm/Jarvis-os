@@ -22,7 +22,10 @@ jobs:
           node --check public/mobile-canonical-cockpit.js
           node --check public/mobile-visual-fit-v189.js
           node --check public/mobile-native-v190.js
+          node --check public/mobile-reference-v195.js
+          node --check tests/mobile-reference-browser.cjs
           node --check public/mobile-viewport-v192.js
+          node --check public/mobile-session-security-v195.js
           node --check public/mobile-approval-review.js
           node --check public/tri-core-hologram.js
           node --check reference-cockpit-selftest.js
@@ -31,6 +34,7 @@ jobs:
           node --check mobile-visual-fit-v189-selftest.js
           node --check mobile-native-v190-selftest.js
           node --check mobile-viewport-v192-selftest.js
+          node --check mobile-session-security-v195-selftest.js
           node --check mobile-approval-review-selftest.js
       - name: Reference cockpit motion and authority selftest
         run: node reference-cockpit-selftest.js
@@ -44,5 +48,33 @@ jobs:
         run: node mobile-native-v190-selftest.js
       - name: Dynamic mobile viewport selftest
         run: node mobile-viewport-v192-selftest.js
+      - name: Mobile session security selftest
+        run: node mobile-session-security-v195-selftest.js
       - name: Mobile approval review selftest
         run: node mobile-approval-review-selftest.js
+
+  mobile-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Mobile DOM, touch and viewport regression
+        run: node tests/mobile-reference-browser.cjs
+        env:
+          JARVIS_TEST_BROWSER: ${{ matrix.browser }}
+          JARVIS_SCREENSHOTS: artifacts/mobile-reference
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobile-reference-${{ matrix.browser }}
+          path: artifacts/mobile-reference
+          if-no-files-found: ignore
