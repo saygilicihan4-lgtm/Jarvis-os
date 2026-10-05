@@ -17,7 +17,7 @@ assert.strictEqual(art.subarray(8,12).toString('ascii'),'WEBP','approved cockpit
 assert.strictEqual(crypto.createHash('sha256').update(art).digest('hex'),'a6f13cb2a07b42abb4d795bdff62069ef9c5e6528145287407890fcb48049193','approved cockpit image bytes drifted');
 
 assert(mobile.includes("const VERSION='2.0'"),'exact approved canonical implementation version missing');
-assert(mobile.includes("const MEDIA='(max-width: 860px) and (orientation: portrait)'"),'portrait mobile activation contract missing');
+assert(mobile.includes("const MEDIA='screen'"),'all-orientation activation contract missing');
 assert(mobile.includes('aspect-ratio:941/1672'),'approved 941x1672 aspect ratio missing');
 for(let n=1;n<=4;n++)assert(mobile.includes(`/jarvis-mobile-cockpit-v185-0${n}.b64`),`asset chunk ${n} loader missing`);
 assert(mobile.includes("ascii(0,4)!=='RIFF'")&&mobile.includes("ascii(8,12)!=='WEBP'"),'runtime asset integrity guard missing');

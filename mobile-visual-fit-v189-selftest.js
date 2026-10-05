@@ -13,7 +13,7 @@ assert(fit.includes("script.id='jarvisMobileSessionSecurityV195Script'"),'v195 l
 assert(fit.includes("script.addEventListener('load',()=>ensureSessionSecurity(0),{once:true})"),'v195 security UI must load only after v192 viewport script');
 assert(fit.includes("if(!doc.getElementById('jarvisNativeMobileV190')&&attempt<220)"),'viewport/security layers must wait for the native v190 stage');
 assert(fit.includes("script.addEventListener('load',()=>ensureViewport(0),{once:true})"),'fresh v190 load must trigger v192 only after v190 script load');
-assert(fit.includes('(max-width: 860px) and (orientation: portrait)'),'portrait activation contract missing');
+assert(fit.includes("const MEDIA='screen'"),'all-orientation activation contract missing');
 assert(!fit.includes('localStorage')&&!fit.includes('sessionStorage'),'compatibility bridge must not persist state');
 assert(!fit.includes('approve_mission_action')&&!fit.includes('shopify_publish')&&!fit.includes('youtube_publish'),'compatibility bridge must not gain authority');
 const canonicalPos=holo.indexOf("script.src='/mobile-canonical-cockpit.js'");

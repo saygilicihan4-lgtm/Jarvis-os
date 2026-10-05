@@ -5,7 +5,7 @@
   const VERSION='2.0';
   const ROOT_ID='jarvisMobileCanonical';
   const STYLE_ID='jarvisMobileCanonicalStyle';
-  const MEDIA='(max-width: 860px) and (orientation: portrait)';
+  const MEDIA='screen'; // v197: one cockpit in portrait, landscape and desktop.
   const PARTS=[
     '/jarvis-mobile-cockpit-v185-01.b64',
     '/jarvis-mobile-cockpit-v185-02.b64',

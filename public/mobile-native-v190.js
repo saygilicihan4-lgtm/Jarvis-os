@@ -6,7 +6,7 @@
   const STAGE_ID='jarvisNativeMobileV190';
   const STYLE_ID='jarvisNativeMobileV190Style';
   const VERSION='1.0';
-  const MEDIA='(max-width: 860px) and (orientation: portrait)';
+  const MEDIA='screen'; // v197: one cockpit in portrait, landscape and desktop.
 
   const TR={
     listening:'Dinliyorum…',online:'Sistemler Çevrimiçi',advisor:'DANIŞMAN',executor:'İCRA',expert:'UZMAN',
@@ -39,7 +39,7 @@
   function style(){
     if(doc.getElementById(STYLE_ID))return;
     const s=doc.createElement('style');s.id=STYLE_ID;s.textContent=`
-      @media (max-width:860px) and (orientation:portrait){
+      @media screen{
         html,body{margin:0!important;padding:0!important;width:100%!important;height:100vh!important;height:100lvh!important;min-height:100vh!important;background:#02070b!important;overflow:hidden!important;overscroll-behavior:none!important}
         body[data-reference-cockpit-mobile="1"]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;height:100lvh!important;overflow:hidden!important;background:#02070b!important}
         #${ROOT_ID}{display:block!important;position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;height:100lvh!important;background:#02070b!important;overflow:hidden!important}
