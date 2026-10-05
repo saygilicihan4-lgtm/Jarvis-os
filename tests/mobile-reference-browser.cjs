@@ -42,6 +42,7 @@ function geometry(){
         assert.equal(await page.locator('.jr-layout .jr-button').count(),16);
         assert.equal(await page.locator('.jr-sphere-art image').count(),3);
         if(width>height){
+          assert.equal(await page.locator('.jr-sphere').evaluateAll(ns=>ns.every(n=>{const r=n.getBoundingClientRect();return Math.abs(r.width-r.height)<1})),true,'wide spheres must remain square');
           assert.deepEqual(await page.evaluate(()=>['nova','jarvis','orion'].flatMap(name=>{
             const core=document.querySelector('.jr-core.'+name).getBoundingClientRect(),card=document.querySelector('.jr-card.'+name),r=card.getBoundingClientRect();
             return r.left<core.right-1||r.top>=core.bottom||r.bottom<=core.top||card.scrollHeight>card.clientHeight+1?[name+' capability card is not beside sphere or clips text']:[];
