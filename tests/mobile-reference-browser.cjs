@@ -49,6 +49,10 @@ async function avatarChecks(page){
   if(process.env.JARVIS_SCREENSHOTS)await page.screenshot({path:path.join(process.env.JARVIS_SCREENSHOTS,'avatar-projection-'+process.env.JARVIS_TEST_BROWSER+'.png')});
   assert.equal(await page.locator('.ja-projection').evaluate(n=>n.textContent.includes('Test avatar <img onerror=alert(1)>')),true,'name stays text');
   await page.locator('[data-ja=mirror]').click();assert.equal(await page.locator('.ja-projected-image.ja-mirror').count(),1);
+  for(const viewport of [{width:844,height:390},{width:390,height:844}]){
+    await page.setViewportSize(viewport);await page.waitForFunction(()=>Math.abs(document.querySelector('.ja-projection').getBoundingClientRect().width-visualViewport.width)<1);
+    assert.equal(await page.locator('.ja-projection button').evaluateAll(ns=>ns.every(n=>{const r=n.getBoundingClientRect();return r.width>=24&&r.height>=24&&r.top>=0&&r.bottom<=visualViewport.height&&n.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))})),true,'projection controls survive rotation');
+  }
   await page.locator('[data-ja=close]').click();
   await page.reload();await page.waitForSelector('.jr-core.jarvis .ja-face');
   await page.locator('.jr-layout [data-a=settings]').tap();await page.locator('[data-jsv=avatar]').tap();
