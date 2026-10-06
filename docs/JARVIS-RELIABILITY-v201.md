@@ -22,6 +22,8 @@ Human projection v200 remains isolated on its work branch; this fix does not cla
 
 Follow-up after CI: the permission fixture had changed only a label while leaving the real desktop wake loop armed. It now invokes the production recognition error/end handlers. Animation moved from filtered SVG transforms to an HTML wrapper; the test waits for actual transform progression instead of sampling a single 160 ms interval. A superseded legacy WebGL renderer now releases its loop, buffer, program and canvas; hidden tabs pause its loop. Lifecycle tests cover pause, resume, disposal and restart prevention. These remove demonstrated unnecessary rendering work, but do not establish the sole cause of the user's HP browser hang.
 
+The 700 ms localhost wake poll and 2500 ms dashboard poll also lacked in-flight guards. Slow or stalled requests could accumulate. Both scheduled paths now allow at most one pending request, have abort deadlines and skip hidden tabs. A transient dashboard network failure no longer logs out the browser; an actual ACCESS DENIED response still does. Production-function tests cover non-overlap and hidden-tab behavior. Freshness indicators continue to expire rather than displaying invented online state.
+
 - `node cockpit-reliability-selftest.js`: executes extracted production handlers for passive/manual routing, manual expiry, privacy and startup failure.
 - `npm test`, `npm run security:check`: existing isolated regressions.
 - `tests/mobile-reference-browser.cjs`: delayed-loader first-paint test, desktop transform progression, reduced motion, visible permission error, connection diagnostics, existing portrait/landscape/desktop geometry and action dispatch checks. CI runs Chromium and WebKit; no physical-device claim.

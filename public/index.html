@@ -1258,9 +1258,13 @@ async function enableClapWake(){
     clapState.textContent=' · DOUBLE CLAP: MIC DENIED';
   }
 }
+let localWakePollPending=false;
 async function pollLocalWake(){
+  if(localWakePollPending||document.hidden)return;
+  localWakePollPending=true;
+  const controller=new AbortController(),deadline=setTimeout(()=>controller.abort(),1800);
   try{
-    const r=await fetch('http://127.0.0.1:8765/wake-state',{cache:'no-store'});
+    const r=await fetch('http://127.0.0.1:8765/wake-state',{cache:'no-store',signal:controller.signal});
     if(!r.ok)return;
     const d=await r.json();
     const n=Number(d.wake||0);
@@ -1275,7 +1279,7 @@ async function pollLocalWake(){
         }
       },wait);
     }
-  }catch(e){}
+  }catch(e){}finally{clearTimeout(deadline);localWakePollPending=false}
 }
 setInterval(pollLocalWake,700);
 setTimeout(pollLocalWake,1200);
@@ -2737,8 +2741,8 @@ function speakPhoneTaskResults(taskList){
   }
 }
 function workerVersionSupported(value){const m=String(value||'').match(/^(\d+)\.(\d+)\.(\d+)$/);return !!m&&(Number(m[1])>2||(Number(m[1])===2&&Number(m[2])>=13));}
-async function load(){
-  const d=await api('/api/state');
+async function load(signal){
+  const d=await api('/api/state',signal?{signal}:{});
   document.dispatchEvent(new CustomEvent('jarvis:dashboard-state',{detail:d}));
   speakPhoneTaskResults(d.tasks||[]);
   const pc=d.workers&&d.workers.pc?d.workers.pc:{online:false};
@@ -3038,7 +3042,15 @@ if(!/Windows/i.test(navigator.userAgent)&&!isMobileJarvis()){
 document.addEventListener('visibilitychange',()=>{if(document.hidden)languageChatClient?.cancel();if(document.hidden)mobileLanguageChatClient?.cancel()});
 window.addEventListener('pagehide',()=>{languageChatClient?.cancel();mobileLanguageChatClient?.cancel()});
 bootstrapSession();
-setInterval(()=>{if(!loginOverlay.classList.contains('hidden'))return;load().catch(()=>setAuthenticated(false))},2500);
+let dashboardRefreshPending=false;
+async function refreshDashboard(){
+  if(dashboardRefreshPending||document.hidden||!loginOverlay.classList.contains('hidden'))return;
+  dashboardRefreshPending=true;
+  const controller=new AbortController(),deadline=setTimeout(()=>controller.abort(),8000);
+  try{await load(controller.signal)}catch(e){if(String(e.message)==='ACCESS DENIED')setAuthenticated(false)}
+  finally{clearTimeout(deadline);dashboardRefreshPending=false}
+}
+setInterval(refreshDashboard,2500);
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
 </script>
 </body>

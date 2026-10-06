@@ -33,5 +33,14 @@ function context(){
  doc.hidden=false;events.visibilitychange();assert.equal(draws,2);assert.equal(frames.size,1);
  doc.body.dataset.referenceCockpit='1';events['jarvis:cockpit-ready']();
  assert.equal(frames.size,0);assert.equal(removed,true);assert.equal(deleted,2,'superseded buffers/program disposed');assert.equal(renderer.install(host),false,'cannot restart obsolete renderer');
+ for(const [name,start,end,pending]of [
+   ['pollLocalWake','async function pollLocalWake(){','setInterval(pollLocalWake','localWakePollPending'],
+   ['refreshDashboard','async function refreshDashboard(){','setInterval(refreshDashboard','dashboardRefreshPending']]){
+   let finish,calls=0,loggedOut=false;const timers=[];
+   const polling={AbortController,document:{hidden:false},loginOverlay:{classList:{contains:()=>true}},localWakeSeen:0,fetch:()=>{calls++;return new Promise(r=>finish=()=>r({ok:false}))},load:()=>{calls++;return new Promise(r=>finish=r)},setTimeout:fn=>{timers.push(fn);return timers.length},clearTimeout(){},setAuthenticated:()=>loggedOut=true,[pending]:false};
+   vm.createContext(polling);vm.runInContext(html.slice(html.indexOf(start),html.indexOf(end,html.indexOf(start))),polling);
+   const first=polling[name]();await polling[name]();assert.equal(calls,1,name+' must not overlap');finish();await first;assert.equal(polling[pending],false);
+   polling.document.hidden=true;await polling[name]();assert.equal(calls,1,name+' hidden tabs do not poll');assert.equal(loggedOut,false);
+ }
  console.log('COCKPIT RELIABILITY PASS: production manual/passive recognition routing, expiry, privacy, startup failure, first-paint guard');
 })().catch(e=>{console.error(e);process.exitCode=1});
