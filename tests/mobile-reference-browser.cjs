@@ -148,11 +148,38 @@ async function avatarChecks(page){
       const desktop=await browser.newContext({viewport:{width:1366,height:768},locale:'tr-TR'});
       const desk=await desktop.newPage(),deskErrors=[];desk.on('pageerror',e=>deskErrors.push(e.message));
       await desk.goto(base+'/');await desk.waitForSelector('.jr-layout');await desk.waitForSelector('#loginOverlay.hidden',{state:'attached'});
+      assert.equal(await desk.evaluate(()=>document.documentElement.dataset.cockpitReady),'ready');
+      assert.equal(await desk.locator('#cockpitBoot').isVisible(),false);
+      for(const core of ['nova','jarvis','orion']){
+        const sphere=desk.locator('.jr-core.'+core+' .jr-sphere-art');
+        assert.notEqual(await sphere.evaluate(n=>getComputedStyle(n).animationName),'none','desktop motion '+core);
+        const changes=await sphere.evaluate(async n=>{const a=getComputedStyle(n).transform;await new Promise(r=>setTimeout(r,160));return a!==getComputedStyle(n).transform});
+        assert.equal(changes,true,'desktop transforms advance '+core);
+      }
+      await desk.emulateMedia({reducedMotion:'reduce'});
+      assert.equal(await desk.locator('.nova .jr-sphere-art').evaluate(n=>getComputedStyle(n).animationName),'none','respect reduced motion');
+      await desk.emulateMedia({reducedMotion:'no-preference'});
+      await desk.evaluate(()=>document.getElementById('voiceState').textContent='VOICE: NOT-ALLOWED');
+      await desk.waitForFunction(()=>document.querySelector('.jr-prompt').textContent.includes('Mikrofon izni'));
+      await desk.locator('.jr-layout [data-a=connections]').click();
+      assert.match(await desk.locator('.ref-modal pre').textContent(),/start-worker-windows.bat/);
+      assert.match(await desk.locator('.ref-modal pre').textContent(),/NOT-ALLOWED/);
+      await desk.locator('.ref-modal .ref-actions button').first().click();
       assert.deepEqual(await desk.evaluate(geometry),[],'actual desktop app loader');
       await desk.locator('.jr-layout [data-a=newTask]').click();await desk.locator('.ref-modal.open').waitFor();
       await desk.locator('.ref-modal .ref-actions button').first().click();
       await desk.locator('.jr-layout [data-a=settings]').click();await desk.locator('#jarvisMobileSessionSecurityV195[data-open="1"]').waitFor();await desk.locator('button[data-jsv=close]').click();
       assert.deepEqual(deskErrors,[],'desktop runtime errors');await desktop.close();
+      const bootContext=await browser.newContext(),bootPage=await bootContext.newPage();
+      let release;const barrier=new Promise(r=>release=r);
+      await bootPage.route('**/mobile-reference-v195.js',async route=>{await barrier;await route.continue()});
+      await bootPage.goto(base+'/',{waitUntil:'domcontentloaded'});
+      await bootPage.waitForSelector('#jarvisReferenceCockpit',{state:'attached'});
+      assert.equal(await bootPage.locator('#jarvisReferenceCockpit').isVisible(),false,'legacy cockpit hidden during delayed load');
+      assert.equal(await bootPage.locator('#cockpitBoot').isVisible(),true);
+      release();await bootPage.waitForFunction(()=>document.documentElement.dataset.cockpitReady==='ready');
+      assert.equal(await bootPage.locator('#cockpitBoot').isVisible(),false);
+      await bootContext.close();
       console.log(engine,'PASS: animation state and viewport/keyboard resize');
     }finally{await browser.close()}
   }

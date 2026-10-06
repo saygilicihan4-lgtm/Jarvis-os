@@ -94,7 +94,7 @@
     hotspot(frame,'done','Tamamlandı').onclick=()=>modal.openText('AKTİF GÖREVLER',readPanel('tasks'));
     hotspot(frame,'tasks','Aktif Görevler').onclick=()=>modal.openText('AKTİF GÖREVLER',readPanel('tasks'));
     hotspot(frame,'feed','Son Bildirimler').onclick=()=>modal.openText('SON BİLDİRİMLER',readPanel('audit'));
-    hotspot(frame,'connections','Bağlantılar').onclick=()=>modal.openText('BAĞLANTILAR',[doc.getElementById('pcState')?.textContent,doc.getElementById('systemState')?.textContent,doc.getElementById('remoteMode')?.textContent].filter(Boolean).join('\n'));
+    hotspot(frame,'connections','Bağlantılar').onclick=()=>modal.openText('BAĞLANTILAR',root.JarvisMobileReferenceV195?.diagnostics?.()||[doc.getElementById('pcState')?.textContent,doc.getElementById('systemState')?.textContent,doc.getElementById('remoteMode')?.textContent].filter(Boolean).join('\n'));
     doc.body.appendChild(rootEl);
     function sync(){rootEl.dataset.state=doc.body.classList.contains('speaking')?'speaking':(doc.body.dataset.jarvisCoreState||'idle');rootEl.dataset.core=doc.body.dataset.jarvisCore||'jarvis';rootEl.dataset.collab=doc.body.dataset.jarvisCoreCollab||'0'}
     sync();if(typeof root.MutationObserver==='function'){const observer=new root.MutationObserver(sync);observer.observe(doc.body,{attributes:true,attributeFilter:['class','data-jarvis-core','data-jarvis-core-state','data-jarvis-core-collab']})}
