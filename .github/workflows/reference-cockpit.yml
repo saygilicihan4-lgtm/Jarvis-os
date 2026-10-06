@@ -55,6 +55,7 @@ jobs:
       - name: Avatar syntax and isolated security checks
         run: |
           node --check public/avatar-security-v198.js
+          node --check public/avatar-3d-v199.js
           npm run security:check
 
   mobile-browser:
@@ -73,6 +74,11 @@ jobs:
       - run: npx playwright install --with-deps ${{ matrix.browser }}
       - name: Mobile DOM, touch and viewport regression
         run: node tests/mobile-reference-browser.cjs
+        env:
+          JARVIS_TEST_BROWSER: ${{ matrix.browser }}
+          JARVIS_SCREENSHOTS: artifacts/mobile-reference
+      - name: Original 3D avatar and audio clock regression
+        run: node tests/avatar-3d-browser.cjs
         env:
           JARVIS_TEST_BROWSER: ${{ matrix.browser }}
           JARVIS_SCREENSHOTS: artifacts/mobile-reference

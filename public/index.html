@@ -1556,6 +1556,7 @@ function browserSpeak(text,lang=activeLanguage){
 
   u.onstart=()=>document.body.classList.add('speaking');
   u.onend=()=>document.body.classList.remove('speaking');
+  globalThis.JarvisAvatar3D?.bindUtterance(u);
   speechSynthesis.speak(u);
 }
 let mobileSpeechPrimed=false;
@@ -1651,6 +1652,7 @@ async function playJarvisMobileRelay(text,tone='balanced',locale=activeLanguage)
         a.src=url;
         a.currentTime=0;
         a.volume=1;
+        void globalThis.JarvisAvatar3D?.bindAudio(a,bytes);
         document.body.classList.add('speaking');
         await a.play();
         if(window.voiceState)voiceState.textContent='VOICE: '+String(locale||'').toUpperCase()+' RELAY';
@@ -2885,6 +2887,7 @@ function playLanguageConversationAudio(result,signal){
     signal.throwIfAborted();
     const bytes=Uint8Array.from(atob(result.audio),x=>x.charCodeAt(0));
     const url=URL.createObjectURL(new Blob([bytes],{type:result.mime})),audio=new Audio(url);
+    void globalThis.JarvisAvatar3D?.bindAudio(audio,bytes);
     audio.preload='auto';let finished=false;
     const finish=error=>{
       if(finished)return;finished=true;clearTimeout(timer);signal.removeEventListener('abort',abort);
