@@ -68,7 +68,8 @@
   }
   function renderCore(core){const host=d.querySelector('.jr-core.'+core+' .jr-sphere');if(!host)return;
     host.querySelectorAll('.ja-robot3d').forEach(c=>{views.delete(c);c.remove()});host.removeAttribute('data-robot3d');
-    if(enabled.has(core)){mount(host,core);host.dataset.robot3d='1';}
+    if(enabled.has(core)){mount(host,core);host.dataset.robot3d='1';host.removeAttribute('aria-hidden');host.setAttribute('aria-label',label());}
+    else {const photo=host.querySelector('.ja-face');if(photo){host.removeAttribute('aria-hidden');host.setAttribute('aria-label',photo.alt)}else{host.setAttribute('aria-hidden','true');host.removeAttribute('aria-label')}}
   }
   function setCore(core,on){if(!cores.includes(core))throw Error('invalid_core');
     if(on)localStorage.setItem(key+core,'1');else localStorage.removeItem(key+core);
@@ -97,7 +98,7 @@
   }
   for(const core of cores){try{if(localStorage.getItem(key+core)==='1')enabled.add(core)}catch(_){}renderCore(core)}
   d.addEventListener('visibilitychange',()=>{if(d.hidden){cancelAnimationFrame(frame);frame=0}else start()});
-  d.addEventListener('jarvis:cockpit-locale',()=>{for(const [c] of views)c.setAttribute('aria-label',label())});
+  d.addEventListener('jarvis:cockpit-locale',()=>{for(const [c] of views)c.setAttribute('aria-label',label());for(const core of enabled){const host=d.querySelector('.jr-core.'+core+' .jr-sphere');if(host){host.removeAttribute('aria-hidden');host.setAttribute('aria-label',label())}}});
   w.addEventListener('storage',e=>{if(e.key===null||e.key.startsWith(key)){for(const core of cores){try{localStorage.getItem(key+core)==='1'?enabled.add(core):enabled.delete(core)}catch(_){}renderCore(core)}}});
   w.JarvisAvatar3D=Object.freeze({setCore,isEnabled:core=>enabled.has(core),mount,bindAudio,bindUtterance,
     rotate(canvas,degrees){const v=views.get(canvas);if(v)v.angle=Math.max(-1.1,Math.min(1.1,degrees*Math.PI/180))},status});

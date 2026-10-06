@@ -11,6 +11,7 @@ const server=http.createServer((req,res)=>{if(req.url==='/'){res.setHeader('Cont
  await page.goto('http://127.0.0.1:'+server.address().port);await page.waitForFunction(()=>!!window.JarvisAvatar3D);
  await page.evaluate(()=>JarvisAvatarSecurity.open());await page.locator('[data-ja=robot3d]').click();
  assert.equal(await page.locator('[data-ja=robot3d]').getAttribute('aria-pressed'),'true');
+ assert.equal(await page.locator('.jr-sphere').getAttribute('aria-hidden'),null,'3D image remains accessible');
  await page.locator('[data-ja=project]').click();const canvas=page.locator('.ja-projection canvas');await canvas.waitFor();
  await page.waitForFunction(()=>document.querySelector('.ja-projection canvas').dataset.mouth==='0.000');
  const before=await canvas.evaluate(c=>c.toDataURL());await page.locator('.ja-robot-controls input').fill('45');await page.locator('.ja-robot-controls input').dispatchEvent('input');
