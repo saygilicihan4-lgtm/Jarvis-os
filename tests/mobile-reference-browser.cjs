@@ -165,7 +165,15 @@ async function avatarChecks(page){
       assert.match(await desk.locator('.ref-modal pre').textContent(),/start-worker-windows.bat/);
       assert.match(await desk.locator('.ref-modal pre').textContent(),/NOT-ALLOWED|UNSUPPORTED/);
       assert.equal(await desk.locator('#jarvisTriCoreWebgl').count(),0,'superseded GPU canvas released');
+      let pairRequests=0;
+      await desk.route('**/api/pairing/create',async route=>{pairRequests++;assert.equal(route.request().method(),'POST');await route.fulfill({json:{code:'AABB1122',expiresAt:new Date(Date.now()+300000).toISOString()}})});
+      assert.equal(pairRequests,0,'opening diagnostics does not create credentials');
+      await desk.locator('[data-pairing-create]').click();
+      await desk.waitForFunction(()=>document.querySelector('[data-pairing-result]').textContent.includes('AABB1122'));
+      assert.equal(pairRequests,1);assert.equal(await desk.locator('[data-pairing-create]').isDisabled(),true);
+      assert.match(await desk.locator('[data-pairing-result]').textContent(),/--repair-pairing/);
       await desk.locator('.ref-modal .ref-actions button').first().click();
+      assert.equal(await desk.locator('[data-pairing-result]').count(),0,'close removes code from DOM');
       assert.deepEqual(await desk.evaluate(geometry),[],'actual desktop app loader');
       await desk.locator('.jr-layout [data-a=newTask]').click();await desk.locator('.ref-modal.open').waitFor();
       await desk.locator('.ref-modal .ref-actions button').first().click();

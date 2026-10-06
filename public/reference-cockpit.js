@@ -72,9 +72,27 @@
       cancel.onclick=close;voice.onclick=()=>{try{root.toggleVoice&&root.toggleVoice()}catch(_){};ta.focus()};send.onclick=()=>{const target=doc.getElementById('cmd');if(target)target.value=ta.value;if(typeof root.send==='function'){close();root.send()}else ta.focus()};
       modal.classList.add('open');modal.setAttribute('aria-hidden','false');setTimeout(()=>{ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)},30);
     }
-    function openText(title,text){card.innerHTML='';card.appendChild(el('h3','',{text:title}));card.appendChild(el('pre','',{text:text||'Henüz veri yok.'}));const actions=el('div','ref-actions'),closeBtn=el('button','primary',{text:'KAPAT'});closeBtn.onclick=close;actions.appendChild(closeBtn);card.appendChild(actions);modal.classList.add('open');modal.setAttribute('aria-hidden','false')}
+    function openText(title,text,pairing=false){card.innerHTML='';card.appendChild(el('h3','',{text:title}));card.appendChild(el('pre','',{text:text||'Henüz veri yok.'}));const actions=el('div','ref-actions'),closeBtn=el('button','primary',{text:'KAPAT'});closeBtn.onclick=close;actions.appendChild(closeBtn);card.appendChild(actions);modal.classList.add('open');modal.setAttribute('aria-hidden','false');if(pairing)addPairingAction(actions,card)}
     modal.addEventListener('click',e=>{if(e.target===modal)close()});root.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
     return{openComposer,openText,close};
+  }
+
+  function addPairingAction(actions,card){
+    const tr=(doc.documentElement.lang||'tr').startsWith('tr');
+    const button=el('button','',{'data-pairing-create':'1',text:tr?'PC eşleştirme kodu üret':'Create PC pairing code'});
+    const result=el('p','',{'role':'status','data-pairing-result':'1'});result.style.whiteSpace='pre-wrap';actions.appendChild(button);card.appendChild(result);
+    button.onclick=async()=>{
+      button.disabled=true;result.textContent=tr?'Kod isteniyor…':'Requesting code…';
+      const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);
+      try{
+        if(typeof root.api!=='function')throw Error('unavailable');
+        const data=await root.api('/api/pairing/create',{method:'POST',signal:controller.signal});
+        if(!/^[A-F0-9]{8}$/.test(data.code)||!Number.isFinite(Date.parse(data.expiresAt)))throw Error('invalid response');
+        if(!card.contains(result))return;
+        result.textContent=tr?`Tek kullanımlık kod: ${data.code}\n5 dakika içinde PC'de JARVIS klasöründen çalıştır:\nstart-worker-windows.bat --repair-pairing\nİstendiğinde bu kodu gir. Kodu paylaşma.\nBu işlem PC'yi uzaktan başlatmaz; bağlantı heartbeat ile doğrulanır.`:`One-time code: ${data.code}\nWithin 5 minutes run in the JARVIS folder on your PC:\nstart-worker-windows.bat --repair-pairing\nEnter this code when prompted. Keep it private.\nThis does not remotely start the PC; heartbeat confirms connection.`;
+      }catch(_){if(card.contains(result))result.textContent=tr?'Kod üretilemedi. Oturumunuzu ve bağlantınızı kontrol edin.':'Could not create code. Check your session and connection.';button.disabled=false}
+      finally{clearTimeout(timer)}
+    };
   }
 
   function readPanel(id){const n=doc.getElementById(id);if(!n)return'';return String(n.innerText||n.textContent||'').replace(/\n{3,}/g,'\n\n').trim().slice(0,8000)}
@@ -94,7 +112,7 @@
     hotspot(frame,'done','Tamamlandı').onclick=()=>modal.openText('AKTİF GÖREVLER',readPanel('tasks'));
     hotspot(frame,'tasks','Aktif Görevler').onclick=()=>modal.openText('AKTİF GÖREVLER',readPanel('tasks'));
     hotspot(frame,'feed','Son Bildirimler').onclick=()=>modal.openText('SON BİLDİRİMLER',readPanel('audit'));
-    hotspot(frame,'connections','Bağlantılar').onclick=()=>modal.openText('BAĞLANTILAR',root.JarvisMobileReferenceV195?.diagnostics?.()||[doc.getElementById('pcState')?.textContent,doc.getElementById('systemState')?.textContent,doc.getElementById('remoteMode')?.textContent].filter(Boolean).join('\n'));
+    hotspot(frame,'connections','Bağlantılar').onclick=()=>modal.openText('BAĞLANTILAR',root.JarvisMobileReferenceV195?.diagnostics?.()||[doc.getElementById('pcState')?.textContent,doc.getElementById('systemState')?.textContent,doc.getElementById('remoteMode')?.textContent].filter(Boolean).join('\n'),true);
     doc.body.appendChild(rootEl);
     function sync(){rootEl.dataset.state=doc.body.classList.contains('speaking')?'speaking':(doc.body.dataset.jarvisCoreState||'idle');rootEl.dataset.core=doc.body.dataset.jarvisCore||'jarvis';rootEl.dataset.collab=doc.body.dataset.jarvisCoreCollab||'0'}
     sync();if(typeof root.MutationObserver==='function'){const observer=new root.MutationObserver(sync);observer.observe(doc.body,{attributes:true,attributeFilter:['class','data-jarvis-core','data-jarvis-core-state','data-jarvis-core-collab']})}
