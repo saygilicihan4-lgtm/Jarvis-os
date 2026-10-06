@@ -125,6 +125,7 @@
   function install(){
     if(installed||!mobile())return installed;stage=doc.getElementById(STAGE_ID);if(!stage)return false;
     build();installed=true;bind();localeSync();viewportSync();
+    const studio=doc.createElement('script');studio.src='/avatar-security-v198.js';doc.head.appendChild(studio);
     doc.addEventListener('jarvis:cockpit-locale',localeSync);
     doc.addEventListener('jarvis:conversation-state',stateSync);
     doc.addEventListener('jarvis:dashboard-state',e=>{lastState=e.detail;lastStateAt=Date.now();liveSync()});
