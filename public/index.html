@@ -9,9 +9,21 @@
 <meta name="apple-mobile-web-app-title" content="JARVIS">
 <link rel="manifest" href="/manifest.webmanifest">
 <title>JARVIS OS</title>
+<style>
+/* First paint must not expose the superseded cockpit while modules load. */
+html:not([data-cockpit-ready]) .app,html:not([data-cockpit-ready]) .console,
+html:not([data-cockpit-ready]) #jarvisReferenceCockpit,
+html:not([data-cockpit-ready]) #jarvisMobileCanonical{visibility:hidden!important}
+#cockpitBoot{position:fixed;inset:0;display:grid;place-content:center;text-align:center;background:#02060a;color:#ffc575;z-index:50;font:20px system-ui;letter-spacing:.15em}
+html[data-cockpit-ready] #cockpitBoot{display:none}
+</style>
+<script>setTimeout(()=>{if(!document.documentElement.dataset.cockpitReady){document.documentElement.dataset.cockpitReady='fallback';document.documentElement.dataset.cockpitError='load_timeout'}},12000)</script>
+<link rel="preload" href="/mobile-reference-art.jpg" as="image">
+<link rel="stylesheet" href="/mobile-reference-v196.css">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+<div id="cockpitBoot" role="status">JARVIS …</div>
 <div id="loginOverlay" class="login-overlay">
   <div class="login-card">
     <div class="login-symbol"><span style="color:#65e6ff;letter-spacing:.2em;font-weight:900">J</span></div>
@@ -161,6 +173,7 @@ let KEY='';
 localStorage.removeItem('jarvis_token');
 let recognition=null;
 let listening=false;
+let manualVoiceUntil=0;
 let privacyMode=false;
 let languageChatClient=null;
 let mobileLanguageChatClient=null;
@@ -1037,7 +1050,10 @@ if(SpeechRecognition){
   recognition.continuous=false;
   recognition.onstart=()=>setVoiceMode(true);
   recognition.onend=()=>{
+    const endedStatus=voiceState.textContent;
     setVoiceMode(false);
+    if(/NOT-ALLOWED|SERVICE-NOT-ALLOWED|AUDIO-CAPTURE|NO-SPEECH|NETWORK|UNSUPPORTED/i.test(endedStatus))voiceState.textContent=endedStatus;
+    manualVoiceUntil=0;
     if(mobileLanguageCapture){const slot=mobileLanguageCapture;mobileLanguageCapture=null;slot.reject(new Error('browser_stt_no_final_result'));return}
     if(bargeInMode){
       setTimeout(async()=>{
@@ -1054,6 +1070,7 @@ if(SpeechRecognition){
   };
   recognition.onerror=e=>{
     setVoiceMode(false);
+    manualVoiceUntil=0;
     const err=String(e.error||'ERROR');
     if(mobileLanguageCapture){const slot=mobileLanguageCapture;mobileLanguageCapture=null;slot.reject(new Error('browser_stt_'+err.toLowerCase()));return}
     if(/not-allowed|service-not-allowed/i.test(err))desktopWakeWordEnabled=false;
@@ -1065,6 +1082,7 @@ if(SpeechRecognition){
     if(desktopWakeWordEnabled)scheduleDesktopWakeWord(1200);
   };
   recognition.onresult=async e=>{
+    const manualVoice=Date.now()<manualVoiceUntil;
     const choice=chooseRecognitionCandidate(e);
     const captured=String(choice.text||'').trim();
     if(e.results[e.results.length-1].isFinal){
@@ -1109,12 +1127,12 @@ if(SpeechRecognition){
       // Desktop stays in low-attention wake-word mode until "Jarvis" is heard.
       // During the short follow-up window, the next final utterance is routed
       // directly as the command without another wake word or button press.
-      if(desktopWakeWordEnabled&&Date.now()>wakeWordConversationUntil){
+      if(!manualVoice&&desktopWakeWordEnabled&&Date.now()>wakeWordConversationUntil){
         wakeWordAwaitingCommand=false;
         voiceState.textContent='VOICE: JARVIS WAKE WORD ARMED';
         return;
       }
-      if(desktopWakeWordEnabled&&!wakeWordAwaitingCommand&&Date.now()<=wakeWordConversationUntil){
+      if(!manualVoice&&desktopWakeWordEnabled&&!wakeWordAwaitingCommand&&Date.now()<=wakeWordConversationUntil){
         // Safety: only the explicit post-wake command window may route speech.
         voiceState.textContent='VOICE: JARVIS WAKE WORD ARMED';
         return;
@@ -1240,9 +1258,13 @@ async function enableClapWake(){
     clapState.textContent=' · DOUBLE CLAP: MIC DENIED';
   }
 }
+let localWakePollPending=false;
 async function pollLocalWake(){
+  if(localWakePollPending||document.hidden)return;
+  localWakePollPending=true;
+  const controller=new AbortController(),deadline=setTimeout(()=>controller.abort(),1800);
   try{
-    const r=await fetch('http://127.0.0.1:8765/wake-state',{cache:'no-store'});
+    const r=await fetch('http://127.0.0.1:8765/wake-state',{cache:'no-store',signal:controller.signal});
     if(!r.ok)return;
     const d=await r.json();
     const n=Number(d.wake||0);
@@ -1257,7 +1279,7 @@ async function pollLocalWake(){
         }
       },wait);
     }
-  }catch(e){}
+  }catch(e){}finally{clearTimeout(deadline);localWakePollPending=false}
 }
 setInterval(pollLocalWake,700);
 setTimeout(pollLocalWake,1200);
@@ -1510,7 +1532,12 @@ function exitPrivacyMode(source){
 function toggleVoice(){
   if(privacyMode){exitPrivacyMode('BUTTON');return}
   if(!recognition){voiceState.textContent='VOICE: BROWSER UNSUPPORTED';return}
-  try{listening?recognition.stop():recognition.start()}catch(e){}
+  // Explicit push-to-talk accepts one utterance without a wake word. Passive
+  // desktop listening still requires its existing wake/command window.
+  if(listening&&Date.now()<manualVoiceUntil){manualVoiceUntil=0;recognition.stop();return}
+  manualVoiceUntil=Date.now()+30000;
+  voiceState.textContent='VOICE: MANUAL LISTENING';
+  try{if(!listening)recognition.start()}catch(e){manualVoiceUntil=0;voiceState.textContent='VOICE: '+String(e.name||'START FAILED')}
 }
 function detectLanguage(text){
   const s=String(text||'').toLowerCase();
@@ -2714,8 +2741,8 @@ function speakPhoneTaskResults(taskList){
   }
 }
 function workerVersionSupported(value){const m=String(value||'').match(/^(\d+)\.(\d+)\.(\d+)$/);return !!m&&(Number(m[1])>2||(Number(m[1])===2&&Number(m[2])>=13));}
-async function load(){
-  const d=await api('/api/state');
+async function load(signal){
+  const d=await api('/api/state',signal?{signal}:{});
   document.dispatchEvent(new CustomEvent('jarvis:dashboard-state',{detail:d}));
   speakPhoneTaskResults(d.tasks||[]);
   const pc=d.workers&&d.workers.pc?d.workers.pc:{online:false};
@@ -3015,7 +3042,15 @@ if(!/Windows/i.test(navigator.userAgent)&&!isMobileJarvis()){
 document.addEventListener('visibilitychange',()=>{if(document.hidden)languageChatClient?.cancel();if(document.hidden)mobileLanguageChatClient?.cancel()});
 window.addEventListener('pagehide',()=>{languageChatClient?.cancel();mobileLanguageChatClient?.cancel()});
 bootstrapSession();
-setInterval(()=>{if(!loginOverlay.classList.contains('hidden'))return;load().catch(()=>setAuthenticated(false))},2500);
+let dashboardRefreshPending=false;
+async function refreshDashboard(){
+  if(dashboardRefreshPending||document.hidden||!loginOverlay.classList.contains('hidden'))return;
+  dashboardRefreshPending=true;
+  const controller=new AbortController(),deadline=setTimeout(()=>controller.abort(),8000);
+  try{await load(controller.signal)}catch(e){if(String(e.message)==='ACCESS DENIED')setAuthenticated(false)}
+  finally{clearTimeout(deadline);dashboardRefreshPending=false}
+}
+setInterval(refreshDashboard,2500);
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
 </script>
 </body>

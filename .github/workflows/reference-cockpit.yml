@@ -38,6 +38,8 @@ jobs:
           node --check mobile-approval-review-selftest.js
       - name: Reference cockpit motion and authority selftest
         run: node reference-cockpit-selftest.js
+      - name: Push-to-talk and first-paint regression
+        run: node cockpit-reliability-selftest.js
       - name: Reference cockpit multilingual selftest
         run: node reference-cockpit-i18n-selftest.js
       - name: Canonical mobile cockpit selftest

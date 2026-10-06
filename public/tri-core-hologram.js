@@ -35,6 +35,7 @@
   }
   function install(host=root){
     const doc=host&&host.document;if(!doc||!doc.body)return false;
+    if(doc.body.dataset.referenceCockpit==='1')return false;
     const stage=doc.querySelector('.core-stage');if(!stage)return false;
     if(doc.getElementById('jarvisTriCoreWebgl'))return true;
     if(lowPower(host)){doc.body.dataset.jarvisCoreFx='lite';return false}
@@ -47,7 +48,9 @@
     const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);
     gl.useProgram(program);const pos=gl.getAttribLocation(program,'aPos');gl.enableVertexAttribArray(pos);gl.vertexAttribPointer(pos,2,gl.FLOAT,false,0,0);
     const uniforms={};for(const name of ['uResolution','uTime','uRole','uState','uConsult','uMotion'])uniforms[name]=gl.getUniformLocation(program,name);
-    const motion=reduced(host)?0:1;let raf=0,dead=false,lastW=0,lastH=0;
+    const motion=reduced(host)?0:1;let raf=0,dead=false,lastW=0,lastH=0,resizeObserver=null;
+    function dispose(){if(dead)return;dead=true;if(raf)host.cancelAnimationFrame(raf);resizeObserver?.disconnect();gl.deleteBuffer(buffer);gl.deleteProgram(program);canvas.remove();doc.removeEventListener('jarvis:cockpit-ready',dispose);doc.removeEventListener('visibilitychange',visibility);doc.body.dataset.jarvisCoreFx='superseded'}
+    function visibility(){if(dead)return;if(doc.hidden){if(raf)host.cancelAnimationFrame(raf);raf=0}else draw()}
     function resize(){
       const rect=stage.getBoundingClientRect(),dpr=Math.min(Number(host.devicePixelRatio||1),1.5),w=Math.max(1,Math.floor(rect.width*dpr)),h=Math.max(1,Math.floor(rect.height*dpr));
       if(w!==lastW||h!==lastH){canvas.width=w;canvas.height=h;lastW=w;lastH=h;gl.viewport(0,0,w,h)}
@@ -57,11 +60,13 @@
       return{role:safeIndex(ROLE_INDEX,role,0),state:safeIndex(STATE_INDEX,state,0),consult:consult?1:0};
     }
     function draw(ms=0){
+      raf=0;if(doc.body.dataset.referenceCockpit==='1'){dispose();return}if(doc.hidden)return;
       if(dead)return;resize();const s=snapshot();gl.useProgram(program);gl.uniform2f(uniforms.uResolution,lastW,lastH);gl.uniform1f(uniforms.uTime,motion?ms/1000:0);gl.uniform1f(uniforms.uRole,s.role);gl.uniform1f(uniforms.uState,s.state);gl.uniform1f(uniforms.uConsult,s.consult);gl.uniform1f(uniforms.uMotion,motion);gl.drawArrays(gl.TRIANGLES,0,6);
       if(motion)raf=host.requestAnimationFrame(draw);
     }
     canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();dead=true;if(raf)host.cancelAnimationFrame(raf);doc.body.dataset.jarvisCoreFx='lite'},{once:true});
-    if(typeof host.ResizeObserver==='function'){const observer=new host.ResizeObserver(()=>{if(!motion)draw(0)});observer.observe(stage)}
+    doc.addEventListener('jarvis:cockpit-ready',dispose,{once:true});doc.addEventListener('visibilitychange',visibility);
+    if(typeof host.ResizeObserver==='function'){resizeObserver=new host.ResizeObserver(()=>{if(!motion)draw(0)});resizeObserver.observe(stage)}
     draw(0);doc.body.dataset.jarvisCoreFx='webgl';return true;
   }
   return Object.freeze({VERSION,ROLE_INDEX,STATE_INDEX,lowPower,reduced,install});

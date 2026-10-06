@@ -21,6 +21,31 @@
   let stage=null,layout=null,installed=false,raf=0,timer=0,lastState=null,lastStateAt=0,lastLocale='',returnFocus=null,observer=null;
   function mobile(){return host.matchMedia(MEDIA).matches}
   function t(key){return host.JarvisCockpitI18n?.t(key)||key}
+  function message(tr,en){return /^tr/i.test(doc.documentElement.lang)?tr:en}
+  function voiceSync(){
+    if(!layout)return;
+    const raw=doc.getElementById('voiceState')?.textContent||'';
+    const hints=[[/NOT-ALLOWED|SERVICE-NOT-ALLOWED/i,message('Mikrofon izni engelli. Site izinlerini kontrol edin.','Microphone permission blocked. Check site permissions.')],
+      [/AUDIO-CAPTURE/i,message('Mikrofon bulunamadı veya başka uygulama kullanıyor.','Microphone unavailable or in use.')],
+      [/NO-SPEECH/i,message('Konuşma algılanmadı. Mikrofona basıp tekrar konuşun.','No speech detected. Tap the microphone and retry.')],
+      [/NETWORK/i,message('Konuşma tanıma ağına ulaşılamadı. Yazılı komut kullanabilirsiniz.','Speech recognition network unavailable. You can type a command.')],
+      [/UNSUPPORTED/i,message('Bu tarayıcıda konuşma tanıma desteklenmiyor. Yazılı komut kullanın.','Speech recognition unsupported. Use a typed command.')]];
+    const hint=hints.find(([pattern])=>pattern.test(raw));
+    const prompt=layout.querySelector('.jr-prompt');prompt.setAttribute('role','status');
+    prompt.textContent=hint?hint[1]:t('speakPrompt');prompt.title=raw;
+  }
+  function diagnostics(){
+    const fresh=lastState&&Date.now()-lastStateAt<12000,pc=fresh?lastState.workers?.pc:null;
+    const lines=[message('PC yürütücüsü: ','PC worker: ')+(fresh?(pc?.online?t('online'):t('offline')):t('unknown'))];
+    if(pc?.lastSeen)lines.push(message('Son sinyal: ','Last heartbeat: ')+String(pc.lastSeen));
+    if(pc?.version)lines.push('Worker: '+pc.version);
+    if(!pc?.online)lines.push(message('Bilgisayarın veya web sayfasının açık olması yeterli değil. PC’de start-worker-windows.bat çalışmalı ve cihaz eşleştirilmiş olmalı.','An open PC or web page is not enough. Run start-worker-windows.bat on the PC and pair the device.'));
+    lines.push(message('Telefon simgesi yalnızca bu mobil tarayıcıyı gösterir; uzaktaki telefon algılanmış demek değildir.','The phone indicator identifies this mobile browser, not a detected remote phone.'));
+    lines.push(message('Ses tanıma: ','Speech recognition: ')+(doc.getElementById('voiceState')?.textContent||t('unknown')));
+    lines.push(message('Son komut/yanıt: ','Last command/reply: ')+(doc.getElementById('consoleStatus')?.textContent||t('unknown')));
+    lines.push(message('Mikrofon izni bu cihazın site ayarlarından verilir. Bekleyen PC komutları worker bağlanmadan yürütülemez.','Grant microphone permission in this device’s site settings. Pending PC commands need an online worker.'));
+    return lines.join('\n\n');
+  }
   function el(tag,cls,text){const n=doc.createElement(tag);if(cls)n.className=cls;if(text!=null)n.textContent=text;return n}
   function icon(name){return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="'+(PATHS[name]||PATHS.done)+'"/></svg>'}
   function label(node,key){node.dataset.i18n=key;node.textContent=t(key);return node}
@@ -72,7 +97,7 @@
     if(!layout)return;const locale=doc.documentElement.lang||'tr-TR';lastLocale=locale;
     for(const n of layout.querySelectorAll('[data-i18n]'))n.textContent=t(n.dataset.i18n);
     for(const n of layout.querySelectorAll('[data-i18n-aria]'))n.setAttribute('aria-label',t(n.dataset.i18nAria));
-    layout.dataset.dir=doc.documentElement.dir||'ltr';clock();stateSync();liveSync();
+    layout.dataset.dir=doc.documentElement.dir||'ltr';clock();stateSync();liveSync();voiceSync();
   }
   function clock(){try{const loc=doc.documentElement.lang||'tr-TR';layout.querySelector('.jr-time').textContent=new Intl.DateTimeFormat(loc,{hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());layout.querySelector('.jr-date').textContent=new Intl.DateTimeFormat(loc,{day:'numeric',month:'short',year:'numeric'}).format(new Date())}catch(_){}}
   function stateSync(){
@@ -98,7 +123,7 @@
     const active=x=>!['completed','done','cancelled','canceled'].includes(x.status);
     const tasks=fresh?(pc?.missions?.queue||[]).filter(active).concat((lastState.tasks||[]).filter(active)):[];
     rows(layout.querySelector('[data-live="tasks"]'),tasks,'tasks');rows(layout.querySelector('[data-live="feed"]'),fresh?[...(lastState.audit||[])].reverse():[],'feed');
-    connection('pc',fresh?pc?.online===true:null);connection('phone',true);connection('cloud',fresh?true:null);connection('internet',host.navigator.onLine===false?false:null);
+    connection('pc',fresh?pc?.online===true:null);connection('phone',/iPhone|iPad|iPod|Android/i.test(host.navigator.userAgent)?true:null);connection('cloud',fresh?true:null);connection('internet',host.navigator.onLine===false?false:fresh?true:null);
     const online=layout.querySelector('.jr-online');online.querySelector('span').textContent=t(fresh?'online':host.navigator.onLine===false?'offline':'connecting');online.querySelector('i').dataset.online=fresh?'true':'unknown';
     for(const key of ['cpu','ram','disk']){const n=layout.querySelector('[data-metric="'+key+'"]'),value=pc?.online===true?percent(pc.metrics?.[key]):null;n.querySelector('b').textContent=value===null?'—':value+'%';n.style.setProperty('--value',value===null?'0%':value+'%');n.title=value===null?t('unavailable'):key.toUpperCase()+' '+value+'%'}
   }
@@ -125,11 +150,15 @@
   function install(){
     if(installed||!mobile())return installed;stage=doc.getElementById(STAGE_ID);if(!stage)return false;
     build();installed=true;bind();localeSync();viewportSync();
+    doc.documentElement.dataset.cockpitReady='ready';
+    doc.dispatchEvent(new host.CustomEvent('jarvis:cockpit-ready'));
+    const visibility=()=>{stage.dataset.paused=String(doc.hidden)};visibility();doc.addEventListener('visibilitychange',visibility);
     const studio=doc.createElement('script');studio.src='/avatar-security-v198.js';doc.head.appendChild(studio);
     doc.addEventListener('jarvis:cockpit-locale',localeSync);
     doc.addEventListener('jarvis:conversation-state',stateSync);
     doc.addEventListener('jarvis:dashboard-state',e=>{lastState=e.detail;lastStateAt=Date.now();liveSync()});
     new host.MutationObserver(stateSync).observe(doc.body,{attributes:true,attributeFilter:['class','data-jarvis-core','data-jarvis-core-state']});
+    const voice=doc.getElementById('voiceState');if(voice)new host.MutationObserver(voiceSync).observe(voice,{childList:true,characterData:true,subtree:true});voiceSync();
     host.addEventListener('resize',schedule,{passive:true});host.addEventListener('orientationchange',schedule,{passive:true});
     host.visualViewport?.addEventListener('resize',schedule,{passive:true});host.visualViewport?.addEventListener('scroll',schedule,{passive:true});
     host.addEventListener('online',liveSync);host.addEventListener('offline',liveSync);
@@ -138,6 +167,6 @@
   }
   function boot(attempt=0){if(!mobile())return;if(!install()&&attempt<220)host.setTimeout(()=>boot(attempt+1),40)}
   function load(){const link=el('link');link.rel='stylesheet';link.href='/mobile-reference-v196.css';link.onload=()=>boot();link.onerror=()=>{doc.body.dataset.mobileReferenceError='style_unavailable'};doc.head.appendChild(link)}
-  host.JarvisMobileReferenceV195=Object.freeze({VERSION,MEDIA,ACTIONS,viewport,percent,install,get installed(){return installed}});
+  host.JarvisMobileReferenceV195=Object.freeze({VERSION,MEDIA,ACTIONS,viewport,percent,install,diagnostics,get installed(){return installed}});
   if(doc.readyState==='loading')doc.addEventListener('DOMContentLoaded',load,{once:true});else load();
 })(typeof window!=='undefined'?window:null);
