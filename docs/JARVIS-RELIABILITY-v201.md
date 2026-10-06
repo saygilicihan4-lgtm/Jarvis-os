@@ -20,6 +20,8 @@ Human projection v200 remains isolated on its work branch; this fix does not cla
 
 ## Regression evidence
 
+Follow-up after CI: the permission fixture had changed only a label while leaving the real desktop wake loop armed. It now invokes the production recognition error/end handlers. Animation moved from filtered SVG transforms to an HTML wrapper; the test waits for actual transform progression instead of sampling a single 160 ms interval. A superseded legacy WebGL renderer now releases its loop, buffer, program and canvas; hidden tabs pause its loop. Lifecycle tests cover pause, resume, disposal and restart prevention. These remove demonstrated unnecessary rendering work, but do not establish the sole cause of the user's HP browser hang.
+
 - `node cockpit-reliability-selftest.js`: executes extracted production handlers for passive/manual routing, manual expiry, privacy and startup failure.
 - `npm test`, `npm run security:check`: existing isolated regressions.
 - `tests/mobile-reference-browser.cjs`: delayed-loader first-paint test, desktop transform progression, reduced motion, visible permission error, connection diagnostics, existing portrait/landscape/desktop geometry and action dispatch checks. CI runs Chromium and WebKit; no physical-device claim.

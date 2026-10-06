@@ -116,7 +116,7 @@ async function avatarChecks(page){
         if(height>=664){await page.addStyleTag({content:'.jr-enhanced .jr-layout{padding-top:47px!important;padding-bottom:34px!important}'});assert.deepEqual(await page.evaluate(geometry),[],'safe-area inset');}
         if(width>height&&width<1000){await page.addStyleTag({content:'.jr-enhanced .jr-layout{padding-left:47px!important;padding-right:47px!important;padding-bottom:21px!important}'});if(process.env.JARVIS_SCREENSHOTS)await page.screenshot({path:path.join(process.env.JARVIS_SCREENSHOTS,engine+'-'+width+'x'+height+'-notch.png')});assert.deepEqual(await page.evaluate(geometry),[],'landscape notch/home indicator');}
         for(const s of ['idle','listening','speaking','thinking']){await page.evaluate(v=>document.body.dataset.jarvisCoreState=v,s);await page.waitForFunction(v=>document.querySelector('.jr-enhanced').dataset.state===v,s);}
-        assert.equal(await page.locator('.jr-sphere-art').first().evaluate(n=>getComputedStyle(n).animationName),'none','reduced motion');
+        assert.equal(await page.locator('.jr-sphere').first().evaluate(n=>getComputedStyle(n).animationName),'none','reduced motion');
         if(width===390&&height===844&&process.env.JARVIS_SCREENSHOTS){fs.mkdirSync(process.env.JARVIS_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.JARVIS_SCREENSHOTS,engine+'-390x844.png')})}
         if(width===390&&height===844)await avatarChecks(page);
         assert.deepEqual(errors,[],engine+' runtime errors');assert.equal(await page.evaluate(()=>sendCalls),0,'opening UI must not execute commands');
@@ -131,9 +131,9 @@ async function avatarChecks(page){
         assert.deepEqual(await page.evaluate(geometry),[],'rotation '+JSON.stringify(size));
         assert.equal(await page.evaluate(()=>rotationStage===document.querySelector('.jr-enhanced')),true,'rotation must retain DOM/state');
       }
-      const idle=await page.locator('.jarvis .jr-sphere-art').evaluate(n=>getComputedStyle(n).animationName);
+      const idle=await page.locator('.jarvis .jr-sphere').evaluate(n=>getComputedStyle(n).animationName);
       await page.evaluate(()=>document.body.dataset.jarvisCoreState='speaking');await page.waitForFunction(()=>document.querySelector('.jr-enhanced').dataset.state==='speaking');
-      assert.notEqual(await page.locator('.jarvis .jr-sphere-art').evaluate(n=>getComputedStyle(n).animationName),idle);
+      assert.notEqual(await page.locator('.jarvis .jr-sphere').evaluate(n=>getComputedStyle(n).animationName),idle);
       await page.setViewportSize({width:390,height:664});await page.waitForFunction(()=>Math.abs(document.querySelector('.jr-layout').getBoundingClientRect().height-visualViewport.height)<1);assert.deepEqual(await page.evaluate(geometry),[],'dynamic viewport resize');
       // Keyboard viewport: modal remains usable when the visual viewport shrinks.
       await page.locator('.jr-layout [data-a=newTask]').tap();await page.evaluate(()=>{Object.defineProperty(visualViewport,'height',{value:380,configurable:true});visualViewport.dispatchEvent(new Event('resize'))});await page.waitForFunction(()=>document.querySelector('.ref-modal').getBoundingClientRect().height===380);await page.locator('.ref-modal textarea').fill('Yerel test');
@@ -151,19 +151,20 @@ async function avatarChecks(page){
       assert.equal(await desk.evaluate(()=>document.documentElement.dataset.cockpitReady),'ready');
       assert.equal(await desk.locator('#cockpitBoot').isVisible(),false);
       for(const core of ['nova','jarvis','orion']){
-        const sphere=desk.locator('.jr-core.'+core+' .jr-sphere-art');
+        const sphere=desk.locator('.jr-core.'+core+' .jr-sphere');
         assert.notEqual(await sphere.evaluate(n=>getComputedStyle(n).animationName),'none','desktop motion '+core);
-        const changes=await sphere.evaluate(async n=>{const a=getComputedStyle(n).transform;await new Promise(r=>setTimeout(r,160));return a!==getComputedStyle(n).transform});
-        assert.equal(changes,true,'desktop transforms advance '+core);
+        const before=await sphere.evaluate(n=>getComputedStyle(n).transform);
+        await desk.waitForFunction(({core,before})=>getComputedStyle(document.querySelector('.jr-core.'+core+' .jr-sphere')).transform!==before,{core,before},{timeout:5000});
       }
       await desk.emulateMedia({reducedMotion:'reduce'});
-      assert.equal(await desk.locator('.nova .jr-sphere-art').evaluate(n=>getComputedStyle(n).animationName),'none','respect reduced motion');
+      assert.equal(await desk.locator('.nova .jr-sphere').evaluate(n=>getComputedStyle(n).animationName),'none','respect reduced motion');
       await desk.emulateMedia({reducedMotion:'no-preference'});
-      await desk.evaluate(()=>document.getElementById('voiceState').textContent='VOICE: NOT-ALLOWED');
-      await desk.waitForFunction(()=>document.querySelector('.jr-prompt').textContent.includes('Mikrofon izni'));
+      await desk.evaluate(()=>{if(recognition){recognition.onerror({error:'not-allowed'});recognition.onend()}else document.getElementById('voiceState').textContent='VOICE: BROWSER UNSUPPORTED'});
+      await desk.waitForFunction(()=>/Mikrofon izni|desteklenmiyor/.test(document.querySelector('.jr-prompt').textContent));
       await desk.locator('.jr-layout [data-a=connections]').click();
       assert.match(await desk.locator('.ref-modal pre').textContent(),/start-worker-windows.bat/);
-      assert.match(await desk.locator('.ref-modal pre').textContent(),/NOT-ALLOWED/);
+      assert.match(await desk.locator('.ref-modal pre').textContent(),/NOT-ALLOWED|UNSUPPORTED/);
+      assert.equal(await desk.locator('#jarvisTriCoreWebgl').count(),0,'superseded GPU canvas released');
       await desk.locator('.ref-modal .ref-actions button').first().click();
       assert.deepEqual(await desk.evaluate(geometry),[],'actual desktop app loader');
       await desk.locator('.jr-layout [data-a=newTask]').click();await desk.locator('.ref-modal.open').waitFor();

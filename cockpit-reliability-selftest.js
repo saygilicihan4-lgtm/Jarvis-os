@@ -22,5 +22,16 @@ function context(){
  c.voiceState.textContent='VOICE: NOT-ALLOWED';c.manualVoiceUntil=Date.now()+30000;c.recognition.onend();
  assert.equal(c.voiceState.textContent,'VOICE: NOT-ALLOWED','end must retain permission error');assert.equal(c.manualVoiceUntil,0);
  assert(html.indexOf('html:not([data-cockpit-ready])')<html.indexOf('<body>'),'boot protection must precede first body paint');
+ const renderer=require('./public/tri-core-hologram.js'),frames=new Map(),events={};let frameId=0,removed=false,deleted=0,draws=0;
+ const gl=new Proxy({getShaderParameter:()=>true,getProgramParameter:()=>true,drawArrays:()=>draws++,deleteBuffer:()=>deleted++,deleteProgram:()=>deleted++},{get:(o,k)=>o[k]||(()=>({}))});
+ const canvas={setAttribute(){},getContext:()=>gl,addEventListener(){},remove(){removed=true}};
+ const stage={prepend(){},getBoundingClientRect:()=>({width:100,height:100})};
+ const doc={hidden:false,body:{dataset:{}},querySelector:()=>stage,getElementById:()=>null,createElement:()=>canvas,addEventListener:(name,fn)=>events[name]=fn,removeEventListener:name=>delete events[name]};
+ const host={document:doc,navigator:{hardwareConcurrency:8,deviceMemory:8},matchMedia:()=>({matches:false}),requestAnimationFrame:fn=>{frames.set(++frameId,fn);return frameId},cancelAnimationFrame:id=>frames.delete(id)};
+ assert.equal(renderer.install(host),true);assert.equal(draws,1);assert.equal(frames.size,1);
+ doc.hidden=true;events.visibilitychange();assert.equal(frames.size,0,'hidden page stops GPU loop');
+ doc.hidden=false;events.visibilitychange();assert.equal(draws,2);assert.equal(frames.size,1);
+ doc.body.dataset.referenceCockpit='1';events['jarvis:cockpit-ready']();
+ assert.equal(frames.size,0);assert.equal(removed,true);assert.equal(deleted,2,'superseded buffers/program disposed');assert.equal(renderer.install(host),false,'cannot restart obsolete renderer');
  console.log('COCKPIT RELIABILITY PASS: production manual/passive recognition routing, expiry, privacy, startup failure, first-paint guard');
 })().catch(e=>{console.error(e);process.exitCode=1});
