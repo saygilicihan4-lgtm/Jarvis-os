@@ -1680,6 +1680,7 @@ async function playJarvisMobileRelay(text,tone='balanced',locale=activeLanguage)
         a.currentTime=0;
         a.volume=1;
         void globalThis.JarvisAvatar3D?.bindAudio(a,bytes);
+        globalThis.JarvisHumanAvatar?.bindAudio(a,bytes);
         document.body.classList.add('speaking');
         await a.play();
         if(window.voiceState)voiceState.textContent='VOICE: '+String(locale||'').toUpperCase()+' RELAY';
@@ -2915,6 +2916,7 @@ function playLanguageConversationAudio(result,signal){
     const bytes=Uint8Array.from(atob(result.audio),x=>x.charCodeAt(0));
     const url=URL.createObjectURL(new Blob([bytes],{type:result.mime})),audio=new Audio(url);
     void globalThis.JarvisAvatar3D?.bindAudio(audio,bytes);
+    globalThis.JarvisHumanAvatar?.bindAudio(audio,bytes);
     audio.preload='auto';let finished=false;
     const finish=error=>{
       if(finished)return;finished=true;clearTimeout(timer);signal.removeEventListener('abort',abort);
