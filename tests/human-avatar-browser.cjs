@@ -1,6 +1,13 @@
 const assert=require('node:assert/strict'),http=require('node:http'),fs=require('node:fs'),path=require('node:path');
 const {chromium}=require('playwright'),root=path.join(__dirname,'../public');
-const server=http.createServer((req,res)=>{const p=path.join(root,new URL(req.url,'http://localhost').pathname);if(!p.startsWith(root+path.sep)){res.writeHead(403);return res.end()}fs.readFile(p,(e,b)=>{res.writeHead(e?404:200,{'content-type':p.endsWith('.html')?'text/html; charset=utf-8':p.endsWith('.mjs')||p.endsWith('.js')?'application/javascript':'text/plain'});res.end(e?'':b)})});
+// Exercise production static routing, not a fixture with a different MIME map.
+const vm=require('node:vm'),serverPath=path.join(__dirname,'../server.js'),productionRequire=require('node:module').createRequire(serverPath);
+let productionHandler;
+vm.runInNewContext(fs.readFileSync(serverPath,'utf8'),{
+ require(name){if(name==='http')return {createServer(fn){productionHandler=fn;return {listen(){}}}};if(['web-push','pg','@simplewebauthn/server'].includes(name))return {};return productionRequire(name)},
+ __dirname:path.dirname(serverPath),Buffer,URL,console:{log(){},error(){}},process:{env:{JARVIS_TOKEN:'isolated-browser-test'}},setInterval(){return 0},clearInterval(){},setTimeout,clearTimeout
+},{filename:'server.js'});
+const server=http.createServer(productionHandler);
 (async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({headless:true,...(process.env.JARVIS_CHROMIUM_PATH?{executablePath:process.env.JARVIS_CHROMIUM_PATH}:{}),...(process.env.JARVIS_BROWSER_PROXY?{proxy:{server:process.env.JARVIS_BROWSER_PROXY,bypass:'127.0.0.1,localhost'}}:{}),args:['--no-sandbox','--in-process-gpu','--ignore-gpu-blocklist','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
  try{const page=await browser.newPage({viewport:{width:1280,height:720}}),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')console.log('browser:',m.text())});
  if(process.env.JARVIS_TEST_PYTHON_PROXY==='1')await page.route(/^https:\/\/(cdn\.jsdelivr\.net|raw\.githubusercontent\.com)\//,async route=>{
