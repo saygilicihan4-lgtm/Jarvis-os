@@ -318,7 +318,17 @@ try {
 
   Start-Sleep -Milliseconds 1500
   Pump-Ui
-  Set-BootStage "JARVIS ONLINE" "All available local systems are ready." 100
+  # A local HTTP response does not establish that the paired PC reached the cloud.
+  $cloudLinked = $false
+  try {
+    $linkHealth = Invoke-RestMethod -Uri "http://127.0.0.1:8765/health" -TimeoutSec 2
+    $cloudLinked = [bool]$linkHealth.cloudLink.connected
+  } catch {}
+  if ($cloudLinked) {
+    Set-BootStage "JARVIS ONLINE" "PC Worker connected to the cloud." 100
+  } else {
+    Set-BootStage "LOCAL READY" "PC cloud link not confirmed; check Connections." 100
+  }
   Start-Sleep -Milliseconds 1250
   Pump-Ui
   Write-StartupLog "Startup sequence complete."
