@@ -4505,7 +4505,9 @@ function ensureWindowsHelper(filename){
 function syncRepoRuntimeFile(filename,signature){
   if(process.platform!=='win32')return null;
   const target=path.join(__dirname,filename);
-  const tmp=target+'.new';
+  // Node 24 refuses --check on an unknown .new extension. Keep the staged
+  // file in the same directory, but give it a real JavaScript suffix.
+  const tmp=target+'.new.js';
   const url='https://raw.githubusercontent.com/saygilicihan4-lgtm/Jarvis-os/main/'+encodeURIComponent(filename)+'?cb='+Date.now();
   try{
     const safeUrl=url.replace(/'/g,"''"),safeTmp=tmp.replace(/'/g,"''");
@@ -7872,6 +7874,25 @@ function evaluateStrategyPolicy(){
   }
   return{changed:false,rolledBack:false,policy,reason:'Aday mevcut politikayı yeterince aşmadı'};
 }
+let previousCpuTimes=null;
+function systemMetrics(){
+  const readings=os.cpus().map(cpu=>cpu.times);
+  const totals=readings.reduce((result,times)=>({idle:result.idle+times.idle,total:result.total+Object.values(times).reduce((a,b)=>a+b,0)}),{idle:0,total:0});
+  let cpu=null;
+  if(previousCpuTimes){
+    const elapsed=totals.total-previousCpuTimes.total;
+    if(elapsed>0)cpu=Math.max(0,Math.min(100,Math.round(100*(1-(totals.idle-previousCpuTimes.idle)/elapsed))));
+  }
+  previousCpuTimes=totals;
+  const totalMemory=os.totalmem(),ram=totalMemory>0?Math.max(0,Math.min(100,Math.round(100*(1-os.freemem()/totalMemory)))):null;
+  let disk=null;
+  try{
+    const storage=fs.statfsSync(WORKSPACE);
+    const blocks=Number(storage.blocks),available=Number(storage.bavail);
+    if(blocks>0&&Number.isFinite(available))disk=Math.max(0,Math.min(100,Math.round(100*(1-available/blocks))));
+  }catch(_){} // Do not invent a disk percentage when the platform lacks statfs.
+  return{cpu,ram,disk};
+}
 function memoryStats(){
   if(!fs.existsSync(MEMORY_FILE))return{records:0,bytes:0,lastAt:null};
   const raw=fs.readFileSync(MEMORY_FILE,'utf8');
@@ -8905,15 +8926,16 @@ async function poll(){
     await pairDevice();
     await migrateDeviceCredential();
     if(!restoreAttempted){restoreAttempted=true;await tryRestoreCloudState();}
+    const heartbeat={name:NAME,deviceId:DEVICE_ID,version:WORKER_VERSION,capabilities:CAPS,memory:memoryStats(),metrics:systemMetrics(),missions:cloudMissionTelemetry(),update:selfUpdateState()};
     try{
-      await api('/api/worker/heartbeat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:NAME,deviceId:DEVICE_ID,version:WORKER_VERSION,capabilities:CAPS,memory:memoryStats(),missions:cloudMissionTelemetry(),update:selfUpdateState()})});
+      await api('/api/worker/heartbeat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(heartbeat)});
     }catch(e){
       const authLost=/revoked|not approved|awaiting approval/i.test(String(e.message||''));
       if(!authLost||Date.now()-lastAuthRecovery<60000)throw e;
       lastAuthRecovery=Date.now();
       remember({kind:'auth_recovery',reason:String(e.message||'authorization lost')});
       await tryRestoreCloudState();
-      await api('/api/worker/heartbeat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:NAME,deviceId:DEVICE_ID,version:WORKER_VERSION,capabilities:CAPS,memory:memoryStats(),missions:cloudMissionTelemetry(),update:selfUpdateState()})});
+      await api('/api/worker/heartbeat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(heartbeat)});
       console.log('[JARVIS] Cloud restart recovery tamamlandı; Worker yeniden yetkilendirildi.');
     }
     if(!phoneSessionCodeShown){

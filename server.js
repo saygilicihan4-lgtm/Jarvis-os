@@ -600,6 +600,7 @@ function publicState(){
         lastSeen:pc.lastSeen,
         capabilities:pc.capabilities||[],
         memory:pc.memory||null,
+        metrics:pc.metrics||null,
         missions:pc.missions||null,
         update:pc.update||null,
         online:workerOnline(pc)
@@ -1392,6 +1393,10 @@ const server=http.createServer((req,res)=>{
           bytes:Number(d.memory.bytes)||0,
           lastAt:d.memory.lastAt?String(d.memory.lastAt):null
         }:null,
+        metrics:d.metrics&&typeof d.metrics==='object'?Object.fromEntries(['cpu','ram','disk'].map(key=>{
+          const value=d.metrics[key];
+          return[key,typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=100?Math.round(value):null];
+        })):null,
         missions:sanitizeMissionTelemetry(d.missions),
         update:sanitizeWorkerUpdate(d.update)
       };

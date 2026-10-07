@@ -95,13 +95,12 @@ if "%SILENT%"=="0" (
 )
 
 if "%UNIFIED_UPDATE_OK%"=="0" (
-if "%SILENT%"=="1" (
-  echo.>>"%JARVIS_WORKER_LOG%"
-  echo [%date% %time%] [JARVIS] LAUNCHER %LAUNCHER_VERSION% hidden startup>>"%JARVIS_WORKER_LOG%"
-  powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command "$u='https://raw.githubusercontent.com/saygilicihan4-lgtm/Jarvis-os/main/worker.js?cb=' + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); try { $n=Join-Path $env:TEMP 'jarvis-worker.new.js'; Invoke-WebRequest -UseBasicParsing -Headers @{'Cache-Control'='no-cache';'Pragma'='no-cache'} -Uri $u -OutFile $n -TimeoutSec 20; node --check $n ^| Out-Null; $txt=Get-Content $n -Raw; $signed=($txt -match 'const WORKER_VERSION='); if($LASTEXITCODE -eq 0 -and $signed){ $ver=([regex]::Match($txt,\"const WORKER_VERSION='([^']+)'\")).Groups[1].Value; if(-not (Test-Path 'worker.js') -or ((Get-FileHash $n).Hash -ne (Get-FileHash 'worker.js').Hash)){ Copy-Item $n 'worker.js' -Force; Write-Output ('[JARVIS] Worker updated: v'+$ver) } else { Write-Output ('[JARVIS] Worker current: v'+$ver) } } else { Write-Output '[JARVIS] Update validation failed; current Worker preserved.' }; Remove-Item $n -Force -ErrorAction SilentlyContinue } catch { Write-Output ('[JARVIS] Update skipped: '+$_.Exception.Message); Write-Output '[JARVIS] Current Worker will be used.' }" >>"%JARVIS_WORKER_LOG%" 2>&1
-) else (
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "$u='https://raw.githubusercontent.com/saygilicihan4-lgtm/Jarvis-os/main/worker.js?cb=' + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); try { $n=Join-Path $env:TEMP 'jarvis-worker.new.js'; Invoke-WebRequest -UseBasicParsing -Headers @{'Cache-Control'='no-cache';'Pragma'='no-cache'} -Uri $u -OutFile $n -TimeoutSec 20; node --check $n ^| Out-Null; $txt=Get-Content $n -Raw; $signed=($txt -match 'const WORKER_VERSION='); if($LASTEXITCODE -eq 0 -and $signed){ $ver=([regex]::Match($txt,\"const WORKER_VERSION='([^']+)'\")).Groups[1].Value; if(-not (Test-Path 'worker.js') -or ((Get-FileHash $n).Hash -ne (Get-FileHash 'worker.js').Hash)){ Copy-Item $n 'worker.js' -Force; Write-Host ('[JARVIS] Worker guncellendi ve dogrulandi: v'+$ver) } else { Write-Host ('[JARVIS] Worker guncel: v'+$ver) } } else { Write-Host '[JARVIS] Guncelleme dogrulanamadi; mevcut Worker korundu.' }; Remove-Item $n -Force -ErrorAction SilentlyContinue } catch { Write-Host ('[JARVIS] Guncelleme kontrolu atlandi: '+$_.Exception.Message); Write-Host '[JARVIS] Mevcut Worker kullaniliyor.' }"
-)
+  rem Do not partially replace only worker.js; the verified manifest owns the full dependency set.
+  if "%SILENT%"=="1" (
+    echo [%date% %time%] [JARVIS] Verified update unavailable; existing runtime preserved.>>"%JARVIS_WORKER_LOG%"
+  ) else (
+    echo [JARVIS] Dogrulanmis guncelleme kullanilamadi; mevcut dosyalar korunuyor.
+  )
 )
 
 if "%SILENT%"=="0" (
