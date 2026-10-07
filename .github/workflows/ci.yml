@@ -7,6 +7,25 @@ on:
     branches: [ main, jarvis-local-brain-v2 ]
 
 jobs:
+  windows-launcher:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Execute silent launcher without network or device credentials
+        shell: pwsh
+        run: |
+          $sandbox = Join-Path $env:RUNNER_TEMP 'jarvis-launcher-smoke'
+          New-Item -ItemType Directory -Force -Path $sandbox | Out-Null
+          Copy-Item ./start-worker-windows.bat (Join-Path $sandbox 'start-worker-windows.bat')
+          Set-Content -Path (Join-Path $sandbox 'node.cmd') -Value '@echo off', 'echo WORKER_STUB_STARTED' -Encoding ASCII
+          $env:PATH = $sandbox + ';' + $env:PATH
+          $env:JARVIS_WORKSPACE = Join-Path $sandbox 'workspace'
+          $env:JARVIS_PAIR_CODE = 'TEST_ONLY_NO_NETWORK'
+          & cmd.exe /d /c ('"' + (Join-Path $sandbox 'start-worker-windows.bat') + '" --silent')
+          if ($LASTEXITCODE -ne 0) { throw 'Launcher failed to parse or start' }
+          $log = Get-Content (Join-Path $env:JARVIS_WORKSPACE '.jarvis-memory/worker.log') -Raw
+          if (-not $log.Contains('WORKER_STUB_STARTED')) { throw 'Launcher never reached worker execution' }
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -18,6 +37,8 @@ jobs:
       - run: npm install --ignore-scripts --no-audit --no-fund
       - name: Pairing repair regression
         run: node pairing-repair-selftest.js
+      - name: PC startup and telemetry regression
+        run: node pc-startup-telemetry-selftest.js
       - name: Ensure FFmpeg for real Creator smoke
         run: |
           if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then

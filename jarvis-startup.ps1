@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference = "SilentlyContinue"
 $ProgressPreference = "SilentlyContinue"
 
-$JarvisDir = Join-Path $env:USERPROFILE "JARVIS-OS"
+$JarvisDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Workspace = Join-Path $env:USERPROFILE "JARVIS-Workspace"
 $MemoryDir = Join-Path $Workspace ".jarvis-memory"
 $LogFile = Join-Path $MemoryDir "startup.log"
@@ -306,8 +306,14 @@ try {
   Set-BootStage "SECURE LINK" "Opening JARVIS command interface." 91
 
   if (-not $NoBrowser) {
-    $startupUrl = $JarvisUrl + "/?startup=1&t=" + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
-    try { Start-Process $startupUrl } catch { Write-StartupLog ("Browser launch failed: " + $_.Exception.Message) }
+    # Opera restores its previous JARVIS tab on sign-in. When Opera is already
+    # running, opening the URL again produces an unwanted duplicate tab.
+    $operaRunning = @(Get-Process -Name 'opera' -ErrorAction SilentlyContinue).Count -gt 0
+    if ($operaRunning) {
+      Write-StartupLog 'Opera already running; browser auto-open skipped to avoid a duplicate tab.'
+    } else {
+      try { Start-Process $JarvisUrl } catch { Write-StartupLog ("Browser launch failed: " + $_.Exception.Message) }
+    }
   }
 
   Start-Sleep -Milliseconds 1500

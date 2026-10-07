@@ -71,9 +71,15 @@
     },
     {
       "path": "JARVIS-STARTUP-HIDDEN.vbs",
-      "signature": "JARVIS-OS\\jarvis-startup.ps1",
+      "signature": "WScript.ScriptFullName",
       "kind": "text",
       "min_bytes": 150
+    },
+    {
+      "path": "start-worker-windows.bat",
+      "signature": "LAUNCHER_VERSION=4.1",
+      "kind": "text",
+      "min_bytes": 2500
     },
     {
       "path": "install-jarvis-startup.ps1",
@@ -130,6 +136,12 @@
       "min_bytes": 400
     },
     {
+      "path": "jarvis-tts-locale-router.js",
+      "signature": "const VERSION='1.1'",
+      "kind": "node",
+      "min_bytes": 2000
+    },
+    {
       "path": "jarvis-session-language.js",
       "signature": "module.exports=",
       "kind": "node",
@@ -167,6 +179,60 @@
     },
     {
       "path": "jarvis-approval-lifecycle.js",
+      "signature": "module.exports=",
+      "kind": "node",
+      "min_bytes": 1000
+    },
+    {
+      "path": "jarvis-creator-web-media.js",
+      "signature": "module.exports",
+      "kind": "node",
+      "min_bytes": 1000
+    },
+    {
+      "path": "jarvis-creator-semantic-quality.js",
+      "signature": "module.exports",
+      "kind": "node",
+      "min_bytes": 1000
+    },
+    {
+      "path": "jarvis-bluetooth-audio.js",
+      "signature": "module.exports=",
+      "kind": "node",
+      "min_bytes": 1000
+    },
+    {
+      "path": "jarvis-bluetooth-secure.js",
+      "signature": "module.exports=",
+      "kind": "node",
+      "min_bytes": 1000
+    },
+    {
+      "path": "jarvis-workspace-file-engine.js",
+      "signature": "module.exports",
+      "kind": "node",
+      "min_bytes": 1000
+    },
+    {
+      "path": "jarvis-mobile-language-conversation.js",
+      "signature": "module.exports=",
+      "kind": "node",
+      "min_bytes": 1000
+    },
+    {
+      "path": "jarvis-mobile-language-relay.js",
+      "signature": "module.exports=",
+      "kind": "node",
+      "min_bytes": 1000
+    },
+    {
+      "path": "jarvis-tri-core-personality.js",
+      "signature": "module.exports=",
+      "kind": "node",
+      "min_bytes": 1000
+    },
+    {
+      "path": "jarvis-tri-core-deliberation.js",
       "signature": "module.exports=",
       "kind": "node",
       "min_bytes": 1000

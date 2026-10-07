@@ -3,7 +3,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$JarvisDir = Join-Path $env:USERPROFILE "JARVIS-OS"
+$JarvisDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $StartupPs1 = Join-Path $JarvisDir "jarvis-startup.ps1"
 $HiddenVbs = Join-Path $JarvisDir "JARVIS-STARTUP-HIDDEN.vbs"
 $TaskName = "JARVIS Silent Startup"
