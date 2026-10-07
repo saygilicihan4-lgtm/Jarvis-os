@@ -37,6 +37,16 @@ const server=http.createServer(productionHandler);
  await page.evaluate(()=>{testAudio.pause();URL.revokeObjectURL(testAudio.src);JarvisHumanStage.resume()});
  await page.locator('#mirror').click();assert.equal(await page.locator('#stage').evaluate(n=>n.classList.contains('mirror')),true);
  await page.locator('#clean').click();await page.locator('#restore').click();
+ // The projection dialog must be able to start the parent's explicit mic capture
+ // and show the parent's recognition state without loading a second model.
+ await page.evaluate(()=>{window.voiceCalls=0;window.toggleVoice=()=>{window.voiceCalls++};for(const [id,value] of [['voiceState','VOICE: MANUAL LISTENING'],['consoleStatus','JARVIS · DUYULAN: Merhaba']]){const n=document.createElement('div');n.id=id;n.textContent=value;document.body.append(n)}});
+ await page.addScriptTag({url:'/human-avatar-bridge-v200.js'});
+ await page.evaluate(()=>JarvisHumanAvatar.open());
+ const projection=page.frameLocator('iframe[title="JARVIS human projection"]');
+ await projection.locator('#listen').click();
+ assert.equal(await page.evaluate(()=>voiceCalls),1,'projection microphone reaches parent capture');
+ await projection.locator('#voiceStatus').filter({hasText:'MANUAL LISTENING'}).waitFor();
+ await page.locator('dialog > button').click();
  for(const [width,height]of [[844,390],[390,844]]){await page.setViewportSize({width,height});const bounds=await page.locator('header button').evaluateAll(ns=>ns.map(n=>{const r=n.getBoundingClientRect();return {text:n.textContent,left:r.left,right:r.right,bottom:r.bottom,ok:r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth}}));assert(bounds.every(r=>r.ok),JSON.stringify({width,height,bounds}))}
  await page.setViewportSize({width:1280,height:720});if(process.env.JARVIS_SCREENSHOTS){fs.mkdirSync(process.env.JARVIS_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.JARVIS_SCREENSHOTS,'human-avatar.png')})}
  assert.deepEqual(errors,[]);console.log('PASS: real MPFB model, applied visemes from synthetic audio, pause neutral, closed-load lifecycle, WebGL, mirror, controls, rotation');
