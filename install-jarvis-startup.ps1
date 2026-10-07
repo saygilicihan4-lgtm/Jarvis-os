@@ -9,6 +9,7 @@ $HiddenVbs = Join-Path $JarvisDir "JARVIS-STARTUP-HIDDEN.vbs"
 $TaskName = "JARVIS Silent Startup"
 $StartupFolder = [Environment]::GetFolderPath("Startup")
 $FallbackVbs = Join-Path $StartupFolder "JARVIS-Silent-Startup.vbs"
+$FallbackShortcut = Join-Path $StartupFolder "JARVIS-Silent-Startup.lnk"
 
 if (-not (Test-Path $StartupPs1)) { throw "jarvis-startup.ps1 bulunamadi." }
 if (-not (Test-Path $HiddenVbs)) { throw "JARVIS-STARTUP-HIDDEN.vbs bulunamadi." }
@@ -19,6 +20,7 @@ try {
   Get-ChildItem -Path $StartupFolder -Filter "JARVIS*.cmd" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
   Get-ChildItem -Path $StartupFolder -Filter "JARVIS*.bat" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
   if (Test-Path $FallbackVbs) { Remove-Item $FallbackVbs -Force -ErrorAction SilentlyContinue }
+  if (Test-Path $FallbackShortcut) { Remove-Item $FallbackShortcut -Force -ErrorAction SilentlyContinue }
 } catch {}
 
 try {
@@ -57,8 +59,15 @@ try {
 }
 
 if (-not $registered) {
-  Copy-Item $HiddenVbs $FallbackVbs -Force
-  Write-Host "[JARVIS] Task Scheduler kullanilamadi; Startup klasoru fallback hazirlandi." -ForegroundColor Yellow
+  # A copied VBS would look for jarvis-startup.ps1 in the Startup folder, not the installed folder.
+  # Point a user-logon shortcut at the original VBS so its relative path remains valid.
+  $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($FallbackShortcut)
+  $shortcut.TargetPath = $wscript
+  $shortcut.Arguments = ('"' + $HiddenVbs + '"')
+  $shortcut.WorkingDirectory = $JarvisDir
+  $shortcut.WindowStyle = 7
+  $shortcut.Save()
+  Write-Host "[JARVIS] Task Scheduler kullanilamadi; Startup kisayolu kurulu klasore baglandi." -ForegroundColor Yellow
 }
 
 if ($StartNow) {
@@ -66,7 +75,7 @@ if ($StartNow) {
     if ($registered) {
       Start-ScheduledTask -TaskName $TaskName
     } else {
-      Start-Process -FilePath $wscript -ArgumentList ('"' + $FallbackVbs + '"')
+      Start-Process -FilePath $wscript -ArgumentList ('"' + $HiddenVbs + '"')
     }
   } catch {}
 }
