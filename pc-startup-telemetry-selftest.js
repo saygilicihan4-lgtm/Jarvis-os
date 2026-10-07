@@ -37,5 +37,9 @@ const installer=fs.readFileSync(path.join(root,'install-jarvis-startup.ps1'),'ut
 const hidden=fs.readFileSync(path.join(root,'JARVIS-STARTUP-HIDDEN.vbs'),'utf8');
 for(const contents of [startup,installer])assert(contents.includes('Split-Path -Parent $MyInvocation.MyCommand.Path'),'startup must use installed folder');
 assert(hidden.includes('WScript.ScriptFullName'),'hidden launcher must resolve its installed folder');
+assert(installer.includes('$shortcut.TargetPath = $wscript'),'Startup fallback must launch wscript');
+assert(installer.includes('$shortcut.Arguments = (\'"\' + $HiddenVbs + \'"\')'),'Startup fallback must reference installed VBS');
+assert(installer.includes('$shortcut.WorkingDirectory = $JarvisDir'),'Startup fallback must retain installed directory');
+assert(!installer.includes('Copy-Item $HiddenVbs $FallbackVbs'),'Startup fallback must not copy a relative-path launcher');
 assert(startup.includes('if ($operaRunning)'),'Opera session restore must not open duplicate tab');
 console.log('PC STARTUP TELEMETRY PASS: manifest closure, live metrics, JS staging and folder-relative boot');
