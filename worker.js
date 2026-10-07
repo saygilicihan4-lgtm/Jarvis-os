@@ -4246,6 +4246,7 @@ function startLocalTtsBridge(){
       res.writeHead(200,{'content-type':'application/json'});
       return res.end(JSON.stringify({
         ok:true,voice:TTS_VOICE,version:WORKER_VERSION,
+        cloudLink:{connected:lastCloudHeartbeatAt>0&&Date.now()-lastCloudHeartbeatAt<15000,lastHeartbeatAt:lastCloudHeartbeatAt?new Date(lastCloudHeartbeatAt).toISOString():null},
         capabilities:CAPS,
         selfUpdate:selfUpdateState(),
         missionRuntime:missionHealthSnapshot(),
@@ -7465,18 +7466,18 @@ function visibleJarvisShellWindows(){
   }catch(_){return[]}
 }
 function startupAcceptanceSnapshot(){
-  const jarvisDir=path.join(os.homedir(),'JARVIS-OS');
+  const jarvisDir=__dirname;
   const startupPs=path.join(jarvisDir,'jarvis-startup.ps1');
   const hiddenVbs=path.join(jarvisDir,'JARVIS-STARTUP-HIDDEN.vbs');
   const installer=path.join(jarvisDir,'install-jarvis-startup.ps1');
-  const fallback=process.platform==='win32'&&process.env.APPDATA?path.join(process.env.APPDATA,'Microsoft','Windows','Start Menu','Programs','Startup','JARVIS-Silent-Startup.vbs'):null;
+  const fallback=process.platform==='win32'&&process.env.APPDATA?path.join(process.env.APPDATA,'Microsoft','Windows','Start Menu','Programs','Startup','JARVIS-Silent-Startup.lnk'):null;
   const canonicalFiles={startup:fs.existsSync(startupPs),hiddenLauncher:fs.existsSync(hiddenVbs),installer:fs.existsSync(installer)};
   let taskRegistered=false,hiddenTaskAction=false,taskError=null;
   if(process.platform==='win32'){
     try{
       const out=childProcess.execFileSync('schtasks.exe',['/Query','/TN','JARVIS Silent Startup','/FO','LIST','/V'],{encoding:'utf8',windowsHide:true,timeout:8000,maxBuffer:512*1024});
       taskRegistered=true;
-      hiddenTaskAction=/wscript\.exe/i.test(out)&&/JARVIS-STARTUP-HIDDEN\.vbs/i.test(out);
+      hiddenTaskAction=/wscript\.exe/i.test(out)&&out.toLowerCase().includes(hiddenVbs.toLowerCase());
     }catch(e){taskError=String(e.message||e).slice(0,220)}
   }
   const fallbackRegistered=!!(fallback&&fs.existsSync(fallback));
@@ -7947,6 +7948,7 @@ async function saveDeviceToken(token,kind){
   remember({kind,deviceId:DEVICE_ID});
 }
 let pairingAttempted=false;
+let lastCloudHeartbeatAt=0;
 async function pairDevice(){
   // An explicitly supplied one-time code also repairs an obsolete saved token.
   // Never retry a consumed code on each poll or remove the previous credential.
@@ -8938,6 +8940,7 @@ async function poll(){
       await api('/api/worker/heartbeat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(heartbeat)});
       console.log('[JARVIS] Cloud restart recovery tamamlandı; Worker yeniden yetkilendirildi.');
     }
+    lastCloudHeartbeatAt=Date.now();
     if(!phoneSessionCodeShown){
       const p=await api('/api/session/create',{method:'POST'});
       phoneSessionCodeShown=true;
