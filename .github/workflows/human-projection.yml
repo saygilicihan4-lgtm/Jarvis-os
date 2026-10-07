@@ -19,6 +19,8 @@ jobs:
         run: |
           node --check public/human-avatar-v200.mjs
           node --check public/human-avatar-bridge-v200.js
+      - name: Production server module MIME regression
+        run: node static-module-selftest.js
       - name: Real model, audio visemes and projection lifecycle
         run: node tests/human-avatar-browser.cjs
         env:
