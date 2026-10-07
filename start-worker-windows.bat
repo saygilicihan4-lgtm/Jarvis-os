@@ -5,11 +5,13 @@ set "LAUNCHER_VERSION=4.1"
 set "AUTOSTART=0"
 set "SILENT=0"
 set "INSTALL_AUTOSTART=0"
+set "REPAIR_PAIRING=0"
 
 for %%A in (%*) do (
   if /I "%%~A"=="--autostart" set "AUTOSTART=1"
   if /I "%%~A"=="--silent" set "SILENT=1"
   if /I "%%~A"=="--install-autostart" set "INSTALL_AUTOSTART=1"
+  if /I "%%~A"=="--repair-pairing" set "REPAIR_PAIRING=1"
 )
 
 cd /d "%~dp0"
@@ -60,6 +62,16 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
+
+if "%REPAIR_PAIRING%"=="1" if "%JARVIS_PAIR_CODE%"=="" (
+  if "%SILENT%"=="1" (
+    echo [JARVIS] Repair requires an explicit pairing code; silent repair cancelled.>>"%JARVIS_WORKER_LOG%"
+    exit /b 1
+  )
+  echo [JARVIS] Yeni tek kullanimlik eslestirme kodunu girin. Eski anahtar silinmez.
+  set /p "JARVIS_PAIR_CODE=JARVIS PAIR CODE: "
+)
+if "%REPAIR_PAIRING%"=="1" if "%JARVIS_PAIR_CODE%"=="" exit /b 1
 
 if "%JARVIS_PAIR_CODE%"=="" if not exist "%USERPROFILE%\.jarvis-device-token" (
   if "%SILENT%"=="1" (

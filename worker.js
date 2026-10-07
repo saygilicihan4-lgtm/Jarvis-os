@@ -7925,13 +7925,19 @@ async function saveDeviceToken(token,kind){
   const tmp=DEVICE_TOKEN_FILE+'.tmp';fs.writeFileSync(tmp,token,{encoding:'utf8',mode:0o600});fs.renameSync(tmp,DEVICE_TOKEN_FILE);DEVICE_TOKEN=token;
   remember({kind,deviceId:DEVICE_ID});
 }
+let pairingAttempted=false;
 async function pairDevice(){
-  if(DEVICE_TOKEN||!PAIR_CODE)return false;
+  // An explicitly supplied one-time code also repairs an obsolete saved token.
+  // Never retry a consumed code on each poll or remove the previous credential.
+  if(!PAIR_CODE||pairingAttempted)return false;
+  pairingAttempted=true;
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);
   try{
-    const r=await fetch(BASE+'/api/pairing/exchange',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:PAIR_CODE,deviceId:DEVICE_ID,name:NAME,version:WORKER_VERSION,capabilities:CAPS})});
+    const r=await fetch(BASE+'/api/pairing/exchange',{method:'POST',signal:controller.signal,headers:{'content-type':'application/json'},body:JSON.stringify({code:PAIR_CODE,deviceId:DEVICE_ID,name:NAME,version:WORKER_VERSION,capabilities:CAPS})});
     const j=await r.json().catch(()=>({}));if(!r.ok||!j.token)throw new Error(j.error||('HTTP '+r.status));
     await saveDeviceToken(j.token,'device_paired');return true;
-  }catch(e){console.error('[JARVIS] Pairing:',e.message);return false}
+  }catch(e){console.error('[JARVIS] Pairing failed; previous credential preserved. Restart with a fresh pairing code.');return false}
+  finally{clearTimeout(timer)}
 }
 async function migrateDeviceCredential(){
   const exp=deviceTokenExp(DEVICE_TOKEN),nowMs=Date.now();
