@@ -42,12 +42,14 @@
   const css=node('link');css.rel='stylesheet';css.href='/avatar-security-v198.css';d.head.append(css);
   const robotCSS=node('link');robotCSS.rel='stylesheet';robotCSS.href='/avatar-3d-v199.css';d.head.append(robotCSS);
   const robotScript=node('script');robotScript.src='/avatar-3d-v199.js';d.head.append(robotScript);
+  const humanScript=node('script');humanScript.src='/human-avatar-bridge-v200.js';d.head.append(humanScript);
   // Add the optional original robot without changing the existing photo workflow.
   const studioObserver=new MutationObserver(()=>{
     if(!dialog.open||dialog.classList.contains('ja-projection')||!dialog.querySelector('[data-ja=core]')||dialog.querySelector('[data-ja=robot3d]'))return;
     const b=node('button',d.documentElement.lang.startsWith('tr')?'Özgün 3D robotu aç / kapat':'Toggle original 3D robot');b.type='button';b.dataset.ja='robot3d';
     b.onclick=()=>{try{if(!w.JarvisAvatar3D)throw Error('loading');w.JarvisAvatar3D.setCore(selected,!w.JarvisAvatar3D.isEnabled(selected));b.setAttribute('aria-pressed',String(w.JarvisAvatar3D.isEnabled(selected)));message('saved')}catch(_){message('error')}};
     b.setAttribute('aria-pressed',String(!!w.JarvisAvatar3D?.isEnabled(selected)));dialog.append(b,node('p',d.documentElement.lang.startsWith('tr')?'3D robot: özgün model, ünlü değil. Ses genliğine bağlı çene; fonem senkronu değil. Fotoğraf modu ayrıdır.':'3D robot: original model, not a celebrity. Audio-energy jaw motion, not phoneme lip sync. Photo mode is separate.'));
+    const human=node('button',d.documentElement.lang.startsWith('tr')?'İnsan avatarı / Projeksiyon':'Human avatar / Projection');human.type='button';human.dataset.ja='human';human.onclick=()=>{if(w.JarvisHumanAvatar)w.JarvisHumanAvatar.open();else message('error')};dialog.append(human);
   });
   dialog=node('dialog',null,'ja-dialog');dialog.id='jarvisAvatarStudio';dialog.addEventListener('cancel',e=>{e.preventDefault();close()});d.body.append(dialog);
   studioObserver.observe(dialog,{childList:true,attributes:true,attributeFilter:['open']});

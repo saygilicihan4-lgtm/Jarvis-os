@@ -1,0 +1,31 @@
+name: Jarvis Human Projection CI
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+jobs:
+  human-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: Syntax
+        run: |
+          node --check public/human-avatar-v200.mjs
+          node --check public/human-avatar-bridge-v200.js
+      - name: Real model, audio visemes and projection lifecycle
+        run: node tests/human-avatar-browser.cjs
+        env:
+          JARVIS_SCREENSHOTS: artifacts/human-projection
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: human-projection-chromium
+          path: artifacts/human-projection
+          if-no-files-found: ignore
