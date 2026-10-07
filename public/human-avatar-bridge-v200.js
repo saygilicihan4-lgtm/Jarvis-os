@@ -6,5 +6,7 @@
   const stop=()=>{try{frame.contentWindow.JarvisHumanStage?.stop()}catch(_){}};close.onclick=()=>{stop();panel.close()};panel.addEventListener('cancel',stop);panel.append(close,frame);d.body.append(panel);
  }panel.showModal();try{frame.contentWindow.JarvisHumanStage?.resume()}catch(_){}}
  function bindAudio(media,bytes){if(!panel?.open)return;try{Promise.resolve(frame.contentWindow.JarvisHumanStage?.bindAudio(media,bytes)).catch(()=>{})}catch(_){}}
- w.JarvisHumanAvatar=Object.freeze({open,bindAudio});
+ function listen(){if(!panel?.open||typeof w.toggleVoice!=='function')return false;w.toggleVoice();return true}
+ function voiceStatus(){if(!panel?.open)return null;return {voice:d.getElementById('voiceState')?.textContent||'',command:d.getElementById('consoleStatus')?.textContent||''}}
+ w.JarvisHumanAvatar=Object.freeze({open,bindAudio,listen,voiceStatus});
 })(window);
