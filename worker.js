@@ -4246,7 +4246,7 @@ function startLocalTtsBridge(){
       res.writeHead(200,{'content-type':'application/json'});
       return res.end(JSON.stringify({
         ok:true,voice:TTS_VOICE,version:WORKER_VERSION,
-        cloudLink:{connected:lastCloudHeartbeatAt>0&&Date.now()-lastCloudHeartbeatAt<15000,lastHeartbeatAt:lastCloudHeartbeatAt?new Date(lastCloudHeartbeatAt).toISOString():null},
+        cloudLink:cloudLinkStatus(),
         capabilities:CAPS,
         selfUpdate:selfUpdateState(),
         missionRuntime:missionHealthSnapshot(),
@@ -7949,6 +7949,9 @@ async function saveDeviceToken(token,kind){
 }
 let pairingAttempted=false;
 let lastCloudHeartbeatAt=0;
+function cloudLinkStatus(now=Date.now()){
+  return{connected:lastCloudHeartbeatAt>0&&now-lastCloudHeartbeatAt>=0&&now-lastCloudHeartbeatAt<15000,lastHeartbeatAt:lastCloudHeartbeatAt?new Date(lastCloudHeartbeatAt).toISOString():null};
+}
 async function pairDevice(){
   // An explicitly supplied one-time code also repairs an obsolete saved token.
   // Never retry a consumed code on each poll or remove the previous credential.
