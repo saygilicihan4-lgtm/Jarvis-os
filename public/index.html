@@ -8,6 +8,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="JARVIS">
 <link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" href="/brand/jarvis-titanium.png">
+<link rel="apple-touch-icon" href="/brand/jarvis-titanium.png">
 <title>JARVIS OS</title>
 <style>
 /* First paint must not expose the superseded cockpit while modules load. */
@@ -21,12 +23,13 @@ html[data-cockpit-ready] #cockpitBoot{display:none}
 <link rel="preload" href="/mobile-reference-art.jpg" as="image">
 <link rel="stylesheet" href="/mobile-reference-v196.css">
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/brand/jarvis-brand.css">
 </head>
 <body>
-<div id="cockpitBoot" role="status">JARVIS …</div>
+<div id="cockpitBoot" role="status"><img src="/brand/jarvis-titanium.png" width="200" height="200" alt="">JARVIS …</div>
 <div id="loginOverlay" class="login-overlay">
   <div class="login-card">
-    <div class="login-symbol"><span style="color:#65e6ff;letter-spacing:.2em;font-weight:900">J</span></div>
+    <div class="login-symbol"><svg class="jarvis-approved-mark" viewBox="170 15 920 980" aria-hidden="true" focusable="false"><image href="/brand/jarvis-titanium.png" width="1254" height="1254"/></svg></div>
     <h2>JARVIS</h2>
     <p>PERSONAL AUTONOMOUS SYSTEM<br>Secure command interface</p>
     <input id="token" type="password" autocomplete="off" placeholder="8 HANELİ SESSION CODE" inputmode="numeric" maxlength="8">
@@ -39,7 +42,7 @@ html[data-cockpit-ready] #cockpitBoot{display:none}
 <div class="app">
   <header class="topbar">
     <div class="brand">
-      <span class="brand-mark"></span>
+      <svg class="jarvis-approved-mark" viewBox="170 15 920 980" aria-hidden="true" focusable="false"><image href="/brand/jarvis-titanium.png" width="1254" height="1254"/></svg>
       <div>
         <h1>JARVIS</h1>
         <small>PERSONAL AUTONOMOUS SYSTEM</small>

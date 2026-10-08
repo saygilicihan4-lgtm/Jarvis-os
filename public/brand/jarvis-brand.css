@@ -1,0 +1,9 @@
+/* User-approved JARVIS identity. Original artwork remains unchanged. */
+.jarvis-approved-mark{display:block;width:42px;height:46px;flex:none;background:transparent;border-radius:9px}
+#cockpitBoot img{display:block;max-width:55vw;height:auto;margin:0 auto 12px;border-radius:18px}
+.login-symbol .jarvis-approved-mark{width:76px;height:82px;margin:auto}
+.jr-layout .jr-brand{position:relative;padding-left:40px;min-width:0}
+.jr-layout .jr-brand>.jarvis-approved-mark{position:absolute;left:0;top:50%;transform:translateY(-50%);width:34px;height:38px}
+.jr-layout .jr-brand b{font-size:clamp(15px,4.6vw,32px);letter-spacing:.03em;background:none;color:#eaf9ff;-webkit-text-fill-color:#eaf9ff}
+.jr-layout .jr-brand small{letter-spacing:.05em}
+@media(min-width:800px){.jr-layout .jr-brand{padding-left:54px}.jr-layout .jr-brand>.jarvis-approved-mark{width:46px;height:50px}}
