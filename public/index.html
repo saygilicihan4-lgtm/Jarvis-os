@@ -1085,6 +1085,13 @@ if(SpeechRecognition){
     const manualVoice=Date.now()<manualVoiceUntil;
     const choice=chooseRecognitionCandidate(e);
     const captured=String(choice.text||'').trim();
+    if(!e.results[e.results.length-1].isFinal){
+      if(captured){
+        consoleStatus.textContent='VOICE · DUYULAN: '+captured.slice(0,120);
+        if(window.coreSubtitle)coreSubtitle.textContent='Duyuyorum: '+captured.slice(0,120);
+      }else if(window.coreSubtitle)coreSubtitle.textContent='Dinliyorum…';
+      return;
+    }
     if(e.results[e.results.length-1].isFinal){
       if(mobileLanguageCapture){const slot=mobileLanguageCapture;mobileLanguageCapture=null;slot.resolve(captured);return}
       if(bargeInMode){
@@ -1199,8 +1206,13 @@ function setAccessMode(mode){
 function setVoiceMode(on){
   listening=on;
   document.body.classList.toggle('listening',on);
-  if(window.voiceState)voiceState.textContent=on?'VOICE: LISTENING':'VOICE: READY';
+  const manual=Date.now()<manualVoiceUntil;
+  if(window.voiceState)voiceState.textContent=on?(manual?'VOICE: MANUAL LISTENING':'VOICE: LISTENING'):'VOICE: READY';
   if(window.voiceBtn)voiceBtn.textContent=on?'STOP':'VOICE';
+  if(window.coreSubtitle){
+    if(on)coreSubtitle.textContent=manual?'Dinliyorum. Konuşabilirsiniz.':'JARVIS dinlemede. “Jarvis” diye seslenin.';
+    else if(/dinliyorum|dinleme modunda/i.test(coreSubtitle.textContent))coreSubtitle.textContent='Dinleme durdu.';
+  }
 }
 function releaseMobileClapAudioSession(){
   if(!isMobileJarvis())return;
