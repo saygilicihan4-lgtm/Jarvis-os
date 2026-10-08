@@ -8336,7 +8336,7 @@ function findInstalledStartMenuApp(raw){
   const roots=[
     env.APPDATA||path.join(home,'AppData','Roaming'),
     env.PROGRAMDATA||'C:\\ProgramData'
-  ].map((base,i)=>({dir:i===0?path.join(base,'Microsoft','Windows','Start Menu','Programs'):path.join(base,'Microsoft','Windows','Start Menu','Programs'),rank:i}));
+  ].map((base,rank)=>({dir:path.join(base,'Microsoft','Windows','Start Menu','Programs'),rank}));
   const candidates=[];let scanned=0;
   const walk=(dir,depth,rank)=>{
     if(depth>5||scanned>=2500)return;
