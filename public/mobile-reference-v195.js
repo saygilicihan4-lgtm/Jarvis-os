@@ -68,7 +68,7 @@
       const scenery=el('div','jr-environment '+name);scenery.setAttribute('aria-hidden','true');scenery.innerHTML='<svg viewBox="'+x+' 80 '+w+' 585" preserveAspectRatio="none"><defs><clipPath id="jr-wall-'+name+'"><rect x="'+x+'" y="80" width="'+w+'" height="585"/></clipPath></defs><image clip-path="url(#jr-wall-'+name+')" href="/mobile-reference-art.jpg" width="1221" height="1288"/></svg>';stage.appendChild(scenery);
     }
     const header=el('header','jr-header');
-    const brand=el('div','jr-brand');brand.append(el('b','','JARVIS'),label(el('small'),'smart'));
+    const brand=el('div','jr-brand');brand.innerHTML="<svg class=\"jarvis-approved-mark\" viewBox=\"350 180 620 680\" aria-hidden=\"true\" focusable=\"false\"><image href=\"/brand/jarvis-approved.png\" width=\"1254\" height=\"1254\"/></svg>";brand.append(el('b','','JARVIS'),label(el('small'),'smart'));
     const wave=el('div','jr-listening');wave.append(label(el('span','jr-state-label'),'ready'));const bars=el('div','jr-wave');bars.setAttribute('aria-hidden','true');
     for(let i=0;i<37;i++){const b=el('i');b.style.setProperty('--bar',String(18+Math.abs(Math.sin(i*7.13)*Math.cos(i*.45))*82)+'%');b.style.animationDelay=String(i*-.09)+'s';bars.appendChild(b)}wave.appendChild(bars);
     const status=el('div','jr-status');status.innerHTML='<time class="jr-time"></time><span class="jr-date"></span><span class="jr-online"><i class="jr-dot"></i><span></span></span>';

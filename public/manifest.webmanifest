@@ -5,5 +5,13 @@
   "display": "standalone",
   "background_color": "#05070a",
   "theme_color": "#05070a",
-  "description": "JARVIS personal assistant and remote PC control"
+  "description": "JARVIS personal assistant and remote PC control",
+  "icons": [
+    {
+      "src": "/brand/jarvis-approved.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
 }
