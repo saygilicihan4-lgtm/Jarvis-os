@@ -8458,7 +8458,7 @@ function openKnownDesktopTarget(raw){
     return{ok:true,message:'Başlat menüsünde bulunan '+installed.label+' uygulamasını açma isteği gönderildi'};
   }
 
-  return{ok:false,message:'Bu uygulama güvenli açma listesinde yok: '+raw};
+  return{ok:false,message:'Başlat menüsünde bu adla güvenli uygulama bulamadım: '+raw};
 }
 async function execute(task){
   if(task.plan)return runPlan(task);
