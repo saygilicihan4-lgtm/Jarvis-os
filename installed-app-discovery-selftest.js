@@ -45,5 +45,6 @@ const blocked=context.openKnownDesktopTarget('Uninstall');
 assert.equal(blocked.ok,false,'maintenance shortcuts are not discovered as apps');
 const unknown=context.openKnownDesktopTarget('not installed app');
 assert.equal(unknown.ok,false,'unknown names never become executable paths');
+assert.match(unknown.message,/Başlat menüsünde/,'failed discovery is explained instead of reporting a static allowlist miss');
 assert.equal(launched.length,2,'only exact Start Menu app matches launch');
 console.log('INSTALLED APP DISCOVERY PASS: exact user/shared Start Menu match, nested shortcut, no arbitrary executable, maintenance shortcuts blocked');
