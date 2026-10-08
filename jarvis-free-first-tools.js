@@ -1,4 +1,5 @@
 'use strict';
+const FREE_FIRST_TOOL_ROUTER_VERSION='1.0';
 
 // Free-first routes are launch hints, not a claim that a connected service has
 // completed work. The user can keep a signed-in session in the JARVIS browser
