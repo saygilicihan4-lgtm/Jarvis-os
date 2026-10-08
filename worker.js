@@ -8317,6 +8317,45 @@ function workspaceBrainContext(query,limit=3){
   return{context,sources:useful.map(x=>x.path)};
 }
 
+function normalizeStartMenuAppName(value){
+  return String(value||'')
+    .replace(/\\.lnk$/i,'')
+    .toLocaleLowerCase('tr-TR')
+    .normalize('NFD')
+    .replace(/\\p{M}/gu,'')
+    .replace(/ı/g,'i')
+    .replace(/[^a-z0-9]+/g,' ')
+    .trim()
+    .replace(/\\s+/g,' ');
+}
+function findInstalledStartMenuApp(raw){
+  const wanted=normalizeStartMenuAppName(raw);
+  const blocked=new Set(['uninstall','uninstaller','remove','kaldir','repair','setup','installer','install','update','guncelle']);
+  if(!wanted||blocked.has(wanted))return null;
+  const home=os.homedir(),env=process.env||{};
+  const roots=[
+    env.APPDATA||path.join(home,'AppData','Roaming'),
+    env.PROGRAMDATA||'C:\\\\ProgramData'
+  ].map((base,i)=>({dir:i===0?path.join(base,'Microsoft','Windows','Start Menu','Programs'):path.join(base,'Microsoft','Windows','Start Menu','Programs'),rank:i}));
+  const candidates=[];let scanned=0;
+  const walk=(dir,depth,rank)=>{
+    if(depth>5||scanned>=2500)return;
+    let entries;try{entries=fs.readdirSync(dir,{withFileTypes:true})}catch(_){return}
+    for(const entry of entries){
+      if(scanned++>=2500)break;
+      if(!entry||!entry.name||entry.name.startsWith('.'))continue;
+      const full=path.join(dir,entry.name);
+      if(entry.isDirectory()){walk(full,depth+1,rank);continue}
+      if(!entry.isFile()||path.extname(entry.name).toLowerCase()!=='.lnk')continue;
+      const label=path.basename(entry.name,path.extname(entry.name));
+      if(normalizeStartMenuAppName(label)===wanted)candidates.push({path:full,rank,depth,label});
+    }
+  };
+  for(const root of roots)walk(root.dir,0,root.rank);
+  candidates.sort((a,b)=>a.rank-b.rank||a.depth-b.depth||a.path.localeCompare(b.path));
+  return candidates.length?candidates[0]:null;
+}
+
 function openKnownDesktopTarget(raw){
   if(process.platform!=='win32')return{ok:false,message:'Masaüstü açma komutları şu anda Windows için etkin'};
   let key=String(raw||'').toLocaleLowerCase('tr-TR').trim()
@@ -8411,6 +8450,12 @@ function openKnownDesktopTarget(raw){
     if(!exe)return{ok:false,message:key+' bilgisayarda bulunamadı'};
     startDetached(exe,[]);
     return{ok:true,message:key+' açıldı'};
+  }
+
+  const installed=findInstalledStartMenuApp(key);
+  if(installed){
+    startDetached('explorer.exe',[installed.path]);
+    return{ok:true,message:'Başlat menüsünde bulunan '+installed.label+' uygulamasını açma isteği gönderildi'};
   }
 
   return{ok:false,message:'Bu uygulama güvenli açma listesinde yok: '+raw};
