@@ -8319,14 +8319,14 @@ function workspaceBrainContext(query,limit=3){
 
 function normalizeStartMenuAppName(value){
   return String(value||'')
-    .replace(/\\.lnk$/i,'')
+    .replace(/\.lnk$/i,'')
     .toLocaleLowerCase('tr-TR')
     .normalize('NFD')
-    .replace(/\\p{M}/gu,'')
+    .replace(/\p{M}/gu,'')
     .replace(/ı/g,'i')
     .replace(/[^a-z0-9]+/g,' ')
     .trim()
-    .replace(/\\s+/g,' ');
+    .replace(/\s+/g,' ');
 }
 function findInstalledStartMenuApp(raw){
   const wanted=normalizeStartMenuAppName(raw);
@@ -8335,7 +8335,7 @@ function findInstalledStartMenuApp(raw){
   const home=os.homedir(),env=process.env||{};
   const roots=[
     env.APPDATA||path.join(home,'AppData','Roaming'),
-    env.PROGRAMDATA||'C:\\\\ProgramData'
+    env.PROGRAMDATA||'C:\\ProgramData'
   ].map((base,i)=>({dir:i===0?path.join(base,'Microsoft','Windows','Start Menu','Programs'):path.join(base,'Microsoft','Windows','Start Menu','Programs'),rank:i}));
   const candidates=[];let scanned=0;
   const walk=(dir,depth,rank)=>{
