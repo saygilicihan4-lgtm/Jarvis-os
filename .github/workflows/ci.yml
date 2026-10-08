@@ -39,6 +39,8 @@ jobs:
         run: node pairing-repair-selftest.js
       - name: PC startup and telemetry regression
         run: node pc-startup-telemetry-selftest.js
+      - name: Natural desktop app opening regression
+        run: node desktop-open-intent-selftest.js
       - name: Ensure FFmpeg for real Creator smoke
         run: |
           if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
