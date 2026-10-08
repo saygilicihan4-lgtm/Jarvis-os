@@ -43,6 +43,8 @@ jobs:
         run: node desktop-open-intent-selftest.js
       - name: Safe installed app discovery regression
         run: node installed-app-discovery-selftest.js
+      - name: Free-first tool router regression
+        run: node free-first-tool-router-selftest.js
       - name: Ensure FFmpeg for real Creator smoke
         run: |
           if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
@@ -53,6 +55,8 @@ jobs:
       - name: Syntax check
         run: |
           node --check server.js
+          node --check jarvis-free-first-tools.js
+          node --check free-first-tool-router-selftest.js
           node --check worker.js
           node --check jarvis-creator-engine.js
           node --check jarvis-creator-web-media.js
