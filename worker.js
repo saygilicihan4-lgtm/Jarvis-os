@@ -8322,7 +8322,7 @@ function openKnownDesktopTarget(raw){
   let key=String(raw||'').toLocaleLowerCase('tr-TR').trim()
     .replace(/\s+/g,' ')
     .replace(/^(?:uygulama|program|site)\s+/,'')
-    .replace(/\s+(?:uygulamasını|uygulamasini|programını|programini|sitesini)$/,'')
+    .replace(/\s+(?:görevini|gorevini|görevi|gorevi|uygulamayı|uygulamayi|programı|programi|uygulamasını|uygulamasini|programını|programini|sitesini)$/,'')
     .replace(/['’](?:y)?[ıiuü]$/,'')
     .trim();
 
