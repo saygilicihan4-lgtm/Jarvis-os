@@ -37,6 +37,8 @@ jobs:
       - run: npm install --ignore-scripts --no-audit --no-fund
       - name: Pairing repair regression
         run: node pairing-repair-selftest.js
+      - name: Mobile authorization poll regression
+        run: node mobile-auth-poll-selftest.js
       - name: PC startup and telemetry regression
         run: node pc-startup-telemetry-selftest.js
       - name: Natural desktop app opening regression

@@ -8869,7 +8869,23 @@ let mobileTtsBusy=false;
 let mobileLanguageBusy=false;
 let mobileLanguageEngine=null;
 let mobileBrainBusy=false;
+let mobilePollAuthorized=false;
+let mobileAuthNoticeShown=false;
+function mobileAuthorizationDenied(error){
+  return /device revoked or not approved|approved device required|device awaiting approval|device identity mismatch|unauthorized/i.test(String(error&&error.message||error||''));
+}
+function pauseMobilePollsForAuth(error){
+  if(!mobileAuthorizationDenied(error))return false;
+  mobilePollAuthorized=false;
+  lastCloudHeartbeatAt=0;
+  if(!mobileAuthNoticeShown){
+    mobileAuthNoticeShown=true;
+    console.error('[JARVIS] PC cihaz yetkisi reddedildi; mobil yoklamalar durduruldu. Sunucuda cihaz onayını kontrol edin veya yeni tek kullanımlık eşleştirme koduyla --repair-pairing çalıştırın.');
+  }
+  return true;
+}
 async function serviceMobileTts(){
+  if(!mobilePollAuthorized)return false;
   if(mobileTtsBusy)return false;
   mobileTtsBusy=true;
   try{
@@ -8894,7 +8910,7 @@ async function serviceMobileTts(){
     }
     return true;
   }catch(e){
-    if(!/404|not found/i.test(String(e.message||'')))console.error('[JARVIS] MOBILE TTS POLL:',e.message);
+    if(!pauseMobilePollsForAuth(e)&&!/404|not found/i.test(String(e.message||'')))console.error('[JARVIS] MOBILE TTS POLL:',e.message);
     return false;
   }finally{
     mobileTtsBusy=false;
@@ -8908,6 +8924,7 @@ function getMobileLanguageEngine(){
   return mobileLanguageEngine;
 }
 async function serviceMobileLanguage(){
+  if(!mobilePollAuthorized)return false;
   if(mobileLanguageBusy)return false;
   mobileLanguageBusy=true;
   try{
@@ -8917,9 +8934,10 @@ async function serviceMobileLanguage(){
     try{result=await getMobileLanguageEngine().turn(q)}catch(e){result={ok:false,state:'failed',reason:String(e.message||e),locale:q.locale,learning:false,deviceE2eVerified:false}}
     await api('/api/worker/mobile-language-result',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:q.id,locale:q.locale,ok:result.ok===true,result,error:result.ok===true?null:String(result.reason||'mobile language failed')})});
     return true;
-  }catch(e){return false}finally{mobileLanguageBusy=false}
+  }catch(e){pauseMobilePollsForAuth(e);return false}finally{mobileLanguageBusy=false}
 }
 async function serviceMobileBrain(){
+  if(!mobilePollAuthorized)return false;
   if(mobileBrainBusy)return false;
   mobileBrainBusy=true;
   try{
@@ -9004,7 +9022,7 @@ async function serviceMobileBrain(){
     }
     return true;
   }catch(e){
-    if(!/404|not found/i.test(String(e.message||'')))console.error('[JARVIS] MOBILE BRAIN POLL:',e.message);
+    if(!pauseMobilePollsForAuth(e)&&!/404|not found/i.test(String(e.message||'')))console.error('[JARVIS] MOBILE BRAIN POLL:',e.message);
     return false;
   }finally{
     mobileBrainBusy=false;
@@ -9020,6 +9038,7 @@ async function poll(){
       await api('/api/worker/heartbeat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(heartbeat)});
     }catch(e){
       const authLost=/revoked|not approved|awaiting approval/i.test(String(e.message||''));
+      if(authLost)pauseMobilePollsForAuth(e);
       if(!authLost||Date.now()-lastAuthRecovery<60000)throw e;
       lastAuthRecovery=Date.now();
       remember({kind:'auth_recovery',reason:String(e.message||'authorization lost')});
@@ -9028,6 +9047,8 @@ async function poll(){
       console.log('[JARVIS] Cloud restart recovery tamamlandı; Worker yeniden yetkilendirildi.');
     }
     lastCloudHeartbeatAt=Date.now();
+    mobilePollAuthorized=true;
+    mobileAuthNoticeShown=false;
     if(!phoneSessionCodeShown){
       const p=await api('/api/session/create',{method:'POST'});
       phoneSessionCodeShown=true;
@@ -9051,7 +9072,7 @@ async function poll(){
     await api('/api/worker/result',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.task.id,uid:r.task.uid,...result})});
     queueJarvisSpeech(result.message);
     console.log('#'+r.task.id+' '+(result.ok?'OK':'FAIL')+' '+result.message);
-  }catch(e){console.error(new Date().toISOString(),e.message)}
+  }catch(e){if(!pauseMobilePollsForAuth(e))console.error(new Date().toISOString(),e.message)}
 }
 console.log('JARVIS PC Worker '+WORKER_VERSION+' başladı');
 if(!TEST_MODE){
