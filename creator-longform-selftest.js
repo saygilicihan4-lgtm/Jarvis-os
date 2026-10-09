@@ -7,7 +7,7 @@ const creator=require('./jarvis-creator-engine');
 const worker=fs.readFileSync('./worker.js','utf8');
 const source=fs.readFileSync('./jarvis-creator-engine.js','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.102.0'"),'Worker 2.102.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.103.0'"),'Worker 2.103.0 required');
 assert.strictEqual(creator.ENGINE_VERSION,'1.4');
 
 for(const cap of [

@@ -1950,10 +1950,15 @@ async function checkLocalAI(){
   consoleStatus.textContent='LOCAL AI · PC CHECK QUEUED';
   try{await send()}catch(e){cmd.value=previous;consoleStatus.textContent='LOCAL AI CHECK FAILED'}
 }
+function isFreeFirstToolCommand(command){
+  const c=String(command||'').trim().replace(/^(pc|bilgisayar)\s*:\s*/i,'');
+  return /^(?:(?:ücretsiz|bedava)\s+.+?\s+(?:aracı|aracını)\s+(?:aç|ac|kullan)|.+?\s+(?:için\s+)?(?:ücretsiz|bedava)\s+aracı\s+(?:aç|ac|kullan)|free\s+tool\s+(?:open|use)\s+.+)$/i.test(c);
+}
 function isDirectLocalPcCommand(command){
   const c=String(command||'').trim().replace(/^(pc|bilgisayar)\s*:\s*/i,'');
   return /^(?:sistem durumu|system status|pc durumu|disk durumu|disk status|depolama durumu|ağ durumu|ag durumu|network status|internet durumu|pil durumu|batarya durumu|güç durumu|guc durumu|power status|sesi yükselt|sesi yukselt|ses yükselt|ses yukselt|sesi artır|sesi arttır|ses artır|volume up|sesi azalt|ses azalt|sesi kıs|sesi kis|ses kıs|ses kis|volume down|sessize al|sesi kapat|sesi sustur|mute|sesi aç|sesi ac|unmute|oynat|duraklat|devam ettir|oynat duraklat|play pause|play|pause|sonraki|sonraki şarkı|sonraki sarki|sonraki medya|next track|önceki|onceki|önceki şarkı|onceki sarki|previous track|medyayı durdur|medyayi durdur|stop media)$/i.test(c)
     || /^(?:dosyalarda ara|dosyalarda arat|workspace search)\s+.+$/i.test(c)
+    || isFreeFirstToolCommand(c)
     || /^(?:aç|ac|open|uygulama aç|uygulama ac|program aç|program ac|site aç|site ac)\s+.+$/i.test(c)
     || /^.+?\s+(?:aç|ac)$/i.test(c);
 }
@@ -2654,6 +2659,13 @@ async function send(){
       consoleStatus.textContent='HATIRLATMA KAYDEDILMEDI · CLOUD HATA';
       return
     }
+  }
+  if(isFreeFirstToolCommand(command)){
+    try{
+      await api('/api/tasks',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({command,source:/iPhone|iPod|Android.*Mobile/i.test(navigator.userAgent)?'phone-web':'pc-web'})});
+      cmd.value='';await load();
+    }catch(e){consoleStatus.textContent=e.message}
+    return;
   }
   // Known direct PC commands already ran above. Everything else gets one
   // semantic pass through the optional conversational brain before the legacy queue.
