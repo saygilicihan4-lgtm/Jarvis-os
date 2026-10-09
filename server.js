@@ -357,7 +357,10 @@ function chooseDevice(command,agent='DEVELOPER'){
 }
 function normalizeAccountType(x){const v=String(x||'').toLowerCase();return['github','shopify'].includes(v)?v:null}
 function accountActionFor(command){
-  const c=String(command||'').toLowerCase();
+  const c=String(command||'').toLocaleLowerCase('tr-TR').trim().replace(/^(?:pc|bilgisayar)\s*:\s*/i,'');
+  // Opening a local browser tab is not a Shopify account read/write operation.
+  // Only these exact navigation commands are exempt; product changes remain gated.
+  if(/^(?:shopify (?:(?:mağazasını|magazasini|mağazası|magazasi|admin) )?(?:aç|ac)|(?:aç|ac|open) shopify(?: (?:mağazası|magazasi))?)$/.test(c))return null;
   if(/(?:shopify bağlantısını kur|shopify baglantisini kur|mağaza bağlantısını kur|magaza baglantisini kur|shopify bağla|shopify bagla|shopify durumu|shopify status|mağaza durumu|magaza durumu|varova mağaza durumu|varova magaza durumu)/.test(c))return null;
   if(/github/.test(c)){
     if(/delete|sil/.test(c))return{type:'github',action:'delete'};
