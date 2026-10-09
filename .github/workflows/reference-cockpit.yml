@@ -44,6 +44,8 @@ jobs:
         run: node reference-cockpit-i18n-selftest.js
       - name: Canonical mobile cockpit selftest
         run: node mobile-canonical-cockpit-selftest.js
+      - name: PC device status diagnostic selftest
+        run: node device-status-ui-selftest.js
       - name: Mobile visual fit compatibility selftest
         run: node mobile-visual-fit-v189-selftest.js
       - name: Native mobile cockpit selftest

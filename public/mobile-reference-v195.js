@@ -34,12 +34,24 @@
     const prompt=layout.querySelector('.jr-prompt');prompt.setAttribute('role','status');
     prompt.textContent=hint?hint[1]:t('speakPrompt');prompt.title=raw;
   }
+  function deviceRepairHints(devices,tr){
+    if(!devices||typeof devices!=='object'||Array.isArray(devices))return [];
+    const records=Object.values(devices).filter(x=>x&&typeof x==='object');
+    if(!records.length)return [tr?'Sunucuda kayıtlı PC cihazı görünmüyor. Yeni tek kullanımlık eşleştirme kodu gerekebilir.':'No registered PC device appears on the server. A new one-time pairing code may be needed.'];
+    const unapproved=records.filter(x=>x.approved===false).length;
+    const approvedOffline=records.filter(x=>x.approved===true&&x.online!==true).length;
+    const hints=[];
+    if(unapproved)hints.push(tr?`${unapproved} kayıtlı cihaz onaysız. Bunun bu PC olup olmadığını kontrol edin; cihazı sessizce yeniden onaylamıyoruz.`:`${unapproved} registered device(s) are not approved. Check whether this is your PC; approval is never restored silently.`);
+    if(approvedOffline)hints.push(tr?`${approvedOffline} onaylı cihaz çevrimdışı. PC’de Worker’ın çalıştığını ve internet bağlantısını kontrol edin.`:`${approvedOffline} approved device(s) are offline. Check that the Worker is running on the PC and connected to the internet.`);
+    return hints;
+  }
   function diagnostics(){
     const fresh=lastState&&Date.now()-lastStateAt<12000,pc=fresh?lastState.workers?.pc:null;
     const lines=[message('PC yürütücüsü: ','PC worker: ')+(fresh?(pc?.online?t('online'):t('offline')):t('unknown'))];
     if(pc?.lastSeen)lines.push(message('Son sinyal: ','Last heartbeat: ')+String(pc.lastSeen));
     if(pc?.version)lines.push('Worker: '+pc.version);
     if(!pc?.online)lines.push(message('Bilgisayarın veya web sayfasının açık olması yeterli değil. PC’de start-worker-windows.bat çalışmalı ve cihaz eşleştirilmiş olmalı.','An open PC or web page is not enough. Run start-worker-windows.bat on the PC and pair the device.'));
+    if(fresh&&!pc?.online)lines.push(...deviceRepairHints(lastState.workers?.devices,/^tr/i.test(doc.documentElement.lang)));
     lines.push(message('Telefon simgesi yalnızca bu mobil tarayıcıyı gösterir; uzaktaki telefon algılanmış demek değildir.','The phone indicator identifies this mobile browser, not a detected remote phone.'));
     lines.push(message('Ses tanıma: ','Speech recognition: ')+(doc.getElementById('voiceState')?.textContent||t('unknown')));
     lines.push(message('Son komut/yanıt: ','Last command/reply: ')+(doc.getElementById('consoleStatus')?.textContent||t('unknown')));
