@@ -7,7 +7,7 @@
   const ROOT_ID='jarvisReferenceCockpit';
   const STYLE_ID='jarvisReferenceCockpitStyle';
   const ACTIONS={
-    newTask:'Yeni görev oluştur',youtube:'YouTube görevini aç',shopify:'Shopify ürün görevini aç',files:'Dosyalarımı aç',apps:'Uygulamalarımı göster',browser:'Tarayıcıyı aç',settings:'JARVIS ayarlarını göster'
+    newTask:'Yeni görev oluştur',youtube:'YouTube görevini aç',shopify:'Shopify mağazasını aç',files:'Dosyalarımı aç',apps:'Uygulamalarımı göster',browser:'Tarayıcıyı aç',settings:'JARVIS ayarlarını göster'
   };
 
   function installStyle(){

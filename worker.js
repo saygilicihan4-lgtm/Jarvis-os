@@ -964,6 +964,7 @@ function isLocalSafeControlCommand(command){
   const c=String(command||'').trim().replace(/^(pc|bilgisayar)\s*:\s*/i,'');
   return /^(?:sistem durumu|system status|pc durumu|disk durumu|disk status|depolama durumu|ağ durumu|ag durumu|network status|internet durumu|pil durumu|batarya durumu|güç durumu|guc durumu|power status|sesi yükselt|sesi yukselt|ses yükselt|ses yukselt|sesi artır|sesi arttır|ses artır|volume up|sesi azalt|ses azalt|sesi kıs|sesi kis|ses kıs|ses kis|volume down|sessize al|sesi kapat|sesi sustur|mute|sesi aç|sesi ac|unmute|oynat|duraklat|devam ettir|oynat duraklat|play pause|play|pause|sonraki|sonraki şarkı|sonraki sarki|sonraki medya|next track|önceki|onceki|önceki şarkı|onceki sarki|previous track|medyayı durdur|medyayi durdur|stop media)$/i.test(c)
     || /^(?:dosyalarda ara|dosyalarda arat|workspace search)\s+.+$/i.test(c)
+    || /^(?:(?:ücretsiz|bedava)\s+.+?\s+(?:aracı|aracını)\s+(?:aç|ac|kullan)|.+?\s+(?:için\s+)?(?:ücretsiz|bedava)\s+aracı\s+(?:aç|ac|kullan)|free\s+tool\s+(?:open|use)\s+.+)$/i.test(c)
     || /^(?:aç|ac|open|uygulama aç|uygulama ac|program aç|program ac|site aç|site ac)\s+.+$/i.test(c)
     || /^.+?\s+(?:aç|ac)$/i.test(c)
     || /^(?:creator motor durumu|creator engine status|video motor durumu)$/i.test(c)
@@ -8381,6 +8382,11 @@ function openKnownDesktopTarget(raw){
 
   const urls={
     'youtube':'https://www.youtube.com/',
+    'shopify':'https://admin.shopify.com/',
+    'shopify mağazasını':'https://admin.shopify.com/',
+    'shopify magazasini':'https://admin.shopify.com/',
+    'shopify mağazası':'https://admin.shopify.com/',
+    'shopify magazasi':'https://admin.shopify.com/',
     'google':'https://www.google.com/',
     'github':'https://github.com/',
     'chatgpt':'https://chatgpt.com/'
@@ -8588,8 +8594,8 @@ async function execute(task){
     }
     if(route.kind==='web'){
       try{
-        const browser=await getBrowserOperator().start(WORKSPACE,{url:route.url});
-        return{ok:true,retryable:false,message:route.label+' JARVIS tarayıcı profilinde açıldı · '+route.note+' · Daha önce bu profilde oturum açtıysan JARVIS yeniden giriş sormaz; ilk bağlantı ve MFA sana aittir.'};
+        openDefaultUrl(route.url);
+        return{ok:true,retryable:false,message:route.label+' varsayılan tarayıcıda açma isteği gönderildi · '+route.note+' · Tarayıcıda oturumun açıksa kullanılabilir; site giriş veya MFA isterse bunu sen tamamlamalısın. İşlem yapıldı anlamına gelmez.'};
       }catch(e){
         return{ok:false,retryable:false,message:route.label+' açılamadı: '+String(e.message||e).slice(0,240)};
       }
@@ -8598,7 +8604,7 @@ async function execute(task){
 
   const openTarget=c.match(/^(?:aç|ac|open|uygulama aç|uygulama ac|program aç|program ac|site aç|site ac)\s+(.+)$/i)
     || c.match(/^(.+?)\s+(?:aç|ac)$/i);
-  if(openTarget){
+  if(openTarget&&!/^(?:youtube studio|shopify admin) (?:aç|ac)$/i.test(c)){
     const r=openKnownDesktopTarget(openTarget[1]);
     return{ok:!!r.ok,retryable:false,message:r.message};
   }

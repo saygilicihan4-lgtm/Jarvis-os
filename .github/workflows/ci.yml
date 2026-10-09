@@ -41,6 +41,8 @@ jobs:
         run: node pc-startup-telemetry-selftest.js
       - name: Natural desktop app opening regression
         run: node desktop-open-intent-selftest.js
+      - name: Shopify navigation and account guard regression
+        run: node shopify-navigation-guard-selftest.js
       - name: Safe installed app discovery regression
         run: node installed-app-discovery-selftest.js
       - name: Free-first tool router regression

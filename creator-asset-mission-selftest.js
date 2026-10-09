@@ -6,7 +6,7 @@ const worker=fs.readFileSync('./worker.js','utf8');
 const creatorSource=fs.readFileSync('./jarvis-creator-engine.js','utf8');
 const fileEngine=fs.readFileSync('./jarvis-workspace-file-engine.js','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.102.0'"),'Worker 2.102.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.103.0'"),'Worker 2.103.0 required');
 assert.strictEqual(creator.ENGINE_VERSION,'1.4');
 assert.ok(worker.includes("'creator_asset_mission_v1'"),'creator asset mission capability missing');
 assert.ok(worker.includes("'creator_asset_probe_v1'"),'creator asset probe capability missing');

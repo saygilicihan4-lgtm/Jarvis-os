@@ -8,6 +8,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="JARVIS">
 <link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" href="/brand/jarvis-titanium.png">
+<link rel="apple-touch-icon" href="/brand/jarvis-titanium.png">
 <title>JARVIS OS</title>
 <style>
 /* First paint must not expose the superseded cockpit while modules load. */
@@ -21,12 +23,13 @@ html[data-cockpit-ready] #cockpitBoot{display:none}
 <link rel="preload" href="/mobile-reference-art.jpg" as="image">
 <link rel="stylesheet" href="/mobile-reference-v196.css">
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/brand/jarvis-brand.css">
 </head>
 <body>
-<div id="cockpitBoot" role="status">JARVIS …</div>
+<div id="cockpitBoot" role="status"><img src="/brand/jarvis-titanium.png" width="200" height="200" alt="">JARVIS …</div>
 <div id="loginOverlay" class="login-overlay">
   <div class="login-card">
-    <div class="login-symbol"><span style="color:#65e6ff;letter-spacing:.2em;font-weight:900">J</span></div>
+    <div class="login-symbol"><svg class="jarvis-approved-mark" viewBox="170 15 920 980" aria-hidden="true" focusable="false"><image href="/brand/jarvis-titanium.png" width="1254" height="1254"/></svg></div>
     <h2>JARVIS</h2>
     <p>PERSONAL AUTONOMOUS SYSTEM<br>Secure command interface</p>
     <input id="token" type="password" autocomplete="off" placeholder="8 HANELİ SESSION CODE" inputmode="numeric" maxlength="8">
@@ -39,7 +42,7 @@ html[data-cockpit-ready] #cockpitBoot{display:none}
 <div class="app">
   <header class="topbar">
     <div class="brand">
-      <span class="brand-mark"></span>
+      <svg class="jarvis-approved-mark" viewBox="170 15 920 980" aria-hidden="true" focusable="false"><image href="/brand/jarvis-titanium.png" width="1254" height="1254"/></svg>
       <div>
         <h1>JARVIS</h1>
         <small>PERSONAL AUTONOMOUS SYSTEM</small>
@@ -1951,6 +1954,7 @@ function isDirectLocalPcCommand(command){
   const c=String(command||'').trim().replace(/^(pc|bilgisayar)\s*:\s*/i,'');
   return /^(?:sistem durumu|system status|pc durumu|disk durumu|disk status|depolama durumu|ağ durumu|ag durumu|network status|internet durumu|pil durumu|batarya durumu|güç durumu|guc durumu|power status|sesi yükselt|sesi yukselt|ses yükselt|ses yukselt|sesi artır|sesi arttır|ses artır|volume up|sesi azalt|ses azalt|sesi kıs|sesi kis|ses kıs|ses kis|volume down|sessize al|sesi kapat|sesi sustur|mute|sesi aç|sesi ac|unmute|oynat|duraklat|devam ettir|oynat duraklat|play pause|play|pause|sonraki|sonraki şarkı|sonraki sarki|sonraki medya|next track|önceki|onceki|önceki şarkı|onceki sarki|previous track|medyayı durdur|medyayi durdur|stop media)$/i.test(c)
     || /^(?:dosyalarda ara|dosyalarda arat|workspace search)\s+.+$/i.test(c)
+    || /^(?:(?:ücretsiz|bedava)\s+.+?\s+(?:aracı|aracını)\s+(?:aç|ac|kullan)|.+?\s+(?:için\s+)?(?:ücretsiz|bedava)\s+aracı\s+(?:aç|ac|kullan)|free\s+tool\s+(?:open|use)\s+.+)$/i.test(c)
     || /^(?:aç|ac|open|uygulama aç|uygulama ac|program aç|program ac|site aç|site ac)\s+.+$/i.test(c)
     || /^.+?\s+(?:aç|ac)$/i.test(c);
 }

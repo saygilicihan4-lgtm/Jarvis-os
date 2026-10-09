@@ -11,7 +11,7 @@ const languageChat=fs.readFileSync('./public/language-chat.js','utf8');
 const missionActions=fs.readFileSync('./public/mission-actions.js','utf8');
 const serviceWorker=fs.readFileSync('./public/sw.js','utf8');
 
-assert.ok(worker.includes("const WORKER_VERSION='2.102.0'"),'Worker 2.102.0 required');
+assert.ok(worker.includes("const WORKER_VERSION='2.103.0'"),'Worker 2.103.0 required');
 assert.ok(worker.includes("'pc_self_repair_v1'"),'self-repair capability must be preserved');
 assert.ok(worker.includes("'creator_multiscene_v2'"),'multi-scene Creator capability must be preserved');
 assert.ok(worker.includes("'creator_burned_captions_v1'"),'burned-caption Creator capability must be preserved');
