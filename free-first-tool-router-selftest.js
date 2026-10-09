@@ -31,12 +31,14 @@ extract(server,'function requiredCapability(command){','\nfunction deterministic
 const workerContext={};vm.createContext(workerContext);
 extract(worker,'function isLocalSafeControlCommand(command){','\nfunction speechLexiconKey(',workerContext);
 const uiContext={};vm.createContext(uiContext);
-extract(html,'function isDirectLocalPcCommand(command){','\nfunction renderSelfUpdateState(',uiContext);
+extract(html,'function isFreeFirstToolCommand(command){','\nfunction renderSelfUpdateState(',uiContext);
 for(const command of ['ücretsiz araştırma aracı aç','tasarım için bedava aracı kullan','free tool open design']){
   assert.equal(serverContext.requiredCapability(command),'free_first_tools_v1');
   assert.equal(workerContext.isLocalSafeControlCommand(command),true);
   assert.equal(uiContext.isDirectLocalPcCommand(command),true);
+  assert.equal(uiContext.isFreeFirstToolCommand(command),true);
 }
+assert(html.indexOf('if(isFreeFirstToolCommand(command)){')<html.indexOf('const brain=await askJarvisBrain(command);'),'known free tool requests must bypass optional conversational chat interception');
 assert.equal(workerContext.isLocalSafeControlCommand('ücretsiz araçla ürünü yayınla'),false);
 assert.equal(serverContext.requiredCapability('ücretsiz araçla ürünü yayınla'),null);
 assert(worker.includes("openDefaultUrl(route.url);"),'free web tool must use the existing default browser');
