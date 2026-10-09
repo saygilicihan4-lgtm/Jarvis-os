@@ -3,6 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const source=fs.readFileSync('worker.js','utf8');
+assert(source.includes("error.code=String(j.code||'')"),'HTTP auth reason reaches the Worker without changing the authorization decision');
 const start=source.indexOf('let mobilePollAuthorized=false;');
 const end=source.indexOf('async function serviceMobileTts(){',start);
 assert(start>0&&end>start,'mobile auth gate exists');
@@ -21,6 +22,14 @@ assert.equal(vm.runInContext('mobilePollAuthorized',ctx),false);
 assert.equal(ctx.lastCloudHeartbeatAt,0);
 ctx.pauseMobilePollsForAuth(Error('device revoked or not approved'));
 assert.equal(notices.length,1,'revoked device notice is not spammed');
+vm.runInContext('mobileAuthNoticeShown=false;mobilePollAuthorized=true',ctx);
+const missing=Error('device revoked or not approved');missing.code='DEVICE_NOT_REGISTERED';
+ctx.pauseMobilePollsForAuth(missing);
+assert.match(notices[1],/cihaz kaydı yok/);
+vm.runInContext('mobileAuthNoticeShown=false;mobilePollAuthorized=true',ctx);
+const denied=Error('device revoked or not approved');denied.code='DEVICE_NOT_APPROVED';
+ctx.pauseMobilePollsForAuth(denied);
+assert.match(notices[2],/kayıtlı fakat onaylı değil/);
 for(const fn of ['serviceMobileTts','serviceMobileLanguage','serviceMobileBrain']){
   assert(source.includes(`async function ${fn}(){\n  if(!mobilePollAuthorized)return false;`),`${fn} requires an authorized heartbeat`);
 }

@@ -922,7 +922,7 @@ const server=http.createServer((req,res)=>{
     if(workerRoute&&ident){
       const signedWorker=deviceWorker(ident.deviceId);if(signedWorker)signedWorker.authMode='signed';
       const headerId=String(req.headers['x-jarvis-device-id']||'');
-      if(headerId!==ident.deviceId)return json(res,401,{error:'device identity mismatch'});
+      if(headerId!==ident.deviceId)return json(res,401,{error:'device identity mismatch',code:'DEVICE_IDENTITY_MISMATCH'});
       if(pathname!=='/api/state/restore'){
         let dw=deviceWorker(ident.deviceId);
         const claimBootstrap=Number.isFinite(ident.bootstrapUntil)&&Date.now()<ident.bootstrapUntil;
@@ -932,7 +932,10 @@ const server=http.createServer((req,res)=>{
           state.workers.devices[ident.deviceId]={name:ident.deviceId,version:null,lastSeen:null,capabilities:[],memory:null,approved:true,roles:['DEVELOPER'],allowedCapabilities:[],authMode:'signed',credentialIssuedAt:now()};
           dw=deviceWorker(ident.deviceId);touchState();log('DEVICE_BOOTSTRAP',ident.deviceId+' signed bootstrap approval restored');
         }
-        if(!dw||!dw.approved)return json(res,403,{error:'device revoked or not approved'});
+        // Keep the denial unchanged, but expose a bounded reason to the signed device.
+        // Inspired by Mender's explicit device-auth states; never auto-admit a missing device.
+        if(!dw)return json(res,403,{error:'device revoked or not approved',code:'DEVICE_NOT_REGISTERED'});
+        if(!dw.approved)return json(res,403,{error:'device revoked or not approved',code:'DEVICE_NOT_APPROVED'});
       }
     }else if(!authorized(req))return json(res,401,{error:'unauthorized'});
   }
