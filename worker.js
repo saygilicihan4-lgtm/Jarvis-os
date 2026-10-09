@@ -8378,6 +8378,11 @@ function openKnownDesktopTarget(raw){
 
   const urls={
     'youtube':'https://www.youtube.com/',
+    'shopify':'https://admin.shopify.com/',
+    'shopify mağazasını':'https://admin.shopify.com/',
+    'shopify magazasini':'https://admin.shopify.com/',
+    'shopify mağazası':'https://admin.shopify.com/',
+    'shopify magazasi':'https://admin.shopify.com/',
     'google':'https://www.google.com/',
     'github':'https://github.com/',
     'chatgpt':'https://chatgpt.com/'
@@ -8565,7 +8570,7 @@ async function execute(task){
 
   const openTarget=c.match(/^(?:aç|ac|open|uygulama aç|uygulama ac|program aç|program ac|site aç|site ac)\s+(.+)$/i)
     || c.match(/^(.+?)\s+(?:aç|ac)$/i);
-  if(openTarget){
+  if(openTarget&&!/^(?:youtube studio|shopify admin) (?:aç|ac)$/i.test(c)){
     const r=openKnownDesktopTarget(openTarget[1]);
     return{ok:!!r.ok,retryable:false,message:r.message};
   }

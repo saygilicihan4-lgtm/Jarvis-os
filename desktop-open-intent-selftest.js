@@ -25,4 +25,10 @@ for(const phrase of ['YouTube görevini','YouTube görevi','YouTube uygulamasın
   assert.equal(opened.at(-1),'https://www.youtube.com/');
 }
 assert.equal(opened.length,4);
+for(const phrase of ['Shopify mağazasını','Shopify magazasini','Shopify']){
+  const result=context.openKnownDesktopTarget(phrase);
+  assert.equal(result.ok,true,phrase+' resolves to the existing default browser');
+  assert.equal(opened.at(-1),'https://admin.shopify.com/');
+}
+assert.equal(opened.length,7);
 console.log('DESKTOP OPEN INTENT PASS: Turkish task/app suffixes resolve known YouTube target without widening executable allowlist');
