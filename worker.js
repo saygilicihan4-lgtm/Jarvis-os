@@ -7941,7 +7941,7 @@ async function api(route,options={}){
   options.headers={...(options.headers||{}),authorization:auth,'x-jarvis-device-id':DEVICE_ID};
   const r=await fetch(BASE+route,options);
   const j=await r.json().catch(()=>({}));
-  if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
+  if(!r.ok){const error=new Error(j.error||('HTTP '+r.status));error.code=String(j.code||'');throw error;}
   return j;
 }
 function deviceTokenExp(token){
@@ -8880,7 +8880,8 @@ function pauseMobilePollsForAuth(error){
   lastCloudHeartbeatAt=0;
   if(!mobileAuthNoticeShown){
     mobileAuthNoticeShown=true;
-    console.error('[JARVIS] PC cihaz yetkisi reddedildi; mobil yoklamalar durduruldu. Sunucuda cihaz onayını kontrol edin veya yeni tek kullanımlık eşleştirme koduyla --repair-pairing çalıştırın.');
+    const reason=error&&error.code==='DEVICE_NOT_REGISTERED'?'Sunucuda bu PC için cihaz kaydı yok.':error&&error.code==='DEVICE_NOT_APPROVED'?'Bu PC kayıtlı fakat onaylı değil.':error&&error.code==='DEVICE_IDENTITY_MISMATCH'?'PC cihaz kimliği ile oturum kimliği uyuşmuyor.':'PC cihaz yetkisi reddedildi.';
+    console.error('[JARVIS] '+reason+' Mobil yoklamalar durduruldu. Cihaz durumunu kontrol edin; gerekirse yeni tek kullanımlık kodla --repair-pairing çalıştırın.');
   }
   return true;
 }

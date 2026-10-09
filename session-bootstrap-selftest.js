@@ -62,6 +62,16 @@ async function run(){
   const anonymousCreate=await request('/api/session/create',{method:'POST'});assert.strictEqual(anonymousCreate.status,401);
   const browserCreate=await request('/api/session/create',{method:'POST',headers:{cookie:valid}});
   assert.strictEqual(browserCreate.status,401,'browser cookie cannot directly issue a recovery code');
+  const missingWorker=await request('/api/worker/mobile-brain-next',{headers:deviceHeaders('missing')});
+  assert.strictEqual(missingWorker.status,403);
+  assert.strictEqual(missingWorker.body.code,'DEVICE_NOT_REGISTERED','missing device is distinguishable without approval');
+  vm.runInContext("state.workers.devices.pc={approved:false,authMode:'signed'}",context);
+  const unapprovedWorker=await request('/api/worker/mobile-brain-next',{headers:deviceHeaders('pc')});
+  assert.strictEqual(unapprovedWorker.status,403);
+  assert.strictEqual(unapprovedWorker.body.code,'DEVICE_NOT_APPROVED','explicit denial is not treated as missing state');
+  const mismatchedWorker=await request('/api/worker/mobile-brain-next',{headers:{...deviceHeaders('pc'),'x-jarvis-device-id':'other'}});
+  assert.strictEqual(mismatchedWorker.status,401);
+  assert.strictEqual(mismatchedWorker.body.code,'DEVICE_IDENTITY_MISMATCH');
   vm.runInContext("state.workers.devices.pc={approved:true,credentialIssuedAt:'generation-1'}",context);
   const signed=deviceHeaders();
   for(const headers of [{authorization:'Bearer selftest-only-token'},deviceHeaders('missing'),deviceHeaders('pc',Date.now()-1),{...signed,'x-jarvis-device-id':'other'},{...signed,'x-jarvis-device-id':'pc!'}, {authorization:'Device invalid','x-jarvis-device-id':'pc'}]){
