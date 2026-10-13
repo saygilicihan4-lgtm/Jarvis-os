@@ -267,7 +267,7 @@ function risky(c){
 }
 function remoteAgent(a){return['DEVELOPER','CREATOR','COMMERCE'].includes(a)}
 function requiredCapability(command){
-  const c=String(command||'').toLowerCase().replace(/^(pc|bilgisayar)\s*:\s*/i,'');
+  const c=String(command||'').trim().toLocaleLowerCase('tr-TR').replace(/^(pc|bilgisayar)\s*:\s*/i,'');
   if(deterministicPlan(command))return'transaction_journal_v3';
   if(/^(optimizasyonu uygula|optimizasyon uygula|apply optimization)/.test(c))return'strategy_rollback';
   if(/^(optimizasyon durumu|strategy selection|en iyi strateji)/.test(c))return'strategy_selection';
@@ -282,11 +282,11 @@ function requiredCapability(command){
   if(/^(?:pil durumu|batarya durumu|güç durumu|guc durumu|power status)$/.test(c))return'power_status_v1';
   if(/^(?:dosyalarda ara|dosyalarda arat|workspace search)\s+/.test(c))return'workspace_search_v1';
   if(/^(?:(?:ücretsiz|bedava)\s+.+?\s+(?:aracı|aracını)\s+(?:aç|ac|kullan)|.+?\s+(?:için\s+)?(?:ücretsiz|bedava)\s+aracı\s+(?:aç|ac|kullan)|free\s+tool\s+(?:open|use)\s+.+)$/.test(c))return'free_first_tools_v1';
+  if(/^(?:browser operatör durumu|browser operator durumu|browser operator status|browser profilini aç|browser profilini ac|browser operator aç|browser operator ac|youtube studio aç|youtube studio ac|shopify admin aç|shopify admin ac|browser sayfasını oku|browser sayfasini oku|browser sayfasını analiz et|browser sayfasini analiz et)$/.test(c))return'browser_operator_v1';
   if(/^(?:aç|ac|open|uygulama aç|uygulama ac|program aç|program ac|site aç|site ac)\s+/.test(c)||/^.+?\s+(?:aç|ac)$/.test(c))return'desktop_launch_v1';
   if(/^(?:creator sesi oluştur|creator sesi olustur|video sesi oluştur|video sesi olustur|shorts sesi oluştur|shorts sesi olustur)/.test(c))return'creator_tts_v1';
   if(/^(?:creator motor durumu|creator engine status|video motor durumu|creator motorunu hazırla|creator motorunu hazirla|creator engine hazırla|creator engine hazirla)/.test(c))return'creator_video_v2';
   if(/^(?:shorts oluştur|shorts olustur|video oluştur|video olustur)(?:\s+[^:]+)?\s*:\s*[\s\S]+$/.test(c))return'creator_video_v2';
-  if(/^(?:browser operatör durumu|browser operator durumu|browser operator status|browser profilini aç|browser profilini ac|browser operator aç|browser operator ac|youtube studio aç|youtube studio ac|shopify admin aç|shopify admin ac|browser sayfasını oku|browser sayfasini oku|browser sayfasını analiz et|browser sayfasini analiz et)$/.test(c))return'browser_operator_v1';
   if(/^(?:youtube yükleme durumu|youtube yukleme durumu|youtube taslak durumu|youtube upload status)$/.test(c))return'youtube_studio_draft_v1';
   if(/^(?:youtube taslak yükle|youtube taslak yukle|youtube studio taslak yükle|youtube studio taslak yukle)\s+.+/.test(c))return'youtube_upload_prepare_v1';
   if(/^(?:jarvis testi|jarvis test|pc kabul testi|pc acceptance|bilgisayar testi|hazır mısın|hazir misin)$/.test(c))return'pc_acceptance_snapshot_v1';
@@ -387,7 +387,7 @@ function accountPolicyAllows(deviceId,agent,command){
 function taskById(id){return state.tasks.find(t=>t.id===Number(id))}
 function taskByUid(uid){return state.tasks.find(t=>t.uid===String(uid||''))}
 function taskLookup(id,uid){return uid?taskByUid(uid):taskById(id)}
-function workerOnline(w){const t=w&&w.lastSeen;return !!t&&(Date.now()-new Date(t).getTime()<15000)}
+function workerOnline(w){const t=w&&w.lastSeen,age=t?Date.now()-new Date(t).getTime():NaN;return Number.isFinite(age)&&age>=0&&age<15000}
 function pcOnline(){return workerOnline(state.workers.pc)||Object.values(state.workers.devices).some(w=>w.approved&&workerOnline(w))}
 function deviceWorker(id){return id&&state.workers.devices[id]||null}
 function deviceOnline(id){return workerOnline(deviceWorker(id))}
@@ -583,7 +583,8 @@ function sanitizeWorkerUpdate(raw){
 }
 function publicState(){
   const signedPc=Object.values(state.workers.devices).filter(w=>w.approved&&workerOnline(w)).sort((a,b)=>new Date(b.lastSeen)-new Date(a.lastSeen))[0];
-  const pc=signedPc||state.workers.pc;
+  const latestApproved=Object.values(state.workers.devices).filter(w=>w.approved).sort((a,b)=>new Date(b.lastSeen||0)-new Date(a.lastSeen||0))[0];
+  const pc=signedPc||latestApproved||state.workers.pc;
   return{
     accountPolicies:Object.values(state.accountPolicies).map(p=>({...p,secretStored:false})),
     tasks:state.tasks,
@@ -1393,7 +1394,7 @@ const server=http.createServer((req,res)=>{
         name:String(d.name||'PC Worker'),
         version:d.version?String(d.version):null,
         lastSeen:now(),
-        capabilities:Array.isArray(d.capabilities)?[...new Set(d.capabilities.map(x=>String(x||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,100)).filter(Boolean))].slice(0,160):[],
+        capabilities:Array.isArray(d.capabilities)?[...new Set(d.capabilities.map(x=>String(x||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,100)).filter(Boolean))].slice(0,512):[],
         networkTag:ipTag(req),
         memory:d.memory&&typeof d.memory==='object'?{
           records:Number(d.memory.records)||0,
@@ -1407,9 +1408,17 @@ const server=http.createServer((req,res)=>{
         missions:sanitizeMissionTelemetry(d.missions),
         update:sanitizeWorkerUpdate(d.update)
       };
-      const deviceId=d.deviceId?String(d.deviceId).replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80):null;
+      const ident=workerIdentity(req);
+      if(ident&&d.deviceId&&String(d.deviceId)!==ident.deviceId)return json(res,401,{error:'device identity mismatch',code:'DEVICE_IDENTITY_MISMATCH'});
+      const deviceId=ident?ident.deviceId:(d.deviceId?String(d.deviceId).replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80):null);
+
       if(deviceId){
         const previous=state.workers.devices[deviceId];
+        // Only the approved claim owner can renew an executing task's lease.
+        const activeUid=String(d.activeTaskUid||'').slice(0,80);
+        const active=activeUid&&state.tasks.find(t=>t.uid===activeUid&&t.status==='claimed'&&t.claimedDeviceId===deviceId);
+        if(previous&&previous.approved&&active)active.claimedAt=snapshot.lastSeen;
+
         const previousMissions=previous&&previous.missions||null;
         const priorAllowed=previous&&Array.isArray(previous.allowedCapabilities)?previous.allowedCapabilities:[];
         const safeNew=snapshot.capabilities.filter(x=>SAFE_AUTO_CAPS.has(x));

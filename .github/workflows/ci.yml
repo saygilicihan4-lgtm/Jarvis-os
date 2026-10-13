@@ -37,6 +37,12 @@ jobs:
       - run: npm install --ignore-scripts --no-audit --no-fund
       - name: Pairing repair regression
         run: node pairing-repair-selftest.js
+      - name: Command intent and mobile routing regression
+        run: node command-reliability-selftest.js
+      - name: Worker connectivity HTTP regression
+        run: node worker-connectivity-http-selftest.js
+      - name: Worker heartbeat scheduling regression
+        run: node worker-heartbeat-scheduler-selftest.js
       - name: Mobile authorization poll regression
         run: node mobile-auth-poll-selftest.js
       - name: PC startup and telemetry regression
