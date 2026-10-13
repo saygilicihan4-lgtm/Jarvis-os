@@ -2,7 +2,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const html=fs.readFileSync('public/index.html','utf8');
 function context(){
- const c={Date,navigator:{userAgent:'iPhone'},localSttController:null,localVoiceGeneration:0,manualLocalVoicePending:false,isMobileJarvis:()=>true,manualVoiceUntil:0,listening:false,privacyMode:false,desktopWakeWordEnabled:true,wakeWordConversationUntil:0,wakeWordAwaitingCommand:false,mobileLanguageCapture:null,bargeInMode:false,activeLanguage:'tr-TR',LANGUAGE_NAMES:{tr:'Türkçe'},voiceState:{},consoleStatus:{},coreSubtitle:{textContent:'Konuşmak için söyleyin'},voiceBtn:{},cmd:{},window:{voiceState:true,coreSubtitle:true,voiceBtn:true},document:{body:{classList:{toggle(){}}}},sent:0,
+ const c={Date,navigator:{userAgent:'iPhone'},localSttListening:false,localSttController:null,localVoiceGeneration:0,manualLocalVoicePending:false,isMobileJarvis:()=>true,manualVoiceUntil:0,listening:false,privacyMode:false,desktopWakeWordEnabled:true,wakeWordConversationUntil:0,wakeWordAwaitingCommand:false,mobileLanguageCapture:null,bargeInMode:false,activeLanguage:'tr-TR',LANGUAGE_NAMES:{tr:'Türkçe'},voiceState:{},consoleStatus:{},coreSubtitle:{textContent:'Konuşmak için söyleyin'},voiceBtn:{},cmd:{},window:{voiceState:true,coreSubtitle:true,voiceBtn:true},document:{body:{classList:{toggle(){}}}},sent:0,
  recognition:{start(){c.started=true},stop(){c.stopped=true}},exitPrivacyMode(){},chooseRecognitionCandidate:()=>({text:'sistem durumu',repaired:'sistem durumu',parsed:{wake:false}}),maybeLearnVoiceCorrection:async()=>false,canonicalJarvisCommand:x=>x,detectLanguage:()=> 'tr-TR',send:()=>c.sent++,setTimeout:fn=>fn()};
  vm.createContext(c);vm.runInContext(html.slice(html.indexOf('function setVoiceMode(on){'),html.indexOf('function releaseMobileClapAudioSession()')),c);vm.runInContext(html.slice(html.indexOf('async function toggleVoice(){'),html.indexOf('function detectLanguage(text)')),c);
  const begin=html.indexOf('recognition.onresult=async e=>{');
@@ -23,6 +23,8 @@ function context(){
  const endStart=html.indexOf('recognition.onend=()=>{');vm.runInContext(html.slice(endStart,html.indexOf('recognition.onerror=e=>',endStart)),c);
  c.voiceState.textContent='VOICE: NOT-ALLOWED';c.manualVoiceUntil=Date.now()+30000;c.recognition.onend();
  assert.equal(c.voiceState.textContent,'VOICE: NOT-ALLOWED','end must retain permission error');assert.equal(c.manualVoiceUntil,0);
+ c.localSttListening=true;c.listening=true;c.manualVoiceUntil=Date.now()+60000;c.voiceState.textContent='VOICE: LOCAL STT LISTENING';c.recognition.onend();
+ assert(c.manualVoiceUntil>Date.now(),'browser stop must not cancel explicit local STT fallback window');assert.equal(c.listening,false);assert.equal(c.voiceState.textContent,'VOICE: LOCAL STT LISTENING');
  assert(html.indexOf('html:not([data-cockpit-ready])')<html.indexOf('<body>'),'boot protection must precede first body paint');
  const renderer=require('./public/tri-core-hologram.js'),frames=new Map(),events={};let frameId=0,removed=false,deleted=0,draws=0;
  const gl=new Proxy({getShaderParameter:()=>true,getProgramParameter:()=>true,drawArrays:()=>draws++,deleteBuffer:()=>deleted++,deleteProgram:()=>deleted++},{get:(o,k)=>o[k]||(()=>({}))});

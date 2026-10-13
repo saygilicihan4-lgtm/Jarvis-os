@@ -1043,6 +1043,7 @@ if(SpeechRecognition){
   recognition.continuous=false;
   recognition.onstart=()=>setVoiceMode(true);
   recognition.onend=()=>{
+    if(localSttListening){listening=false;return}
     const endedStatus=voiceState.textContent;
     setVoiceMode(false);
     if(/NOT-ALLOWED|SERVICE-NOT-ALLOWED|AUDIO-CAPTURE|NO-SPEECH|NETWORK|UNSUPPORTED/i.test(endedStatus))voiceState.textContent=endedStatus;
