@@ -8,6 +8,7 @@ const webpush=require('web-push');
 const {Pool}=require('pg');
 const {generateRegistrationOptions,verifyRegistrationResponse,generateAuthenticationOptions,verifyAuthenticationResponse}=require('@simplewebauthn/server');
 const {createSessionLifecycle,createPgSessionStore}=require('./jarvis-session-lifecycle');
+const {createPgDeviceRegistry}=require('./jarvis-device-registry');
 
 const PORT=process.env.PORT||3000;
 const ROOT=__dirname;
@@ -26,6 +27,8 @@ const JARVIS_BRAIN_MODEL=String(process.env.JARVIS_BRAIN_MODEL||'gpt-5.6-luna').
 const ZERO_COST_ONLY=String(process.env.JARVIS_ZERO_COST_ONLY||'1').trim()!=='0';
 const db=DATABASE_URL?new Pool({connectionString:DATABASE_URL,ssl:DATABASE_URL.includes('localhost')?false:{rejectUnauthorized:false}}):null;
 let dbReady=false;
+const deviceRegistry=db?createPgDeviceRegistry(db):null;
+let deviceRegistryReady=!db;
 async function initDurableMemory(){
  if(!db){log('DB_CONFIG','DATABASE_URL missing; volatile mode');return;}
  log('DB_CONNECT','DATABASE_URL present; PostgreSQL connection starting');
@@ -39,12 +42,30 @@ async function initDurableMemory(){
  log('DB_PERSISTENCE','boot_count='+probe.rows[0].boot_count);
  const ps=await db.query('SELECT * FROM jarvis_push_subscriptions');state.pushSubscriptions={};for(const x of ps.rows)state.pushSubscriptions[x.id]={endpoint:x.endpoint,keys:{p256dh:x.p256dh,auth:x.auth},createdAt:x.created_at,lastSuccessAt:x.last_success_at};
  const rs=await db.query('SELECT * FROM jarvis_reminders ORDER BY remind_at');state.reminders=rs.rows.map(x=>({id:x.id,title:x.title,when:new Date(x.remind_at).toISOString(),sent:x.sent,createdAt:x.created_at,sentAt:x.sent_at,delivered:x.delivered}));
+ const restoredDevices=await deviceRegistry.init();
+ state.workers.devices=restoredDevices;deviceRegistryReady=true;
+ log('DEVICE_POLICY_RESTORE','durable devices='+Object.keys(restoredDevices).length);
  const sessionStoreStatus=await sessionLifecycle.init();
  dbReady=true;log('DB_READY','durable reminders='+state.reminders.length+' push='+Object.keys(state.pushSubscriptions).length);
  log('SESSION_STORE','durable='+sessionStoreStatus.durable+' legacyPolicy='+sessionStoreStatus.legacyPolicy+' sessions='+sessionStoreStatus.managedSessions);
  if(state.reminders.length)log('DB_RESTORE_REMINDERS','restored='+state.reminders.length);
  if(Object.keys(state.pushSubscriptions).length)log('DB_RESTORE_PUSH','restored='+Object.keys(state.pushSubscriptions).length);
  } finally { clearTimeout(timer); }
+}
+const devicePolicyWrites=new Map();
+const devicePolicyVersions=new Map();
+async function persistDevicePolicy(id,device){
+ if(!deviceRegistry)return false;
+ if(!deviceRegistryReady)throw Error('device policy store unavailable');
+ const version=(devicePolicyVersions.get(id)||0)+1;devicePolicyVersions.set(id,version);
+ const previous=devicePolicyWrites.get(id)||Promise.resolve();
+ const write=previous.catch(()=>{}).then(()=>deviceRegistry.save(id,device));
+ devicePolicyWrites.set(id,write);
+ try{
+   await write;
+   if(devicePolicyVersions.get(id)!==version)throw Error('device policy mutation superseded');
+   return true;
+ }finally{if(devicePolicyWrites.get(id)===write)devicePolicyWrites.delete(id)}
 }
 async function persistPush(id,s){if(!dbReady)throw new Error('database not ready');await db.query('INSERT INTO jarvis_push_subscriptions(id,endpoint,p256dh,auth,last_success_at) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET endpoint=EXCLUDED.endpoint,p256dh=EXCLUDED.p256dh,auth=EXCLUDED.auth,last_success_at=EXCLUDED.last_success_at',[id,s.endpoint,s.keys.p256dh,s.keys.auth,s.lastSuccessAt])}
 async function persistReminder(r){if(!dbReady)throw new Error('database not ready');await db.query('INSERT INTO jarvis_reminders(id,title,remind_at,sent,sent_at,delivered) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET title=EXCLUDED.title,remind_at=EXCLUDED.remind_at,sent=EXCLUDED.sent,sent_at=EXCLUDED.sent_at,delivered=EXCLUDED.delivered',[r.id,r.title,r.when,!!r.sent,r.sentAt||null,r.delivered||0])}
@@ -909,13 +930,18 @@ const server=http.createServer((req,res)=>{
   }
 
   if(pathname==='/api/db/status'&&req.method==='GET'){
-    return json(res,200,{configured:!!db,ready:dbReady,persistent:dbReady,reminders:state.reminders.length,pushSubscriptions:Object.keys(state.pushSubscriptions).length,reminderStorage:dbReady?'postgresql':'unavailable',pushStorage:dbReady?'postgresql':'unavailable'});
+    return json(res,200,{configured:!!db,ready:dbReady,persistent:dbReady,reminders:state.reminders.length,pushSubscriptions:Object.keys(state.pushSubscriptions).length,reminderStorage:dbReady?'postgresql':'unavailable',pushStorage:dbReady?'postgresql':'unavailable',deviceStorage:deviceRegistry?(deviceRegistryReady?'postgresql':'unavailable'):'volatile'});
   }
 
   if(pathname==='/api/health'){
     const devices=Object.values(state.workers.devices),approved=devices.filter(w=>w.approved),online=approved.filter(workerOnline),signed=approved.filter(w=>w.authMode==='signed');
     const latest=online.slice().sort((a,b)=>String(b.lastSeen||'').localeCompare(String(a.lastSeen||'')))[0]||null;
-    return json(res,200,{ok:true,name:'JARVIS OS',version:'0.2.0',zeroCostFirst:true,auth:!!TOKEN,pcWorker:pcOnline(),devices:{approved:approved.length,online:online.length,signed:signed.length,latestVersion:latest&&latest.version||null,latestSeen:latest&&latest.lastSeen||null}});
+    return json(res,200,{ok:true,name:'JARVIS OS',version:'0.2.0',zeroCostFirst:true,auth:!!TOKEN,pcWorker:pcOnline(),deviceStorage:deviceRegistry?(deviceRegistryReady?'postgresql':'unavailable'):'volatile',devices:{approved:approved.length,online:online.length,signed:signed.length,latestVersion:latest&&latest.version||null,latestSeen:latest&&latest.lastSeen||null}});
+  }
+
+  // Do not bootstrap missing device policy while durable grants/revocations load.
+  if(deviceRegistry&&!deviceRegistryReady&&(/^(?:\/api\/worker\/|\/api\/devices\/|\/api\/pairing\/exchange$|\/api\/state\/(?:snapshot|restore)$|\/api\/session\/create$)/.test(pathname))){
+    return json(res,503,{error:'device policy store unavailable',code:'DEVICE_POLICY_STORE_UNAVAILABLE'});
   }
 
   if(pathname.startsWith('/api/')&&!['/api/pairing/exchange','/api/session/exchange','/api/session/bootstrap','/api/webauthn/auth/options','/api/webauthn/auth/verify'].includes(pathname)){
@@ -929,7 +955,7 @@ const server=http.createServer((req,res)=>{
         const claimBootstrap=Number.isFinite(ident.bootstrapUntil)&&Date.now()<ident.bootstrapUntil;
         const envBootstrap=BOOTSTRAP_DEVICE_ID===ident.deviceId&&Date.now()<BOOTSTRAP_DEVICE_EXP;
         // Bootstrap recovers absent state; it never overrides an explicit denial.
-        if(!dw&&(claimBootstrap||envBootstrap)){
+        if(!dw&&!deviceRegistry&&(claimBootstrap||envBootstrap)){
           state.workers.devices[ident.deviceId]={name:ident.deviceId,version:null,lastSeen:null,capabilities:[],memory:null,approved:true,roles:['DEVELOPER'],allowedCapabilities:[],authMode:'signed',credentialIssuedAt:now()};
           dw=deviceWorker(ident.deviceId);touchState();log('DEVICE_BOOTSTRAP',ident.deviceId+' signed bootstrap approval restored');
         }
@@ -1124,7 +1150,7 @@ const server=http.createServer((req,res)=>{
     return json(res,200,{code,expiresAt:new Date(expiresAt).toISOString(),expiresInSeconds:300});
   }
   if(pathname==='/api/pairing/exchange'&&req.method==='POST'){
-    return readJson(req,(err,d)=>{
+    return readJson(req,async(err,d)=>{
       if(err)return json(res,400,{error:'bad json'});
       const code=String(d.code||'').trim().toUpperCase(),deviceId=String(d.deviceId||'').replace(/[^A-Za-z0-9_.-]/g,'').slice(0,80);
       let p=state.pairingCodes[code];
@@ -1137,12 +1163,14 @@ const server=http.createServer((req,res)=>{
       if(!deviceId)return json(res,400,{error:'deviceId required'});
       p.used=true;if(p.bootstrap)bootstrapPairUsed=true;
       const caps=Array.isArray(d.capabilities)?d.capabilities.map(String).slice(0,50):[];
-      state.workers.devices[deviceId]={name:String(d.name||deviceId).slice(0,100),version:d.version?String(d.version):null,lastSeen:now(),capabilities:caps,memory:null,approved:true,roles:['DEVELOPER'],allowedCapabilities:caps,authMode:'signed',credentialIssuedAt:now()};
+      const nextDevice={name:String(d.name||deviceId).slice(0,100),version:d.version?String(d.version):null,lastSeen:now(),capabilities:caps,memory:null,approved:true,roles:['DEVELOPER'],allowedCapabilities:caps,authMode:'signed',credentialIssuedAt:now()};
+      try{await persistDevicePolicy(deviceId,nextDevice)}catch(e){log('DEVICE_POLICY_ERROR','pairing persistence failed');return json(res,503,{error:'device policy could not be saved; create a fresh pairing code'})}
+      state.workers.devices[deviceId]=nextDevice;
       touchState();
       const token=signDevicePayload(deviceTokenPayload(deviceId,7*24*60*60*1000,{pairedAt:Date.now(),bootstrapUntil:Date.now()+15*60*1000}));
       log('PAIRING_EXCHANGE',deviceId+' tek kullanımlık kodla eşleştirildi');
       delete state.pairingCodes[code];
-      return json(res,200,{ok:true,deviceId,token,expiresInSeconds:604800});
+      return json(res,200,{ok:true,deviceId,token,expiresInSeconds:604800,durable:!!deviceRegistry});
     });
   }
 
@@ -1166,7 +1194,7 @@ const server=http.createServer((req,res)=>{
       const dataEmpty=state.stateRevision===0&&state.tasks.length===0&&Object.keys(state.accountPolicies).length===0;
       const claimBootstrap=Number.isFinite(ident.bootstrapUntil)&&Date.now()<ident.bootstrapUntil;
       const envBootstrap=BOOTSTRAP_DEVICE_ID===deviceId&&Date.now()<BOOTSTRAP_DEVICE_EXP;
-      const bootstrapApproved=!live&&dataEmpty&&(claimBootstrap||envBootstrap);
+      const bootstrapApproved=!deviceRegistry&&!live&&dataEmpty&&(claimBootstrap||envBootstrap);
       if(live&&live.approved!==true)return json(res,403,{error:'device revoked or not approved'});
       if(!live&&!bootstrapApproved)return json(res,403,{error:'approved signed device required'});
       if(!dataEmpty)return json(res,409,{error:'cloud state not empty; restore refused'});
@@ -1183,13 +1211,16 @@ const server=http.createServer((req,res)=>{
   if(deviceApprove&&req.method==='POST'){
     const id=deviceApprove[1],w=state.workers.devices[id];
     if(!w)return json(res,404,{error:'device not found'});
-    return readJson(req,(err,d)=>{
+    return readJson(req,async(err,d)=>{
       if(err)return json(res,400,{error:'bad json'});
       const validRoles=['DEVELOPER','CREATOR','COMMERCE'];
       const roles=Array.isArray(d.roles)?d.roles.filter(x=>validRoles.includes(x)).slice(0,3):['DEVELOPER'];
       const requestedCaps=Array.isArray(d.allowedCapabilities)?d.allowedCapabilities.map(String):[];
       const allowedCapabilities=(requestedCaps.length?requestedCaps:w.capabilities).filter(x=>w.capabilities.includes(x)).slice(0,50);
-      w.approved=true;w.roles=roles.length?roles:['DEVELOPER'];w.allowedCapabilities=allowedCapabilities;touchState();
+      const next={...w,approved:true,roles:roles.length?roles:['DEVELOPER'],allowedCapabilities};
+      try{await persistDevicePolicy(id,next)}catch(e){return json(res,503,{error:'device approval could not be saved'})}
+      Object.assign(w,next);
+      Object.assign(state.workers.devices[id],{approved:w.approved,roles:w.roles,allowedCapabilities:w.allowedCapabilities});touchState();
       log('DEVICE_APPROVE',id+' onaylandı · roller '+w.roles.join(','));
       return json(res,200,{ok:true,deviceId:id,name:w.name,approved:true,roles:w.roles,allowedCapabilities:w.allowedCapabilities});
     });
@@ -1199,12 +1230,15 @@ const server=http.createServer((req,res)=>{
     const id=deviceScope[1],w=state.workers.devices[id];
     if(!w)return json(res,404,{error:'device not found'});
     if(!w.approved)return json(res,409,{error:'device not approved'});
-    return readJson(req,(err,d)=>{
+    return readJson(req,async(err,d)=>{
       if(err)return json(res,400,{error:'bad json'});
       const validRoles=['DEVELOPER','CREATOR','COMMERCE'];
-      if(Array.isArray(d.roles)){const roles=d.roles.filter(x=>validRoles.includes(x)).slice(0,3);if(!roles.length)return json(res,400,{error:'at least one valid role required'});w.roles=roles}
-      if(Array.isArray(d.allowedCapabilities)){w.allowedCapabilities=d.allowedCapabilities.map(String).filter(x=>w.capabilities.includes(x)).slice(0,50)}
-      touchState();
+      const next={...w};
+      if(Array.isArray(d.roles)){const roles=d.roles.filter(x=>validRoles.includes(x)).slice(0,3);if(!roles.length)return json(res,400,{error:'at least one valid role required'});next.roles=roles}
+      if(Array.isArray(d.allowedCapabilities)){next.allowedCapabilities=d.allowedCapabilities.map(String).filter(x=>w.capabilities.includes(x)).slice(0,50)}
+      try{await persistDevicePolicy(id,next)}catch(e){return json(res,503,{error:'device scope could not be saved'})}
+      Object.assign(w,next);
+      Object.assign(state.workers.devices[id],{approved:w.approved,roles:w.roles,allowedCapabilities:w.allowedCapabilities});touchState();
       log('DEVICE_SCOPE',id+' kapsam güncellendi · '+(w.roles||[]).join(','));
       return json(res,200,{ok:true,deviceId:id,roles:w.roles||[],allowedCapabilities:w.allowedCapabilities||[]});
     });
@@ -1216,8 +1250,11 @@ const server=http.createServer((req,res)=>{
     if(!w)return json(res,404,{error:'device not found'});
     w.approved=false;touchState();
     if(phoneCodeIssuer&&phoneCodeIssuer.deviceId===id)clearPhoneCode();
-    log('DEVICE_REVOKE',id+' cihazının yetkisi kaldırıldı');
-    return json(res,200,{ok:true,deviceId:id,approved:false});
+    persistDevicePolicy(id,w).then(()=>{
+      log('DEVICE_REVOKE',id+' cihazının yetkisi kaldırıldı');
+      return json(res,200,{ok:true,deviceId:id,approved:false});
+    }).catch(()=>json(res,503,{error:'device blocked in this process; durable revocation failed, retry required'}));
+    return;
   }
 
   if(pathname==='/api/account-policies'&&req.method==='POST'){

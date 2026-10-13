@@ -6,11 +6,13 @@ const {EventEmitter}=require('events');
 
 let handler,fakeDb;
 class FakePool{
-  constructor(){fakeDb=this;this.sessions=new Map();this.legacyAllowed=true;this.bootCount=0}
+  constructor(){fakeDb=this;this.sessions=new Map();this.devices=new Map();this.legacyAllowed=true;this.bootCount=0}
   async query(sql,params=[]){
     const q=String(sql).replace(/\s+/g,' ').trim();
     if(q.startsWith('CREATE TABLE IF NOT EXISTS'))return{rows:[]};
     if(q.includes('jarvis_persistence_probe')&&q.startsWith('INSERT INTO'))return{rows:[{boot_count:++this.bootCount}]};
+    if(q==='SELECT device_id,policy FROM jarvis_device_policies')return{rows:[...this.devices].map(([device_id,policy])=>({device_id,policy}))};
+    if(q.startsWith('INSERT INTO jarvis_device_policies')){this.devices.set(params[0],JSON.parse(params[1]));return{rows:[]}}
     if(q==='SELECT * FROM jarvis_push_subscriptions')return{rows:[]};
     if(q==='SELECT * FROM jarvis_reminders ORDER BY remind_at')return{rows:[]};
     if(q.startsWith("INSERT INTO jarvis_admin_session_policy"))return{rows:[]};
